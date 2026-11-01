@@ -54,8 +54,17 @@ pub enum Skit {
 }
 
 const SKIT_COUNT: usize = 9;
-const ALL_SKITS: [Skit; SKIT_COUNT] =
-    [Skit::None, Skit::Patrol, Skit::Ball, Skit::Read, Skit::Stars, Skit::Hide, Skit::Startle, Skit::Dream, Skit::Sleep];
+const ALL_SKITS: [Skit; SKIT_COUNT] = [
+    Skit::None,
+    Skit::Patrol,
+    Skit::Ball,
+    Skit::Read,
+    Skit::Stars,
+    Skit::Hide,
+    Skit::Startle,
+    Skit::Dream,
+    Skit::Sleep,
+];
 
 impl Skit {
     pub fn name(self) -> &'static str {
@@ -108,7 +117,11 @@ pub struct Leisure {
 }
 
 fn base_skit(tier: Tier) -> Skit {
-    if tier == Tier::Sleepy { Skit::Sleep } else { Skit::None }
+    if tier == Tier::Sleepy {
+        Skit::Sleep
+    } else {
+        Skit::None
+    }
 }
 
 impl Leisure {
@@ -257,7 +270,9 @@ impl Leisure {
             return changed;
         }
         let base = base_skit(self.tier);
-        if self.skit != base && now_ms.wrapping_sub(self.skit_started_ms) as i32 >= self.skit.length_ms() as i32 {
+        if self.skit != base
+            && now_ms.wrapping_sub(self.skit_started_ms) as i32 >= self.skit.length_ms() as i32
+        {
             self.last_skit = self.skit;
             self.skit = base;
             self.skit_started_ms = now_ms;
@@ -287,8 +302,16 @@ impl Leisure {
 
     /// For tests and previews: start a given skit immediately.
     pub fn start_skit(&mut self, skit: Skit, now_ms: u32) {
-        let needed = if skit == Skit::Sleep { Tier::Sleepy } else { Tier::Bored };
-        let back = if needed == Tier::Sleepy { SLEEPY_AFTER_MS } else { BORED_AFTER_MS };
+        let needed = if skit == Skit::Sleep {
+            Tier::Sleepy
+        } else {
+            Tier::Bored
+        };
+        let back = if needed == Tier::Sleepy {
+            SLEEPY_AFTER_MS
+        } else {
+            BORED_AFTER_MS
+        };
         self.idle_since_ms = now_ms.wrapping_sub(back);
         self.enter_tier(needed, now_ms);
         self.skit = skit;
@@ -385,7 +408,15 @@ mod tests {
         assert!(played >= 20);
         assert_eq!(repeats, 0);
         // All seven skits should show up within 24 minutes.
-        for skit in [Skit::Patrol, Skit::Ball, Skit::Read, Skit::Stars, Skit::Hide, Skit::Startle, Skit::Dream] {
+        for skit in [
+            Skit::Patrol,
+            Skit::Ball,
+            Skit::Read,
+            Skit::Stars,
+            Skit::Hide,
+            Skit::Startle,
+            Skit::Dream,
+        ] {
             assert!(seen[skit as usize], "{skit:?} never appeared");
         }
     }

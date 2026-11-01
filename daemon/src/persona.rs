@@ -28,7 +28,10 @@ const PERSONAS: &[(&str, &str)] = &[
     ("luna", include_str!("../../characters/luna/persona.md")),
     ("mei", include_str!("../../characters/mei/persona.md")),
     ("robot", include_str!("../../characters/robot/persona.md")),
-    ("wanwanxiaohe", include_str!("../../characters/wanwanxiaohe/persona.md")),
+    (
+        "wanwanxiaohe",
+        include_str!("../../characters/wanwanxiaohe/persona.md"),
+    ),
 ];
 
 /// The forms of address the App offers (docs/characters.md): id, words, language.
@@ -55,14 +58,20 @@ pub struct Written {
 
 impl Written {
     pub fn load(path: &Path) -> Self {
-        std::fs::read_to_string(path).ok().and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default()
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default()
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(path, serde_json::to_string_pretty(self).map_err(std::io::Error::other)?)
+        std::fs::write(
+            path,
+            serde_json::to_string_pretty(self).map_err(std::io::Error::other)?,
+        )
     }
 }
 
@@ -81,10 +90,17 @@ impl Wearing {
     pub fn of(id: Option<String>, written: &Written) -> Self {
         match id {
             Some(id) if written.id.as_deref() == Some(id.as_str()) => Self {
-                character: if id == CUSTOM { written.lender.clone() } else { Some(id) },
+                character: if id == CUSTOM {
+                    written.lender.clone()
+                } else {
+                    Some(id)
+                },
                 address: written.address.clone(),
             },
-            id => Self { character: id, address: None },
+            id => Self {
+                character: id,
+                address: None,
+            },
         }
     }
 }
@@ -122,7 +138,10 @@ impl Persona {
             .and_then(|(_, voice)| crate::synthesis::voice_field(voice, "LANGUAGE"))
             .unwrap_or(ROBOT_LANGUAGE);
         let address = wearing.address.as_deref().and_then(|form| {
-            FORMS_OF_ADDRESS.iter().find(|(id, _, language)| *id == form && *language == code).map(|(_, words, _)| *words)
+            FORMS_OF_ADDRESS
+                .iter()
+                .find(|(id, _, language)| *id == form && *language == code)
+                .map(|(_, words, _)| *words)
         });
         Self {
             id,
@@ -142,16 +161,26 @@ mod tests {
     use super::*;
 
     fn wearing(character: Option<&str>, address: Option<&str>) -> Wearing {
-        Wearing { character: character.map(str::to_owned), address: address.map(str::to_owned) }
+        Wearing {
+            character: character.map(str::to_owned),
+            address: address.map(str::to_owned),
+        }
     }
 
     #[test]
     fn each_character_has_its_own_persona_name_and_language() {
         let ada = Persona::of(&wearing(Some("ada"), None));
         assert_eq!((ada.id, ada.name, ada.language), ("ada", "Ada", "English"));
-        assert!(ada.text.starts_with("Speaks English") && ada.text.contains("Londoner"), "{}", ada.text);
+        assert!(
+            ada.text.starts_with("Speaks English") && ada.text.contains("Londoner"),
+            "{}",
+            ada.text
+        );
         let xiaohe = Persona::of(&wearing(Some("wanwanxiaohe"), None));
-        assert_eq!((xiaohe.id, xiaohe.name, xiaohe.language), ("wanwanxiaohe", "Xiaohe (小何)", "Chinese"));
+        assert_eq!(
+            (xiaohe.id, xiaohe.name, xiaohe.language),
+            ("wanwanxiaohe", "Xiaohe (小何)", "Chinese")
+        );
         for id in ["dave", "hank", "kai", "luna", "mei"] {
             let persona = Persona::of(&wearing(Some(id), None));
             assert_eq!((persona.id, persona.language), (id, "English"));
@@ -163,28 +192,57 @@ mod tests {
     fn no_pack_or_an_unknown_one_is_the_robot() {
         for character in [None, Some("robot"), Some("custom"), Some("hsiaoyu")] {
             let persona = Persona::of(&wearing(character, None));
-            assert_eq!((persona.id, persona.name, persona.language), ("robot", "VibeBuddy", "English"), "{character:?}");
+            assert_eq!(
+                (persona.id, persona.name, persona.language),
+                ("robot", "VibeBuddy", "English"),
+                "{character:?}"
+            );
         }
     }
 
     #[test]
     fn a_form_of_address_counts_only_in_the_characters_language() {
-        assert_eq!(Persona::of(&wearing(Some("ada"), Some("boss"))).address, Some("boss"));
-        assert_eq!(Persona::of(&wearing(Some("wanwanxiaohe"), Some("laoban"))).address, Some("老板"));
-        assert_eq!(Persona::of(&wearing(Some("ada"), Some("laoban"))).address, None);
-        assert_eq!(Persona::of(&wearing(Some("ada"), Some("darling"))).address, None);
+        assert_eq!(
+            Persona::of(&wearing(Some("ada"), Some("boss"))).address,
+            Some("boss")
+        );
+        assert_eq!(
+            Persona::of(&wearing(Some("wanwanxiaohe"), Some("laoban"))).address,
+            Some("老板")
+        );
+        assert_eq!(
+            Persona::of(&wearing(Some("ada"), Some("laoban"))).address,
+            None
+        );
+        assert_eq!(
+            Persona::of(&wearing(Some("ada"), Some("darling"))).address,
+            None
+        );
     }
 
     #[test]
     fn a_custom_character_wears_its_lenders_voice_and_persona_and_the_form_written_with_it() {
-        let written = Written { id: Some("custom".to_owned()), lender: Some("ada".to_owned()), address: Some("boss".to_owned()) };
-        assert_eq!(Wearing::of(Some("custom".to_owned()), &written), wearing(Some("ada"), Some("boss")));
+        let written = Written {
+            id: Some("custom".to_owned()),
+            lender: Some("ada".to_owned()),
+            address: Some("boss".to_owned()),
+        };
+        assert_eq!(
+            Wearing::of(Some("custom".to_owned()), &written),
+            wearing(Some("ada"), Some("boss"))
+        );
         let persona = Persona::of(&Wearing::of(Some("custom".to_owned()), &written));
         assert_eq!((persona.id, persona.address), ("ada", Some("boss")));
         // The box reports another pack than the App last wrote (written elsewhere): only its id is known.
-        assert_eq!(Wearing::of(Some("mei".to_owned()), &written), wearing(Some("mei"), None));
+        assert_eq!(
+            Wearing::of(Some("mei".to_owned()), &written),
+            wearing(Some("mei"), None)
+        );
         // A custom Character written by an App that didn't say who lends it: the robot's persona.
-        assert_eq!(Wearing::of(Some("custom".to_owned()), &Written::default()), wearing(Some("custom"), None));
+        assert_eq!(
+            Wearing::of(Some("custom".to_owned()), &Written::default()),
+            wearing(Some("custom"), None)
+        );
         assert_eq!(Wearing::of(None, &written), wearing(None, None));
     }
 
@@ -193,7 +251,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("vibebuddy-persona-{}", std::process::id()));
         let path = dir.join(RECORD_FILE);
         assert_eq!(Written::load(&path), Written::default());
-        let written = Written { id: Some("custom".to_owned()), lender: Some("kai".to_owned()), address: None };
+        let written = Written {
+            id: Some("custom".to_owned()),
+            lender: Some("kai".to_owned()),
+            address: None,
+        };
         written.save(&path).unwrap();
         assert_eq!(Written::load(&path), written);
         let _ = std::fs::remove_dir_all(dir);

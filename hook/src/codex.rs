@@ -67,7 +67,10 @@ pub fn sanitized_payload(source: &Value) -> Option<Map<String, Value>> {
     if payload.get("hook_event_name").and_then(Value::as_str) == Some("Stop")
         && requires_user_input(source.get("last_assistant_message").and_then(Value::as_str))
     {
-        payload.insert("response_kind".to_owned(), Value::String("input_required".to_owned()));
+        payload.insert(
+            "response_kind".to_owned(),
+            Value::String("input_required".to_owned()),
+        );
     }
     surface::write_into(&mut payload, &surface::detect(BUNDLE_ID));
     Some(payload)
@@ -80,7 +83,11 @@ pub fn trace(source: &Value, payload: &Map<String, Value>, log_dir: &Path) {
     let transcript = source.get("transcript_path").and_then(Value::as_str);
     let thread_source = match transcript {
         Some(path) => transcript_meta(path)
-            .and_then(|meta| meta.get("thread_source").and_then(Value::as_str).map(str::to_owned))
+            .and_then(|meta| {
+                meta.get("thread_source")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            })
             .unwrap_or_else(|| "unreadable".to_owned()),
         None => "-".to_owned(),
     };
@@ -100,7 +107,10 @@ pub fn trace(source: &Value, payload: &Map<String, Value>, log_dir: &Path) {
     let line = format!(
         "{} {} session={} thread={} cwd={} transcript={} thread_source={} keys={}\n",
         chrono::Local::now().format("%m-%d %H:%M:%S"),
-        payload.get("hook_event_name").and_then(Value::as_str).unwrap_or("?"),
+        payload
+            .get("hook_event_name")
+            .and_then(Value::as_str)
+            .unwrap_or("?"),
         short("session_id", "?"),
         short("thread_id", "-"),
         payload.get("cwd").and_then(Value::as_str).unwrap_or("-"),
@@ -127,8 +137,14 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("vibebuddy-hook-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("temp dir");
         let path = dir.join(name);
-        std::fs::write(&path, format!("{}\n", serde_json::json!({"type": "session_meta", "payload": meta})))
-            .expect("write transcript");
+        std::fs::write(
+            &path,
+            format!(
+                "{}\n",
+                serde_json::json!({"type": "session_meta", "payload": meta})
+            ),
+        )
+        .expect("write transcript");
         path
     }
 
@@ -201,7 +217,10 @@ mod tests {
 
     #[test]
     fn an_optional_follow_up_offer_is_not_required_input() {
-        for message in ["如果你还需要调整配色，可以告诉我。", "修复完成。If you need anything else, let me know."] {
+        for message in [
+            "如果你还需要调整配色，可以告诉我。",
+            "修复完成。If you need anything else, let me know.",
+        ] {
             let source = serde_json::json!({
                 "session_id": "session-a",
                 "turn_id": "turn-a",

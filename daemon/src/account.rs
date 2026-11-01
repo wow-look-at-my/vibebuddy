@@ -185,8 +185,22 @@ impl Account {
             github_id: saved.as_ref().and_then(|s| s.github_id),
             github_login: saved.and_then(|s| s.github_login),
             // A new UTC day starts over: nothing used, nothing refused.
-            today: today.usage.clone().filter(|_| signed_in).map(|usage| if usage.day == day { usage } else { Usage { day: day.clone(), commands: 0, ..usage } }),
-            refused: today.refused.as_ref().filter(|(on, _)| signed_in && *on == day).map(|(_, reason)| reason.clone()),
+            today: today.usage.clone().filter(|_| signed_in).map(|usage| {
+                if usage.day == day {
+                    usage
+                } else {
+                    Usage {
+                        day: day.clone(),
+                        commands: 0,
+                        ..usage
+                    }
+                }
+            }),
+            refused: today
+                .refused
+                .as_ref()
+                .filter(|(on, _)| signed_in && *on == day)
+                .map(|(_, reason)| reason.clone()),
             plan: self.plan.lock().unwrap().clone().filter(|_| signed_in),
         }
     }
@@ -197,7 +211,11 @@ impl Account {
         let mut today = self.today.lock().unwrap();
         if let Some(usage) = &mut today.usage {
             if usage.day != day {
-                *usage = Usage { day, commands: 0, ..usage.clone() };
+                *usage = Usage {
+                    day,
+                    commands: 0,
+                    ..usage.clone()
+                };
             }
             usage.commands += 1;
         }
@@ -210,7 +228,11 @@ impl Account {
     /// that, against the daily replies, which aren't shown.
     pub fn note_reply(&self, text: &str) {
         let mut plan = self.plan.lock().unwrap();
-        if let Some(Plan { characters: Some(used), characters_limit: Some(limit), .. }) = plan.as_mut()
+        if let Some(Plan {
+            characters: Some(used),
+            characters_limit: Some(limit),
+            ..
+        }) = plan.as_mut()
             && *used < *limit
         {
             *used += text.encode_utf16().count() as u64;
@@ -238,23 +260,39 @@ impl Account {
     pub fn refresh_usage(&self) -> Result<(), AccountError> {
         let token = self.token().ok_or(AccountError::NotSignedIn)?;
         let base = self.base.clone().ok_or(AccountError::Unavailable)?;
-        let (status, text) = read(crate::speech::agent(TIMEOUT).get(&format!("{base}/v1/account")).header("Authorization", &format!("Bearer {token}")).call())?;
+        let (status, text) = read(
+            crate::speech::agent(TIMEOUT)
+                .get(&format!("{base}/v1/account"))
+                .header("Authorization", &format!("Bearer {token}"))
+                .call(),
+        )?;
         if status == 401 {
             self.forget();
             return Err(AccountError::NotSignedIn);
         }
         if status != 200 {
-            return Err(AccountError::Service(format!("the account couldn't be read: HTTP {status}")));
+            return Err(AccountError::Service(format!(
+                "the account couldn't be read: HTTP {status}"
+            )));
         }
-        let account: serde_json::Value = serde_json::from_str(&text).map_err(|error| AccountError::Service(error.to_string()))?;
+        let account: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|error| AccountError::Service(error.to_string()))?;
         self.take_usage(&account);
         Ok(())
     }
 
     /// Today's usage and the plan from a `GET /v1/account` answer (docs/api.md).
     fn take_usage(&self, account: &serde_json::Value) {
-        let usage = match (account["today"]["day"].as_str(), account["today"]["commands"].as_u64(), account["limits"]["commands"].as_u64()) {
-            (Some(day), Some(commands), Some(limit)) => Some(Usage { day: day.to_owned(), commands, commands_limit: limit }),
+        let usage = match (
+            account["today"]["day"].as_str(),
+            account["today"]["commands"].as_u64(),
+            account["limits"]["commands"].as_u64(),
+        ) {
+            (Some(day), Some(commands), Some(limit)) => Some(Usage {
+                day: day.to_owned(),
+                commands,
+                commands_limit: limit,
+            }),
             _ => None,
         };
         let plan = &account["plan"];
@@ -270,8 +308,13 @@ impl Account {
         let mut today = self.today.lock().unwrap();
         // Commands left today (a higher limit, say on the Paid plan) end a refusal for the allowance; only the day's
         // end ends the global cap, which the account doesn't show.
-        if usage.as_ref().is_some_and(|usage| usage.commands < usage.commands_limit)
-            && today.refused.as_ref().is_some_and(|(_, reason)| reason == "allowance")
+        if usage
+            .as_ref()
+            .is_some_and(|usage| usage.commands < usage.commands_limit)
+            && today
+                .refused
+                .as_ref()
+                .is_some_and(|(_, reason)| reason == "allowance")
         {
             today.refused = None;
         }
@@ -283,12 +326,18 @@ impl Account {
 
     /// The session for calls to the service, when signed in.
     pub fn token(&self) -> Option<String> {
-        self.saved.lock().unwrap().as_ref().map(|saved| saved.token.clone())
+        self.saved
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|saved| saved.token.clone())
     }
 
     /// Starts a sign-in and returns the URL for the App to open; a new one replaces any unfinished one.
     pub fn start(&self) -> Result<String, AccountError> {
-        let (Some(base), Some(_)) = (&self.base, &self.file) else { return Err(AccountError::Unavailable) };
+        let (Some(base), Some(_)) = (&self.base, &self.file) else {
+            return Err(AccountError::Unavailable);
+        };
         let verifier = random_token();
         let state = random_token();
         let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
@@ -302,7 +351,11 @@ impl Account {
         .map(|(key, value)| format!("{key}={}", percent_encode(value)))
         .collect::<Vec<_>>()
         .join("&");
-        *self.pending.lock().unwrap() = Some(Pending { verifier, state, started: Instant::now() });
+        *self.pending.lock().unwrap() = Some(Pending {
+            verifier,
+            state,
+            started: Instant::now(),
+        });
         Ok(format!("{base}/v1/sign-in?{query}"))
     }
 
@@ -312,7 +365,12 @@ impl Account {
         let verifier = {
             let mut pending = self.pending.lock().unwrap();
             match pending.take() {
-                Some(p) if constant_time_eq(p.state.as_bytes(), state.as_bytes()) && p.started.elapsed() < PENDING_FOR => p.verifier,
+                Some(p)
+                    if constant_time_eq(p.state.as_bytes(), state.as_bytes())
+                        && p.started.elapsed() < PENDING_FOR =>
+                {
+                    p.verifier
+                }
                 // A wrong or stale state leaves a live sign-in alone, so a stray request can't cancel it.
                 other => {
                     *pending = other.filter(|p| p.started.elapsed() < PENDING_FOR);
@@ -322,20 +380,35 @@ impl Account {
         };
         let agent = crate::speech::agent(TIMEOUT);
         let body = serde_json::json!({"code": code, "code_verifier": verifier, "redirect_uri": self.redirect_uri}).to_string();
-        let (status, text) = read(agent.post(&format!("{base}/v1/session")).header("Content-Type", "application/json").send(body.as_bytes()))?;
+        let (status, text) = read(
+            agent
+                .post(&format!("{base}/v1/session"))
+                .header("Content-Type", "application/json")
+                .send(body.as_bytes()),
+        )?;
         if status != 200 {
-            return Err(AccountError::Service(format!("the service refused the sign-in: HTTP {status} {text}")));
+            return Err(AccountError::Service(format!(
+                "the service refused the sign-in: HTTP {status} {text}"
+            )));
         }
         let token = serde_json::from_str::<serde_json::Value>(&text)
             .ok()
             .and_then(|value| value["token"].as_str().map(str::to_owned))
             .ok_or_else(|| AccountError::Service("the service sent no session".to_owned()))?;
 
-        let (status, text) = read(agent.get(&format!("{base}/v1/account")).header("Authorization", &format!("Bearer {token}")).call())?;
+        let (status, text) = read(
+            agent
+                .get(&format!("{base}/v1/account"))
+                .header("Authorization", &format!("Bearer {token}"))
+                .call(),
+        )?;
         if status != 200 {
-            return Err(AccountError::Service(format!("the new session didn't work: HTTP {status}")));
+            return Err(AccountError::Service(format!(
+                "the new session didn't work: HTTP {status}"
+            )));
         }
-        let account: serde_json::Value = serde_json::from_str(&text).map_err(|error| AccountError::Service(error.to_string()))?;
+        let account: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|error| AccountError::Service(error.to_string()))?;
         self.take_usage(&account);
         let github_id = account["github_id"].as_u64();
         let saved = Saved {
@@ -345,7 +418,10 @@ impl Account {
             github_login: github_id.and_then(|id| self.github_login(id)),
         };
         self.keep(Some(saved))?;
-        info!(github = github_id.is_some(), "signed in to the VibeBuddy account");
+        info!(
+            github = github_id.is_some(),
+            "signed in to the VibeBuddy account"
+        );
         Ok(())
     }
 
@@ -354,10 +430,20 @@ impl Account {
     pub fn sign_out(&self) -> Result<(), AccountError> {
         let token = self.token().ok_or(AccountError::NotSignedIn)?;
         if let Some(base) = &self.base {
-            match read(crate::speech::agent(TIMEOUT).post(&format!("{base}/v1/sign-out")).header("Authorization", &format!("Bearer {token}")).send_empty()) {
+            match read(
+                crate::speech::agent(TIMEOUT)
+                    .post(&format!("{base}/v1/sign-out"))
+                    .header("Authorization", &format!("Bearer {token}"))
+                    .send_empty(),
+            ) {
                 Ok((204 | 401, _)) => {}
-                Ok((status, _)) => warn!(status, "the service didn't revoke the session; forgetting it anyway"),
-                Err(error) => warn!(%error, "the service couldn't be reached to revoke the session; forgetting it anyway"),
+                Ok((status, _)) => warn!(
+                    status,
+                    "the service didn't revoke the session; forgetting it anyway"
+                ),
+                Err(error) => {
+                    warn!(%error, "the service couldn't be reached to revoke the session; forgetting it anyway")
+                }
             }
         }
         self.keep(None)
@@ -368,10 +454,17 @@ impl Account {
     pub fn delete(&self) -> Result<(), AccountError> {
         let token = self.token().ok_or(AccountError::NotSignedIn)?;
         let base = self.base.clone().ok_or(AccountError::Unavailable)?;
-        let (status, text) = read(crate::speech::agent(TIMEOUT).delete(&format!("{base}/v1/account")).header("Authorization", &format!("Bearer {token}")).call())?;
+        let (status, text) = read(
+            crate::speech::agent(TIMEOUT)
+                .delete(&format!("{base}/v1/account"))
+                .header("Authorization", &format!("Bearer {token}"))
+                .call(),
+        )?;
         // 401: the session is gone, so is the account or at least its hold on this computer.
         if status != 204 && status != 401 {
-            return Err(AccountError::Service(format!("the account wasn't deleted: HTTP {status} {text}")));
+            return Err(AccountError::Service(format!(
+                "the account wasn't deleted: HTTP {status} {text}"
+            )));
         }
         info!("deleted the VibeBuddy account");
         self.keep(None)
@@ -388,27 +481,41 @@ impl Account {
     fn keep(&self, saved: Option<Saved>) -> Result<(), AccountError> {
         let file = self.file.as_deref().ok_or(AccountError::Unavailable)?;
         let written = match &saved {
-            Some(saved) => crate::resident_claude::write_private(file, &serde_json::to_string(saved).expect("serializes")),
+            Some(saved) => crate::resident_claude::write_private(
+                file,
+                &serde_json::to_string(saved).expect("serializes"),
+            ),
             None => match std::fs::remove_file(file) {
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
                 other => other,
             },
         };
-        written.map_err(|error| AccountError::Service(format!("couldn't write {}: {error}", file.display())))?;
+        written.map_err(|error| {
+            AccountError::Service(format!("couldn't write {}: {error}", file.display()))
+        })?;
         let signed_in = saved.is_some();
         *self.saved.lock().unwrap() = saved;
-        self.signed_in.send_if_modified(|was| std::mem::replace(was, signed_in) != signed_in);
+        self.signed_in
+            .send_if_modified(|was| std::mem::replace(was, signed_in) != signed_in);
         self.relay_chance.send_modify(|n| *n += 1);
         Ok(())
     }
 
     /// The GitHub login for a user id, from GitHub's public API; nothing on failure, the App then shows the id.
     fn github_login(&self, id: u64) -> Option<String> {
-        let (status, text) = read(crate::speech::agent(Duration::from_secs(5)).get(&format!("{}/user/{id}", self.github_api)).header("Accept", "application/vnd.github+json").call()).ok()?;
+        let (status, text) = read(
+            crate::speech::agent(Duration::from_secs(5))
+                .get(&format!("{}/user/{id}", self.github_api))
+                .header("Accept", "application/vnd.github+json")
+                .call(),
+        )
+        .ok()?;
         if status != 200 {
             return None;
         }
-        serde_json::from_str::<serde_json::Value>(&text).ok()?["login"].as_str().map(str::to_owned)
+        serde_json::from_str::<serde_json::Value>(&text).ok()?["login"]
+            .as_str()
+            .map(str::to_owned)
     }
 }
 
@@ -429,7 +536,11 @@ impl Account {
 #[cfg(test)]
 pub fn signed_in_for_tests(dir: &Path, token: &str) -> Account {
     std::fs::create_dir_all(dir).unwrap();
-    crate::resident_claude::write_private(&dir.join(ACCOUNT_FILE), &serde_json::json!({"token": token, "github_id": 1}).to_string()).unwrap();
+    crate::resident_claude::write_private(
+        &dir.join(ACCOUNT_FILE),
+        &serde_json::json!({"token": token, "github_id": 1}).to_string(),
+    )
+    .unwrap();
     Account::new(Some("http://127.0.0.1:9".to_owned()), Some(dir), 7331)
 }
 
@@ -439,7 +550,9 @@ fn utc_day() -> String {
 
 /// The next 00:00 UTC after `now`, when the service's day starts over (docs/api.md).
 pub fn next_utc_day(now: chrono::DateTime<chrono::Utc>) -> chrono::DateTime<chrono::Utc> {
-    (now.date_naive() + chrono::Days::new(1)).and_time(chrono::NaiveTime::MIN).and_utc()
+    (now.date_naive() + chrono::Days::new(1))
+        .and_time(chrono::NaiveTime::MIN)
+        .and_utc()
 }
 
 fn load(path: &Path) -> Option<Saved> {
@@ -453,8 +566,12 @@ fn load(path: &Path) -> Option<Saved> {
     }
 }
 
-fn read(response: Result<ureq::http::Response<ureq::Body>, ureq::Error>) -> Result<(u16, String), AccountError> {
-    let mut response = response.map_err(|error| AccountError::Service(format!("the service couldn't be reached: {error}")))?;
+fn read(
+    response: Result<ureq::http::Response<ureq::Body>, ureq::Error>,
+) -> Result<(u16, String), AccountError> {
+    let mut response = response.map_err(|error| {
+        AccountError::Service(format!("the service couldn't be reached: {error}"))
+    })?;
     let status = response.status().as_u16();
     let text = response.body_mut().read_to_string().unwrap_or_default();
     Ok((status, text))
@@ -475,7 +592,9 @@ fn percent_encode(value: &str) -> String {
     value
         .bytes()
         .map(|byte| match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => (byte as char).to_string(),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                (byte as char).to_string()
+            }
             _ => format!("%{byte:02X}"),
         })
         .collect()
@@ -484,9 +603,21 @@ fn percent_encode(value: &str) -> String {
 /// The page the browser shows after coming back.
 pub fn callback_page(result: &Result<(), AccountError>) -> (u16, String) {
     let (status, title, text) = match result {
-        Ok(()) => (200, "You're signed in", "You can close this tab and go back to VibeBuddy."),
-        Err(AccountError::UnknownSignIn) => (400, "Not signed in", "This sign-in wasn't started from VibeBuddy on this computer, or it took too long. Start again from VibeBuddy's settings."),
-        Err(_) => (502, "Not signed in", "VibeBuddy couldn't finish signing in. Try again from VibeBuddy's settings."),
+        Ok(()) => (
+            200,
+            "You're signed in",
+            "You can close this tab and go back to VibeBuddy.",
+        ),
+        Err(AccountError::UnknownSignIn) => (
+            400,
+            "Not signed in",
+            "This sign-in wasn't started from VibeBuddy on this computer, or it took too long. Start again from VibeBuddy's settings.",
+        ),
+        Err(_) => (
+            502,
+            "Not signed in",
+            "VibeBuddy couldn't finish signing in. Try again from VibeBuddy's settings.",
+        ),
     };
     let html = format!(
         "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>{title}</title>\
@@ -511,7 +642,9 @@ mod tests {
         let record = seen.clone();
         std::thread::spawn(move || {
             for (status, body) in answers {
-                let Ok((stream, _)) = listener.accept() else { return };
+                let Ok((stream, _)) = listener.accept() else {
+                    return;
+                };
                 let mut reader = BufReader::new(stream.try_clone().unwrap());
                 let mut head = String::new();
                 let mut length = 0;
@@ -527,9 +660,16 @@ mod tests {
                 }
                 let mut body_in = vec![0; length];
                 reader.read_exact(&mut body_in).unwrap();
-                record.lock().unwrap().push(format!("{head}\n{}", String::from_utf8_lossy(&body_in)));
+                record
+                    .lock()
+                    .unwrap()
+                    .push(format!("{head}\n{}", String::from_utf8_lossy(&body_in)));
                 let mut stream = stream;
-                let _ = write!(stream, "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
             }
         });
         (url, seen)
@@ -537,14 +677,22 @@ mod tests {
 
     /// A fresh directory of this test's own under the system's temporary directory.
     fn scratch() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("vibebuddy-account-{}-{}", std::process::id(), random_token()));
+        let dir = std::env::temp_dir().join(format!(
+            "vibebuddy-account-{}-{}",
+            std::process::id(),
+            random_token()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
 
     fn query_value(url: &str, key: &str) -> String {
         let query = url.split_once('?').unwrap().1;
-        query.split('&').find_map(|pair| pair.strip_prefix(&format!("{key}="))).unwrap().to_owned()
+        query
+            .split('&')
+            .find_map(|pair| pair.strip_prefix(&format!("{key}=")))
+            .unwrap()
+            .to_owned()
     }
 
     fn account(base: &str, dir: &Path) -> Account {
@@ -554,44 +702,80 @@ mod tests {
     #[test]
     fn signs_in_through_the_browser_and_keeps_the_session_privately() {
         let dir = scratch();
-        let (service, seen) = serve(vec![(200, r#"{"token":"tok_123"}"#), (200, r#"{"id":"a","email":null,"github_id":60097}"#)]);
+        let (service, seen) = serve(vec![
+            (200, r#"{"token":"tok_123"}"#),
+            (200, r#"{"id":"a","email":null,"github_id":60097}"#),
+        ]);
         let (github, _) = serve(vec![(200, r#"{"login":"longzhi","id":60097}"#)]);
         let account = account(&service, dir.as_path()).with_github_api(&github);
         let url = account.start().unwrap();
         assert!(url.starts_with(&format!("{service}/v1/sign-in?redirect_uri=http%3A%2F%2F127.0.0.1%3A7331%2Fv1%2Faccount%2Fcallback")));
         assert_eq!(query_value(&url, "code_challenge_method"), "S256");
 
-        account.finish("code-1", &query_value(&url, "state")).unwrap();
+        account
+            .finish("code-1", &query_value(&url, "state"))
+            .unwrap();
         let seen = seen.lock().unwrap();
         // The verifier sent matches the challenge in the URL.
-        let body: serde_json::Value = serde_json::from_str(seen[0].split_once("\n\n").unwrap().1).unwrap();
+        let body: serde_json::Value =
+            serde_json::from_str(seen[0].split_once("\n\n").unwrap().1).unwrap();
         assert_eq!(body["code"], "code-1");
-        assert_eq!(URL_SAFE_NO_PAD.encode(Sha256::digest(body["code_verifier"].as_str().unwrap())), query_value(&url, "code_challenge"));
-        assert!(seen[1].to_ascii_lowercase().contains("authorization: bearer tok_123"));
+        assert_eq!(
+            URL_SAFE_NO_PAD.encode(Sha256::digest(body["code_verifier"].as_str().unwrap())),
+            query_value(&url, "code_challenge")
+        );
+        assert!(
+            seen[1]
+                .to_ascii_lowercase()
+                .contains("authorization: bearer tok_123")
+        );
 
         let status = account.status();
         assert!(status.signed_in && status.available);
-        assert_eq!((status.github_id, status.github_login.as_deref()), (Some(60097), Some("longzhi")));
+        assert_eq!(
+            (status.github_id, status.github_login.as_deref()),
+            (Some(60097), Some("longzhi"))
+        );
         use std::os::unix::fs::PermissionsExt;
         let file = dir.as_path().join(ACCOUNT_FILE);
-        assert_eq!(std::fs::metadata(&file).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            std::fs::metadata(&file).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
         // A restarted daemon is still signed in.
-        assert_eq!(Account::new(Some(service.clone()), Some(dir.as_path()), 7331).token().as_deref(), Some("tok_123"));
+        assert_eq!(
+            Account::new(Some(service.clone()), Some(dir.as_path()), 7331)
+                .token()
+                .as_deref(),
+            Some("tok_123")
+        );
     }
 
     #[test]
     fn refuses_a_callback_it_did_not_start_and_keeps_the_real_one() {
         let dir = scratch();
-        let (service, seen) = serve(vec![(200, r#"{"token":"t"}"#), (200, r#"{"email":"a@b.c","github_id":null}"#)]);
+        let (service, seen) = serve(vec![
+            (200, r#"{"token":"t"}"#),
+            (200, r#"{"email":"a@b.c","github_id":null}"#),
+        ]);
         let account = account(&service, dir.as_path());
-        assert_eq!(account.finish("code", "anything"), Err(AccountError::UnknownSignIn));
+        assert_eq!(
+            account.finish("code", "anything"),
+            Err(AccountError::UnknownSignIn)
+        );
         let url = account.start().unwrap();
-        assert_eq!(account.finish("code", "forged-state"), Err(AccountError::UnknownSignIn));
+        assert_eq!(
+            account.finish("code", "forged-state"),
+            Err(AccountError::UnknownSignIn)
+        );
         assert!(seen.lock().unwrap().is_empty());
         account.finish("code", &query_value(&url, "state")).unwrap();
         assert_eq!(account.status().email.as_deref(), Some("a@b.c"));
         // A state works once.
-        assert_eq!(account.finish("code", &query_value(&url, "state")), Err(AccountError::UnknownSignIn));
+        assert_eq!(
+            account.finish("code", &query_value(&url, "state")),
+            Err(AccountError::UnknownSignIn)
+        );
     }
 
     #[test]
@@ -600,13 +784,20 @@ mod tests {
         let (service, _) = serve(vec![(400, r#"{"error":"invalid_grant"}"#)]);
         let account = account(&service, dir.as_path());
         let url = account.start().unwrap();
-        assert!(matches!(account.finish("code", &query_value(&url, "state")), Err(AccountError::Service(_))));
+        assert!(matches!(
+            account.finish("code", &query_value(&url, "state")),
+            Err(AccountError::Service(_))
+        ));
         assert!(!account.status().signed_in);
         assert!(!dir.as_path().join(ACCOUNT_FILE).exists());
     }
 
     fn signed_in(service: &str, dir: &Path) -> Account {
-        crate::resident_claude::write_private(&dir.join(ACCOUNT_FILE), r#"{"token":"tok","github_id":1}"#).unwrap();
+        crate::resident_claude::write_private(
+            &dir.join(ACCOUNT_FILE),
+            r#"{"token":"tok","github_id":1}"#,
+        )
+        .unwrap();
         account(service, dir)
     }
 
@@ -626,7 +817,11 @@ mod tests {
         signed_in(&service, dir.as_path()).sign_out().unwrap();
         let seen = seen.lock().unwrap();
         assert!(seen[0].starts_with("POST /v1/sign-out"));
-        assert!(seen[0].to_ascii_lowercase().contains("authorization: bearer tok"));
+        assert!(
+            seen[0]
+                .to_ascii_lowercase()
+                .contains("authorization: bearer tok")
+        );
     }
 
     #[test]
@@ -645,23 +840,36 @@ mod tests {
     fn keeps_todays_usage_counts_commands_and_remembers_a_refusal() {
         let dir = scratch();
         let day = utc_day();
-        let account_answer = format!(r#"{{"id":"a","github_id":1,"today":{{"day":"{day}","commands":7,"replies":9}},"limits":{{"commands":100,"replies":300}}}}"#);
+        let account_answer = format!(
+            r#"{{"id":"a","github_id":1,"today":{{"day":"{day}","commands":7,"replies":9}},"limits":{{"commands":100,"replies":300}}}}"#
+        );
         let (service, _) = serve(vec![(200, Box::leak(account_answer.into_boxed_str()))]);
         let account = signed_in(&service, dir.as_path());
         let changes = account.watch_usage();
         assert_eq!(account.status().today, None);
         account.refresh_usage().unwrap();
-        assert_eq!(account.status().today, Some(Usage { day: day.clone(), commands: 7, commands_limit: 100 }));
+        assert_eq!(
+            account.status().today,
+            Some(Usage {
+                day: day.clone(),
+                commands: 7,
+                commands_limit: 100
+            })
+        );
         account.note_command();
         assert_eq!(account.status().today.unwrap().commands, 8);
         account.note_refusal("allowance");
         assert_eq!(account.status().refused.as_deref(), Some("allowance"));
         assert!(changes.has_changed().unwrap());
         // A refusal from another day is forgotten; signed out, nothing is shown.
-        account.today.lock().unwrap().refused = Some(("2001-01-01".to_owned(), "global_cap".to_owned()));
+        account.today.lock().unwrap().refused =
+            Some(("2001-01-01".to_owned(), "global_cap".to_owned()));
         assert_eq!(account.status().refused, None);
         account.forget();
-        assert_eq!((account.status().today, account.status().refused), (None, None));
+        assert_eq!(
+            (account.status().today, account.status().refused),
+            (None, None)
+        );
     }
 
     #[test]
@@ -669,7 +877,9 @@ mod tests {
         let dir = scratch();
         let day = utc_day();
         let read = |commands: u32, limit: u32| {
-            let answer = format!(r#"{{"today":{{"day":"{day}","commands":{commands},"replies":0}},"limits":{{"commands":{limit},"replies":20}}}}"#);
+            let answer = format!(
+                r#"{{"today":{{"day":"{day}","commands":{commands},"replies":0}},"limits":{{"commands":{limit},"replies":20}}}}"#
+            );
             (200, Box::leak(answer.into_boxed_str()) as &'static str)
         };
         let (service, _) = serve(vec![read(20, 20), read(20, 100), read(0, 20)]);
@@ -679,34 +889,61 @@ mod tests {
         account.refresh_usage().unwrap();
         assert_eq!(account.voice_refusal(), Some("allowance"), "still used up");
         account.refresh_usage().unwrap();
-        assert_eq!(account.voice_refusal(), None, "a higher limit leaves commands");
+        assert_eq!(
+            account.voice_refusal(),
+            None,
+            "a higher limit leaves commands"
+        );
         // The global cap isn't in the account; only the day's end lifts it.
         account.note_refusal("global_cap");
         account.refresh_usage().unwrap();
         assert_eq!(account.voice_refusal(), Some("global_cap"));
-        account.today.lock().unwrap().refused = Some(("2001-01-01".to_owned(), "global_cap".to_owned()));
+        account.today.lock().unwrap().refused =
+            Some(("2001-01-01".to_owned(), "global_cap".to_owned()));
         assert_eq!(account.voice_refusal(), None, "a new UTC day");
     }
 
     #[test]
     fn the_next_utc_day_starts_at_midnight_utc() {
-        let at = |text: &str| chrono::DateTime::parse_from_rfc3339(text).unwrap().with_timezone(&chrono::Utc);
-        assert_eq!(next_utc_day(at("2026-10-27T15:30:00Z")), at("2026-10-28T00:00:00Z"));
-        assert_eq!(next_utc_day(at("2026-10-27T00:00:00Z")), at("2026-10-28T00:00:00Z"));
-        assert_eq!(next_utc_day(at("2026-12-31T23:59:59Z")), at("2027-01-01T00:00:00Z"));
+        let at = |text: &str| {
+            chrono::DateTime::parse_from_rfc3339(text)
+                .unwrap()
+                .with_timezone(&chrono::Utc)
+        };
+        assert_eq!(
+            next_utc_day(at("2026-10-27T15:30:00Z")),
+            at("2026-10-28T00:00:00Z")
+        );
+        assert_eq!(
+            next_utc_day(at("2026-10-27T00:00:00Z")),
+            at("2026-10-28T00:00:00Z")
+        );
+        assert_eq!(
+            next_utc_day(at("2026-12-31T23:59:59Z")),
+            at("2027-01-01T00:00:00Z")
+        );
     }
 
     #[test]
     fn reads_the_plan_and_counts_spoken_characters_on_the_paid_plan_only() {
         let dir = scratch();
         let (service, _) = serve(vec![
-            (200, r#"{"plan":{"name":"free"},"today":{"day":"2026-10-24","commands":0,"replies":0},"limits":{"commands":20,"replies":20}}"#),
-            (200, r#"{"plan":{"name":"paid","period_end":"2026-11-24T00:00:00.000Z","characters":99990,"characters_limit":100000}}"#),
+            (
+                200,
+                r#"{"plan":{"name":"free"},"today":{"day":"2026-10-24","commands":0,"replies":0},"limits":{"commands":20,"replies":20}}"#,
+            ),
+            (
+                200,
+                r#"{"plan":{"name":"paid","period_end":"2026-11-24T00:00:00.000Z","characters":99990,"characters_limit":100000}}"#,
+            ),
         ]);
         let account = signed_in(&service, dir.as_path());
         account.refresh_usage().unwrap();
         let free = account.status().plan.unwrap();
-        assert_eq!(serde_json::to_value(&free).unwrap(), serde_json::json!({"name": "free"}));
+        assert_eq!(
+            serde_json::to_value(&free).unwrap(),
+            serde_json::json!({"name": "free"})
+        );
         account.note_reply("Hello");
         assert_eq!(account.status().plan, Some(free));
 
@@ -718,7 +955,14 @@ mod tests {
         account.note_reply("four");
         account.note_reply("more");
         let paid = account.status().plan.unwrap();
-        assert_eq!((paid.characters, paid.characters_limit, paid.period_end.as_deref()), (Some(100001), Some(100000), Some("2026-11-24T00:00:00.000Z")));
+        assert_eq!(
+            (
+                paid.characters,
+                paid.characters_limit,
+                paid.period_end.as_deref()
+            ),
+            (Some(100001), Some(100000), Some("2026-11-24T00:00:00.000Z"))
+        );
         account.forget();
         assert_eq!(account.status().plan, None);
     }
@@ -735,6 +979,10 @@ mod tests {
     fn a_damaged_account_file_means_signed_out() {
         let dir = scratch();
         std::fs::write(dir.as_path().join(ACCOUNT_FILE), "not json").unwrap();
-        assert!(!account("http://127.0.0.1:9", dir.as_path()).status().signed_in);
+        assert!(
+            !account("http://127.0.0.1:9", dir.as_path())
+                .status()
+                .signed_in
+        );
     }
 }

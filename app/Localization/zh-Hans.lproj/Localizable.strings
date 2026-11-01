@@ -294,7 +294,8 @@
 "The hook config changed after Codex's last event, so Codex turned the hooks off. Type /hooks in Codex and trust korekore's hooks again." = "Codex 上次发来事件之后钩子配置改过，所以 Codex 把钩子关了。在 Codex 里输入 /hooks，重新信任 korekore 的钩子。";
 "The update didn't finish" = "更新没有完成";
 "The update didn't take" = "更新没有生效";
-"Update checks are off, so korekore doesn't download firmware. Turn them on in General, or get it from Releases." = "检查更新已关闭，所以 korekore 不会下载固件。在“通用”里打开，或者从发布页下载。";
+"This build doesn't download firmware. Use Flash from file… on the Device page." = "此版本不下载固件。请在“设备”页使用“从文件刷入…”。";
+"Update checks are off, so korekore doesn't download firmware. Turn them on in General, or get it from Releases." ="检查更新已关闭，所以 korekore 不会下载固件。在“通用”里打开，或者从发布页下载。";
 "Allow it in System Settings › Privacy › Automation." = "在“系统设置 › 隐私与安全性 › 自动化”里允许它。";
 "Coming soon" = "即将推出";
 "Config file" = "配置文件";

@@ -16,14 +16,28 @@ const MINIMUM_SYSTEM: &str = "14.0";
 /// `dmg` is the exact file the manifest's URL serves: a notarized DMG changes when its ticket is stapled, so it is
 /// signed as published.
 pub fn appcast(manifest: &Manifest, dmg: &[u8], key: &SigningKey) -> Result<String, String> {
-    let app = manifest.app.get(PLATFORM).ok_or_else(|| format!("the manifest has no {PLATFORM} App"))?;
+    let app = manifest
+        .app
+        .get(PLATFORM)
+        .ok_or_else(|| format!("the manifest has no {PLATFORM} App"))?;
     // Sign only the file the manifest vouches for: what Sparkle downloads is what users get from the same URL.
-    let digest: String = Sha256::digest(dmg).iter().map(|byte| format!("{byte:02x}")).collect();
+    let digest: String = Sha256::digest(dmg)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
     if !digest.eq_ignore_ascii_case(&app.sha256) {
-        return Err(format!("the DMG has sha256 {digest}, the manifest says {}", app.sha256));
+        return Err(format!(
+            "the DMG has sha256 {digest}, the manifest says {}",
+            app.sha256
+        ));
     }
     let signature = STANDARD.encode(key.sign(dmg).to_bytes());
-    Ok(render(app, &manifest.min_supported_app, &signature, dmg.len()))
+    Ok(render(
+        app,
+        &manifest.min_supported_app,
+        &signature,
+        dmg.len(),
+    ))
 }
 
 fn render(app: &Download, min_supported_app: &str, signature: &str, length: usize) -> String {
@@ -32,8 +46,15 @@ fn render(app: &Download, min_supported_app: &str, signature: &str, length: usiz
     let mut descriptions = String::new();
     for (language, notes) in &app.notes {
         // Sparkle shows the description matching the user's language, English otherwise.
-        let lang = if language == "en" { String::new() } else { format!(" xml:lang=\"{}\"", escape(language)) };
-        descriptions.push_str(&format!("      <description{lang}><![CDATA[{}]]></description>\n", html(notes)));
+        let lang = if language == "en" {
+            String::new()
+        } else {
+            format!(" xml:lang=\"{}\"", escape(language))
+        };
+        descriptions.push_str(&format!(
+            "      <description{lang}><![CDATA[{}]]></description>\n",
+            html(notes)
+        ));
     }
     format!(
         r#"<?xml version="1.0" encoding="utf-8"?>
@@ -74,7 +95,10 @@ fn html(markdown: &str) -> String {
                 in_list = true;
             }
             out.push_str(&format!("<li>{}</li>", inline(item)));
-        } else if let Some(heading) = line.strip_prefix('#').map(|rest| rest.trim_start_matches('#').trim()) {
+        } else if let Some(heading) = line
+            .strip_prefix('#')
+            .map(|rest| rest.trim_start_matches('#').trim())
+        {
             out.push_str(&format!("<h3>{}</h3>", inline(heading)));
         } else if !line.is_empty() {
             out.push_str(&format!("<p>{}</p>", inline(line)));
@@ -90,12 +114,21 @@ fn html(markdown: &str) -> String {
 fn inline(text: &str) -> String {
     text.split('`')
         .enumerate()
-        .map(|(index, part)| if index % 2 == 1 { format!("<code>{}</code>", escape(part)) } else { escape(part) })
+        .map(|(index, part)| {
+            if index % 2 == 1 {
+                format!("<code>{}</code>", escape(part))
+            } else {
+                escape(part)
+            }
+        })
         .collect()
 }
 
 fn escape(text: &str) -> String {
-    text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 #[cfg(test)]
@@ -111,13 +144,20 @@ mod tests {
 
     fn manifest() -> Manifest {
         let notes = Notes::from([
-            ("en".to_owned(), "## What's new\n\n- Faster `Check now`\n- Fixes <things>".to_owned()),
+            (
+                "en".to_owned(),
+                "## What's new\n\n- Faster `Check now`\n- Fixes <things>".to_owned(),
+            ),
             ("zh-Hans".to_owned(), "## 新功能\n\n- 更快".to_owned()),
         ]);
         let app = Download {
             version: "0.4.0".to_owned(),
-            url: "https://github.com/x/y/releases/download/v0.4.0/VibeBuddy-v0.4.0-arm64.dmg".to_owned(),
-            sha256: Sha256::digest(DMG).iter().map(|byte| format!("{byte:02x}")).collect(),
+            url: "https://github.com/x/y/releases/download/v0.4.0/VibeBuddy-v0.4.0-arm64.dmg"
+                .to_owned(),
+            sha256: Sha256::digest(DMG)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect(),
             notes,
         };
         Manifest {
@@ -135,9 +175,20 @@ mod tests {
         let (private, public) = generate_key().unwrap();
         let dmg = DMG;
         let xml = appcast(&manifest(), dmg, &signing_key(&private).unwrap()).unwrap();
-        let signature = xml.split("sparkle:edSignature=\"").nth(1).unwrap().split('"').next().unwrap();
+        let signature = xml
+            .split("sparkle:edSignature=\"")
+            .nth(1)
+            .unwrap()
+            .split('"')
+            .next()
+            .unwrap();
         let signature = Signature::from_slice(&STANDARD.decode(signature).unwrap()).unwrap();
-        assert!(verifying_key(&public).unwrap().verify(dmg, &signature).is_ok());
+        assert!(
+            verifying_key(&public)
+                .unwrap()
+                .verify(dmg, &signature)
+                .is_ok()
+        );
         assert!(xml.contains(&format!("length=\"{}\"", dmg.len())));
     }
 
@@ -147,8 +198,13 @@ mod tests {
         let xml = appcast(&manifest(), DMG, &signing_key(&private).unwrap()).unwrap();
         assert!(xml.contains("<sparkle:version>v0.4.0</sparkle:version>"));
         assert!(xml.contains("<sparkle:shortVersionString>0.4.0</sparkle:shortVersionString>"));
-        assert!(xml.contains(r#"<sparkle:criticalUpdate sparkle:version="v0.3.2">"#), "older than min_supported_app can't skip");
-        assert!(xml.contains("url=\"https://github.com/x/y/releases/download/v0.4.0/VibeBuddy-v0.4.0-arm64.dmg\""));
+        assert!(
+            xml.contains(r#"<sparkle:criticalUpdate sparkle:version="v0.3.2">"#),
+            "older than min_supported_app can't skip"
+        );
+        assert!(xml.contains(
+            "url=\"https://github.com/x/y/releases/download/v0.4.0/VibeBuddy-v0.4.0-arm64.dmg\""
+        ));
     }
 
     #[test]
@@ -164,12 +220,24 @@ mod tests {
         let (private, _) = generate_key().unwrap();
         let mut manifest = manifest();
         manifest.app.clear();
-        assert!(appcast(&manifest, DMG, &signing_key(&private).unwrap()).unwrap_err().contains(PLATFORM));
+        assert!(
+            appcast(&manifest, DMG, &signing_key(&private).unwrap())
+                .unwrap_err()
+                .contains(PLATFORM)
+        );
     }
 
     #[test]
     fn a_dmg_the_manifest_doesnt_vouch_for_is_not_signed() {
         let (private, _) = generate_key().unwrap();
-        assert!(appcast(&manifest(), b"another file", &signing_key(&private).unwrap()).unwrap_err().contains("sha256"));
+        assert!(
+            appcast(
+                &manifest(),
+                b"another file",
+                &signing_key(&private).unwrap()
+            )
+            .unwrap_err()
+            .contains("sha256")
+        );
     }
 }

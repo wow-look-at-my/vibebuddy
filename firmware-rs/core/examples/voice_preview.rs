@@ -104,10 +104,21 @@ struct Preview {
 
 impl Preview {
     fn new(directory: &Path) -> Self {
-        let mut board = PreviewBoard { now: Cell::new(1000), frame: vec![0; FRAME_BYTES], flash: NoFlash, keys: (false, false, false), mic: false, samples: Vec::new() };
+        let mut board = PreviewBoard {
+            now: Cell::new(1000),
+            frame: vec![0; FRAME_BYTES],
+            flash: NoFlash,
+            keys: (false, false, false),
+            mic: false,
+            samples: Vec::new(),
+        };
         let mut firmware = Firmware::new(1, 1000, b"v0.3.2-11-g0adc18b 2026-10-06 16:34", "0.3.2");
         firmware.boot(&mut board);
-        let mut preview = Self { directory: directory.to_path_buf(), board, firmware };
+        let mut preview = Self {
+            directory: directory.to_path_buf(),
+            board,
+            firmware,
+        };
         preview.send(r#"{"version":1,"event":"device.heartbeat","build":"0.3.1 v0.3.1-12-ga4a667c 2026-10-06 16:26","hour":14,"day":20261005}"#);
         preview.send(
             r#"{"version":1,"event":"task.start","title":"CC:MUSE DUAL BOOT","stats":["13 DONE","1 ASKS","46M BUSY"],"tasks":[{"title":"CC:MUSE DUAL BOOT","status":"working","elapsed_s":420,"project":"VIBE-BUDDY"},{"title":"CX:RELEASE NOTES","status":"done","elapsed_s":1500,"project":"VIBE-BUDDY"}]}"#,
@@ -129,7 +140,11 @@ impl Preview {
             held += 10;
             if self.board.mic {
                 let start = self.board.now.get() as f32 * 24.0;
-                self.board.samples.extend((0..240).map(|index| ((start + index as f32) * 0.06).sin() * amplitude).map(|sample| sample as i16));
+                self.board.samples.extend(
+                    (0..240)
+                        .map(|index| ((start + index as f32) * 0.06).sin() * amplitude)
+                        .map(|sample| sample as i16),
+                );
             }
             self.firmware.poll(&mut self.board);
         }
@@ -154,7 +169,11 @@ impl Preview {
 }
 
 fn main() {
-    let directory = PathBuf::from(std::env::args().nth(1).expect("usage: voice_preview <output directory>"));
+    let directory = PathBuf::from(
+        std::env::args()
+            .nth(1)
+            .expect("usage: voice_preview <output directory>"),
+    );
     fs::create_dir_all(&directory).expect("create directory");
 
     let mut preview = Preview::new(&directory);
@@ -164,7 +183,9 @@ fn main() {
     preview.snapshot("voice-listening");
     preview.release_k0();
     preview.snapshot("voice-thinking");
-    preview.send(r#"{"version":1,"event":"voice.heard","turn":1,"text":"what is codex doing right now"}"#);
+    preview.send(
+        r#"{"version":1,"event":"voice.heard","turn":1,"text":"what is codex doing right now"}"#,
+    );
     preview.send(r#"{"version":1,"event":"voice.reply","turn":1,"text":"It's writing the release notes. Should be done in a few minutes."}"#);
     preview.snapshot("voice-reply");
 

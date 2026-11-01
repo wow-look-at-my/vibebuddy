@@ -50,7 +50,11 @@ impl UiLanguage {
     }
 
     pub fn saved() -> Self {
-        match Self::file().and_then(|file| std::fs::read_to_string(file).ok()).as_deref().map(str::trim) {
+        match Self::file()
+            .and_then(|file| std::fs::read_to_string(file).ok())
+            .as_deref()
+            .map(str::trim)
+        {
             Some("en") => Self::English,
             Some("zh-Hans") => Self::Chinese,
             _ => Self::System,
@@ -66,8 +70,14 @@ impl UiLanguage {
                 _ => Err(error),
             }),
             Self::English | Self::Chinese => {
-                let code = if self == Self::Chinese { "zh-Hans" } else { "en" };
-                file.parent().map_or(Ok(()), std::fs::create_dir_all).and_then(|()| std::fs::write(&file, code))
+                let code = if self == Self::Chinese {
+                    "zh-Hans"
+                } else {
+                    "en"
+                };
+                file.parent()
+                    .map_or(Ok(()), std::fs::create_dir_all)
+                    .and_then(|()| std::fs::write(&file, code))
             }
         };
         result.map_err(|error| format!("{}: {error}", file.display()))
@@ -106,8 +116,12 @@ fn locale_wants_chinese() -> bool {
 fn parse(table: &str) -> HashMap<String, String> {
     let mut entries = HashMap::new();
     for line in table.lines() {
-        let Some((key, rest)) = literal(line.trim_start()) else { continue };
-        let Some(rest) = rest.trim_start().strip_prefix('=') else { continue };
+        let Some((key, rest)) = literal(line.trim_start()) else {
+            continue;
+        };
+        let Some(rest) = rest.trim_start().strip_prefix('=') else {
+            continue;
+        };
         if let Some((value, _)) = literal(rest.trim_start()) {
             entries.insert(key, value);
         }
@@ -142,10 +156,15 @@ fn format(text: &str, args: &[&dyn Display]) -> String {
         let spec = &rest[start + 1..];
         let digits = spec.bytes().take_while(u8::is_ascii_digit).count();
         let (index, after_index) = match spec[digits..].strip_prefix('$') {
-            Some(after) if digits > 0 => (spec[..digits].parse::<usize>().ok().map(|n| n - 1), after),
+            Some(after) if digits > 0 => {
+                (spec[..digits].parse::<usize>().ok().map(|n| n - 1), after)
+            }
             _ => (None, spec),
         };
-        let Some(length) = ["lld", "@", "d"].iter().find(|kind| after_index.starts_with(**kind)).map(|kind| kind.len())
+        let Some(length) = ["lld", "@", "d"]
+            .iter()
+            .find(|kind| after_index.starts_with(**kind))
+            .map(|kind| kind.len())
         else {
             out.push('%');
             rest = spec;
@@ -179,7 +198,10 @@ mod tests {
     #[test]
     fn the_shared_table_parses() {
         let table = parse(TABLE);
-        assert_eq!(table.get("Box not found").map(String::as_str), Some("未找到盒子"));
+        assert_eq!(
+            table.get("Box not found").map(String::as_str),
+            Some("未找到盒子")
+        );
         assert!(table.len() > 100);
     }
 

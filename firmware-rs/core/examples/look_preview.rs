@@ -48,14 +48,20 @@ fn main() {
     fs::create_dir_all(&directory).expect("create directory");
     let look = Look::parse(&fs::read(look_path).expect("read look")).expect("not a look");
 
-    let mut screen = Frame { bytes: vec![0; FRAME_BYTES] };
+    let mut screen = Frame {
+        bytes: vec![0; FRAME_BYTES],
+    };
     let mut display = Display::new();
     let pomodoro = Pomodoro::new();
     let mut leisure = Leisure::new(1, 0);
     let mut now = 1000;
     macro_rules! scene {
         () => {
-            Scene { now_ms: now, pomodoro: &pomodoro, leisure: &leisure }
+            Scene {
+                now_ms: now,
+                pomodoro: &pomodoro,
+                leisure: &leisure,
+            }
         };
     }
     display.start(&mut screen, &scene!()).unwrap();
@@ -63,8 +69,22 @@ fn main() {
     display.set_look(&mut screen, &scene!(), Some(look));
 
     let cards = [
-        TaskInput { title: Some(b"CC:CHARACTERS"), state: State::Working, elapsed_s: 75, project: Some(b"VIBE-BUDDY"), id: None, icon: None },
-        TaskInput { title: Some(b"CX:EROS-TRAINING"), state: State::Working, elapsed_s: 900, project: None, id: None, icon: None },
+        TaskInput {
+            title: Some(b"CC:CHARACTERS"),
+            state: State::Working,
+            elapsed_s: 75,
+            project: Some(b"VIBE-BUDDY"),
+            id: None,
+            icon: None,
+        },
+        TaskInput {
+            title: Some(b"CX:EROS-TRAINING"),
+            state: State::Working,
+            elapsed_s: 900,
+            project: None,
+            id: None,
+            icon: None,
+        },
     ];
     let states: [(&str, State, &[TaskInput], u32); 6] = [
         ("idle", State::Idle, &[], 120),
@@ -75,13 +95,27 @@ fn main() {
         ("offline", State::Offline, &[], 1),
     ];
     for (name, state, tasks, frames) in states {
-        let shown = if state == State::Offline { State::Idle } else { state };
-        let _ = display.show_tasks(&mut screen, &scene!(), shown, Some(b"CC:VIBE-BUDDY"), tasks, tasks.len());
+        let shown = if state == State::Offline {
+            State::Idle
+        } else {
+            state
+        };
+        let _ = display.show_tasks(
+            &mut screen,
+            &scene!(),
+            shown,
+            Some(b"CC:VIBE-BUDDY"),
+            tasks,
+            tasks.len(),
+        );
         display.set_link_lost(&mut screen, &scene!(), state == State::Offline);
         for frame in 0..frames {
             display.preview_pose(Some(frame), None, None);
             display.refresh(&mut screen, &scene!());
-            write_ppm(&directory.join(format!("duty_{name}_{frame:03}.ppm")), &screen.bytes);
+            write_ppm(
+                &directory.join(format!("duty_{name}_{frame:03}.ppm")),
+                &screen.bytes,
+            );
         }
     }
     display.set_link_lost(&mut screen, &scene!(), false);
@@ -105,7 +139,10 @@ fn main() {
         for frame in 0..frames {
             now = start + frame * leisure::FRAME_MS;
             display.refresh(&mut screen, &scene!());
-            write_ppm(&directory.join(format!("skit_{name}_{frame:03}.ppm")), &screen.bytes);
+            write_ppm(
+                &directory.join(format!("skit_{name}_{frame:03}.ppm")),
+                &screen.bytes,
+            );
         }
     }
 }

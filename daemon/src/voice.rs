@@ -37,10 +37,11 @@ const LINE_PREFIX: &str = "VOICE ";
 
 // IMA ADPCM, exactly as firmware-rs/core/src/adpcm.rs decodes it; the box encodes with its inverse.
 const STEPS: [i32; 89] = [
-    7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66, 73, 80, 88, 97, 107, 118, 130,
-    143, 157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408, 449, 494, 544, 598, 658, 724, 796, 876, 963, 1060, 1166,
-    1282, 1411, 1552, 1707, 1878, 2066, 2272, 2499, 2749, 3024, 3327, 3660, 4026, 4428, 4871, 5358, 5894, 6484, 7132, 7845,
-    8630, 9493, 10442, 11487, 12635, 13899, 15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767,
+    7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66,
+    73, 80, 88, 97, 107, 118, 130, 143, 157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408, 449,
+    494, 544, 598, 658, 724, 796, 876, 963, 1060, 1166, 1282, 1411, 1552, 1707, 1878, 2066, 2272,
+    2499, 2749, 3024, 3327, 3660, 4026, 4428, 4871, 5358, 5894, 6484, 7132, 7845, 8630, 9493,
+    10442, 11487, 12635, 13899, 15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767,
 ];
 const INDEX_CHANGE: [i32; 16] = [-1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8];
 
@@ -52,7 +53,10 @@ pub struct Decoder {
 
 impl Decoder {
     pub fn new(predictor: i16, index: u8) -> Self {
-        Self { predictor: predictor.into(), index: i32::from(index).min(88) }
+        Self {
+            predictor: predictor.into(),
+            index: i32::from(index).min(88),
+        }
     }
 
     pub fn decode(&mut self, nibble: u8) -> i16 {
@@ -67,7 +71,12 @@ impl Decoder {
         if nibble & 1 != 0 {
             diff += step >> 2;
         }
-        self.predictor = if nibble & 8 != 0 { self.predictor - diff } else { self.predictor + diff }.clamp(-32768, 32767);
+        self.predictor = if nibble & 8 != 0 {
+            self.predictor - diff
+        } else {
+            self.predictor + diff
+        }
+        .clamp(-32768, 32767);
         self.index = (self.index + INDEX_CHANGE[(nibble & 15) as usize]).clamp(0, 88);
         self.predictor as i16
     }
@@ -76,30 +85,61 @@ impl Decoder {
 /// Two samples per byte, low nibble first.
 pub fn decode_line(predictor: i16, index: u8, bytes: &[u8]) -> Vec<i16> {
     let mut decoder = Decoder::new(predictor, index);
-    bytes.iter().flat_map(|byte| [byte & 15, byte >> 4]).map(|nibble| decoder.decode(nibble)).collect()
+    bytes
+        .iter()
+        .flat_map(|byte| [byte & 15, byte >> 4])
+        .map(|nibble| decoder.decode(nibble))
+        .collect()
 }
 
 #[derive(Debug, PartialEq)]
 pub enum VoiceLine {
-    Start { turn: u32 },
-    Data { turn: u32, seq: u32, predictor: i16, index: u8, bytes: Vec<u8> },
-    End { turn: u32, samples: u32 },
-    Cancel { turn: u32 },
+    Start {
+        turn: u32,
+    },
+    Data {
+        turn: u32,
+        seq: u32,
+        predictor: i16,
+        index: u8,
+        bytes: Vec<u8>,
+    },
+    End {
+        turn: u32,
+        samples: u32,
+    },
+    Cancel {
+        turn: u32,
+    },
 }
 
 /// None when the line isn't a `VOICE` line; an error when it is one but malformed.
 pub fn parse_line(line: &str) -> Option<Result<VoiceLine, String>> {
     let rest = line.trim().strip_prefix(LINE_PREFIX)?;
     let fields: Vec<&str> = rest.split(' ').collect();
-    let number = |index: usize| fields.get(index).and_then(|field| field.parse::<u32>().ok());
+    let number = |index: usize| {
+        fields
+            .get(index)
+            .and_then(|field| field.parse::<u32>().ok())
+    };
     let parsed = match (fields[0], fields.len()) {
         ("START", 2) => number(1).map(|turn| VoiceLine::Start { turn }),
-        ("END", 3) => number(1).zip(number(2)).map(|(turn, samples)| VoiceLine::End { turn, samples }),
+        ("END", 3) => number(1)
+            .zip(number(2))
+            .map(|(turn, samples)| VoiceLine::End { turn, samples }),
         ("CANCEL", 2) => number(1).map(|turn| VoiceLine::Cancel { turn }),
         ("DATA", 6) => (|| {
-            let bytes = base64::engine::general_purpose::STANDARD.decode(fields[5]).ok()?;
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(fields[5])
+                .ok()?;
             let index = fields[4].parse::<u8>().ok().filter(|index| *index <= 88)?;
-            Some(VoiceLine::Data { turn: number(1)?, seq: number(2)?, predictor: fields[3].parse().ok()?, index, bytes })
+            Some(VoiceLine::Data {
+                turn: number(1)?,
+                seq: number(2)?,
+                predictor: fields[3].parse().ok()?,
+                index,
+                bytes,
+            })
         })(),
         _ => None,
     };
@@ -185,7 +225,9 @@ pub enum Availability {
 /// the box shows for it.
 pub fn available_event(availability: Availability) -> Event {
     let mut event = Event::named("voice.available");
-    event.extra.insert("on".to_owned(), (availability == Availability::On).into());
+    event
+        .extra
+        .insert("on".to_owned(), (availability == Availability::On).into());
     if let Availability::Off(reason) = availability {
         event.extra.insert("reason".to_owned(), reason.into());
         event.message = refusal_message(reason);
@@ -200,8 +242,12 @@ pub fn slow_link_event(firmware_switches: bool) -> Event {
     event.extra.insert("on".to_owned(), false.into());
     event.extra.insert("reason".to_owned(), "slow_link".into());
     event.message = Some(
-        if firmware_switches { "This port is too slow for voice. Use my other USB port." } else { "Update my firmware, or use my other USB port, to talk to me." }
-            .to_owned(),
+        if firmware_switches {
+            "This port is too slow for voice. Use my other USB port."
+        } else {
+            "Update my firmware, or use my other USB port, to talk to me."
+        }
+        .to_owned(),
     );
     event
 }
@@ -213,7 +259,10 @@ pub fn refusal_message(reason: &str) -> Option<String> {
     Some(match reason {
         "signed_out" => "Sign in on the computer to talk to me.".to_owned(),
         "allowance" => format!("Today's voice is used up. It comes back at {}.", back()),
-        "global_cap" => format!("Voice is paused for everyone today. It comes back at {}.", back()),
+        "global_cap" => format!(
+            "Voice is paused for everyone today. It comes back at {}.",
+            back()
+        ),
         "not_ready" => "My session on the computer isn't ready.".to_owned(),
         _ => return None,
     })
@@ -224,7 +273,10 @@ fn comes_back_at<Zone: chrono::TimeZone>(now: chrono::DateTime<chrono::Utc>, zon
 where
     Zone::Offset: std::fmt::Display,
 {
-    crate::account::next_utc_day(now).with_timezone(zone).format("%H:%M").to_string()
+    crate::account::next_utc_day(now)
+        .with_timezone(zone)
+        .format("%H:%M")
+        .to_string()
 }
 
 fn turn_event(name: &str, turn: u32) -> Event {
@@ -237,9 +289,15 @@ fn turn_event(name: &str, turn: u32) -> Event {
 fn fitted(text: &str, build: impl Fn(String) -> Event) -> Event {
     let mut keep = text.len();
     loop {
-        let shown = if keep < text.len() { format!("{}…", &text[..keep]) } else { text.to_owned() };
+        let shown = if keep < text.len() {
+            format!("{}…", &text[..keep])
+        } else {
+            text.to_owned()
+        };
         let event = build(shown);
-        let size = serde_json::to_vec(&event).map(|bytes| bytes.len()).unwrap_or(0);
+        let size = serde_json::to_vec(&event)
+            .map(|bytes| bytes.len())
+            .unwrap_or(0);
         if size <= MAX_MESSAGE_BYTES || keep == 0 {
             return event;
         }
@@ -356,11 +414,20 @@ pub struct Voice {
 
 impl Voice {
     pub fn new(recognizer: Option<Arc<dyn Recognizer>>, resident: Option<Arc<Resident>>) -> Self {
-        Self { recognizer, resident, synthesizer: None, recording: std::sync::Mutex::new(None), running: Arc::default() }
+        Self {
+            recognizer,
+            resident,
+            synthesizer: None,
+            recording: std::sync::Mutex::new(None),
+            running: Arc::default(),
+        }
     }
 
     pub fn with_synthesizer(self, synthesizer: Option<Arc<dyn Synthesizer>>) -> Self {
-        Self { synthesizer, ..self }
+        Self {
+            synthesizer,
+            ..self
+        }
     }
 
     /// Voice is offered when speech recognition can be asked (the voice service needs the person signed in to their
@@ -368,7 +435,10 @@ impl Voice {
     /// installed and logged in. Signing in comes first, since nothing else works without it; then the session, since
     /// voice doesn't come back with the day while it isn't ready.
     pub fn availability(&self) -> Availability {
-        let (Some(recognizer), Some(resident)) = (&self.recognizer, self.resident.as_ref().filter(|resident| resident.enabled())) else {
+        let (Some(recognizer), Some(resident)) = (
+            &self.recognizer,
+            self.resident.as_ref().filter(|resident| resident.enabled()),
+        ) else {
             return Availability::Unset;
         };
         let refusal = recognizer.refusal();
@@ -383,7 +453,12 @@ impl Voice {
 
     /// Takes one `VOICE` line from the box. A turn that ends starts a task, returned so tests can wait for it;
     /// its replies are written in the persona and spoken in the voice of what the box `wearing`.
-    pub fn handle_line(&self, line: &str, transport: &Arc<dyn Transport>, wearing: &Wearing) -> Option<JoinHandle<()>> {
+    pub fn handle_line(
+        &self,
+        line: &str,
+        transport: &Arc<dyn Transport>,
+        wearing: &Wearing,
+    ) -> Option<JoinHandle<()>> {
         let parsed = match parse_line(line) {
             None => return None,
             Some(Err(error)) => {
@@ -396,23 +471,49 @@ impl Voice {
         match parsed {
             VoiceLine::Start { turn } => {
                 if let Some(old) = recording.as_ref().filter(|old| old.turn != turn) {
-                    warn!(old = old.turn, new = turn, "a voice turn started before the last one ended; dropped the last one");
+                    warn!(
+                        old = old.turn,
+                        new = turn,
+                        "a voice turn started before the last one ended; dropped the last one"
+                    );
                 }
                 // Refused at once rather than at its end, so the user isn't left talking to a box that won't listen.
                 let refused = self.running.load(Ordering::Acquire);
                 if refused {
                     info!(turn, "a voice turn started while another is still running");
-                    send(&**transport, error_event(turn, "busy", "another voice command is still running"));
+                    send(
+                        &**transport,
+                        error_event(turn, "busy", "another voice command is still running"),
+                    );
                 } else {
                     info!(turn, "voice turn recording");
                 }
-                *recording = Some(Recording { turn, lines: BTreeMap::new(), samples: 0, refused });
+                *recording = Some(Recording {
+                    turn,
+                    lines: BTreeMap::new(),
+                    samples: 0,
+                    refused,
+                });
             }
-            VoiceLine::Data { turn, seq, predictor, index, bytes } => {
-                if recording.as_ref().is_none_or(|current| current.turn != turn) {
+            VoiceLine::Data {
+                turn,
+                seq,
+                predictor,
+                index,
+                bytes,
+            } => {
+                if recording
+                    .as_ref()
+                    .is_none_or(|current| current.turn != turn)
+                {
                     // Its START was lost: the audio still counts.
                     debug!(turn, "voice data without its start");
-                    *recording = Some(Recording { turn, lines: BTreeMap::new(), samples: 0, refused: false });
+                    *recording = Some(Recording {
+                        turn,
+                        lines: BTreeMap::new(),
+                        samples: 0,
+                        refused: false,
+                    });
                 }
                 let current = recording.as_mut().expect("recording was just made");
                 if current.refused {
@@ -420,14 +521,20 @@ impl Voice {
                 }
                 let line = decode_line(predictor, index, &bytes);
                 if current.samples + line.len() > MAX_SAMPLES {
-                    debug!(turn, seq, "voice turn over the longest recording; line dropped");
+                    debug!(
+                        turn,
+                        seq, "voice turn over the longest recording; line dropped"
+                    );
                 } else {
                     current.samples += line.len();
                     current.lines.insert(seq, line);
                 }
             }
             VoiceLine::Cancel { turn } => {
-                if recording.as_ref().is_some_and(|current| current.turn == turn) {
+                if recording
+                    .as_ref()
+                    .is_some_and(|current| current.turn == turn)
+                {
                     *recording = None;
                 }
                 info!(turn, "voice turn cancelled by the box");
@@ -438,8 +545,18 @@ impl Voice {
                 if taken.as_ref().is_some_and(|taken| taken.refused) {
                     return None;
                 }
-                let speaker = self.synthesizer.clone().map(|synthesizer| (synthesizer, wearing.character.clone()));
-                return self.end(turn, samples as usize, taken, transport.clone(), speaker, wearing.clone());
+                let speaker = self
+                    .synthesizer
+                    .clone()
+                    .map(|synthesizer| (synthesizer, wearing.character.clone()));
+                return self.end(
+                    turn,
+                    samples as usize,
+                    taken,
+                    transport.clone(),
+                    speaker,
+                    wearing.clone(),
+                );
             }
         }
         None
@@ -454,19 +571,34 @@ impl Voice {
         speaker: Option<(Arc<dyn Synthesizer>, Option<String>)>,
         wearing: Wearing,
     ) -> Option<JoinHandle<()>> {
-        let (Some(recognizer), Some(resident)) = (self.recognizer.clone(), self.resident.clone().filter(|resident| resident.enabled()))
-        else {
-            send(&*transport, error_event(turn, "unavailable", "voice commands are off on this computer"));
+        let (Some(recognizer), Some(resident)) = (
+            self.recognizer.clone(),
+            self.resident.clone().filter(|resident| resident.enabled()),
+        ) else {
+            send(
+                &*transport,
+                error_event(
+                    turn,
+                    "unavailable",
+                    "voice commands are off on this computer",
+                ),
+            );
             return None;
         };
         let Some(recording) = recording.filter(|recording| !recording.lines.is_empty()) else {
             warn!(turn, "a voice turn ended with no audio");
-            send(&*transport, error_event(turn, "not_heard", "no audio arrived"));
+            send(
+                &*transport,
+                error_event(turn, "not_heard", "no audio arrived"),
+            );
             return None;
         };
         if self.running.swap(true, Ordering::AcqRel) {
             info!(turn, "a voice turn ended while another is still running");
-            send(&*transport, error_event(turn, "busy", "another voice command is still running"));
+            send(
+                &*transport,
+                error_event(turn, "busy", "another voice command is still running"),
+            );
             return None;
         }
         let running = Running(self.running.clone());
@@ -476,7 +608,10 @@ impl Voice {
         }
         Some(tokio::spawn(async move {
             let _running = running;
-            run_turn(turn, audio, recognizer, resident, transport, speaker, wearing).await;
+            run_turn(
+                turn, audio, recognizer, resident, transport, speaker, wearing,
+            )
+            .await;
         }))
     }
 }
@@ -490,7 +625,12 @@ struct Speaker {
 }
 
 impl Speaker {
-    fn start(turn: u32, synthesizer: Arc<dyn Synthesizer>, character: Option<String>, transport: Arc<dyn Transport>) -> Self {
+    fn start(
+        turn: u32,
+        synthesizer: Arc<dyn Synthesizer>,
+        character: Option<String>,
+        transport: Arc<dyn Transport>,
+    ) -> Self {
         let (replies, mut texts) = tokio::sync::mpsc::unbounded_channel::<String>();
         let stopped = Arc::new(AtomicBool::new(false));
         let task = tokio::spawn({
@@ -498,10 +638,22 @@ impl Speaker {
             async move {
                 let mut reply = 0;
                 while let Some(text) = texts.recv().await {
-                    let (synthesizer, character, transport, stopped) =
-                        (synthesizer.clone(), character.clone(), transport.clone(), stopped.clone());
+                    let (synthesizer, character, transport, stopped) = (
+                        synthesizer.clone(),
+                        character.clone(),
+                        transport.clone(),
+                        stopped.clone(),
+                    );
                     let spoken = tokio::task::spawn_blocking(move || {
-                        speak(turn, reply, &text, character.as_deref(), &*synthesizer, &*transport, &stopped)
+                        speak(
+                            turn,
+                            reply,
+                            &text,
+                            character.as_deref(),
+                            &*synthesizer,
+                            &*transport,
+                            &stopped,
+                        )
                     });
                     if let Err(error) = spoken.await {
                         warn!(turn, reply, %error, "speech synthesis panicked");
@@ -510,7 +662,11 @@ impl Speaker {
                 }
             }
         });
-        Self { replies, stopped, task }
+        Self {
+            replies,
+            stopped,
+            task,
+        }
     }
 
     fn say(&self, text: &str) {
@@ -559,7 +715,12 @@ fn speak(
         bytes += piece.len();
         for chunk in piece.chunks(AUDIO_BYTES) {
             let mut event = audio_event(turn, reply, seq);
-            event.extra.insert("data".to_owned(), base64::engine::general_purpose::STANDARD.encode(chunk).into());
+            event.extra.insert(
+                "data".to_owned(),
+                base64::engine::general_purpose::STANDARD
+                    .encode(chunk)
+                    .into(),
+            );
             if !send_paced(transport, event, stopped) {
                 return false;
             }
@@ -574,7 +735,10 @@ fn speak(
     let mut end = audio_event(turn, reply, seq);
     end.extra.insert("end".to_owned(), true.into());
     match result {
-        Ok(()) => info!(turn, reply, voice, first_byte_ms, total_ms, bytes, "spoken reply synthesized"),
+        Ok(()) => info!(
+            turn,
+            reply, voice, first_byte_ms, total_ms, bytes, "spoken reply synthesized"
+        ),
         Err(error) => {
             warn!(turn, reply, voice, %error, bytes, "speech synthesis failed; the reply stays text");
             end.extra.insert("error".to_owned(), "synthesis".into());
@@ -598,7 +762,9 @@ fn send_paced(transport: &dyn Transport, event: Event, stopped: &AtomicBool) -> 
     loop {
         match transport.send(frame.clone()) {
             Ok(()) => return true,
-            Err(TransportError::QueueFull) if !stopped.load(Ordering::Acquire) && started.elapsed() < AUDIO_QUEUE_WAIT => {
+            Err(TransportError::QueueFull)
+                if !stopped.load(Ordering::Acquire) && started.elapsed() < AUDIO_QUEUE_WAIT =>
+            {
                 std::thread::sleep(std::time::Duration::from_millis(10));
             }
             Err(error) => {
@@ -619,7 +785,10 @@ async fn run_turn(
     wearing: Wearing,
 ) {
     let events = TurnEvents::start(transport.clone());
-    answer_turn(turn, audio, recognizer, resident, transport, speaker, wearing, &events).await;
+    answer_turn(
+        turn, audio, recognizer, resident, transport, speaker, wearing, &events,
+    )
+    .await;
     events.finish().await;
 }
 
@@ -650,18 +819,34 @@ async fn answer_turn(
         }
     };
     if transcript.text.is_empty() {
-        info!(turn, seconds, recognised_ms, "nothing was heard in the voice turn");
+        info!(
+            turn,
+            seconds, recognised_ms, "nothing was heard in the voice turn"
+        );
         events.send(error_event(turn, "not_heard", "nothing was recognised"));
         return;
     }
-    info!(turn, seconds, recognised_ms, language = transcript.language.as_deref().unwrap_or("unknown"), chars = transcript.text.chars().count(), "voice turn heard");
+    info!(
+        turn,
+        seconds,
+        recognised_ms,
+        language = transcript.language.as_deref().unwrap_or("unknown"),
+        chars = transcript.text.chars().count(),
+        "voice turn heard"
+    );
     events.send(text_event("voice.heard", turn, &transcript.text));
-    let speaker = speaker.map(|(synthesizer, character)| Speaker::start(turn, synthesizer, character, transport.clone()));
+    let speaker = speaker.map(|(synthesizer, character)| {
+        Speaker::start(turn, synthesizer, character, transport.clone())
+    });
     let mut replies = 0;
     let answered = resident
         .say_streaming(&transcript.text, &wearing, &mut |reply| {
             replies += 1;
-            info!(turn, elapsed_ms = started.elapsed().as_millis() as u64, "voice reply");
+            info!(
+                turn,
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                "voice reply"
+            );
             events.send(text_event("voice.reply", turn, reply));
             if let Some(speaker) = &speaker {
                 speaker.say(reply);
@@ -674,7 +859,12 @@ async fn answer_turn(
             if let Some(speaker) = speaker {
                 speaker.finish().await;
             }
-            info!(turn, replies, elapsed_ms = started.elapsed().as_millis() as u64, "voice turn done");
+            info!(
+                turn,
+                replies,
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                "voice turn done"
+            );
             events.send(turn_event("voice.done", turn));
         }
         Err(error) => {
@@ -717,21 +907,48 @@ pub mod tests {
     }
 
     pub fn sine(count: usize) -> Vec<i16> {
-        (0..count).map(|index| ((index as f32 * 0.05).sin() * 12000.0) as i16).collect()
+        (0..count)
+            .map(|index| ((index as f32 * 0.05).sin() * 12000.0) as i16)
+            .collect()
     }
 
     #[test]
     fn lines_parse_and_malformed_ones_are_told_apart_from_other_lines() {
-        assert_eq!(parse_line("VOICE START 3"), Some(Ok(VoiceLine::Start { turn: 3 })));
-        assert_eq!(parse_line("VOICE END 3 12000\r"), Some(Ok(VoiceLine::End { turn: 3, samples: 12000 })));
-        assert_eq!(parse_line("VOICE CANCEL 3"), Some(Ok(VoiceLine::Cancel { turn: 3 })));
+        assert_eq!(
+            parse_line("VOICE START 3"),
+            Some(Ok(VoiceLine::Start { turn: 3 }))
+        );
+        assert_eq!(
+            parse_line("VOICE END 3 12000\r"),
+            Some(Ok(VoiceLine::End {
+                turn: 3,
+                samples: 12000
+            }))
+        );
+        assert_eq!(
+            parse_line("VOICE CANCEL 3"),
+            Some(Ok(VoiceLine::Cancel { turn: 3 }))
+        );
         assert_eq!(
             parse_line("VOICE DATA 3 7 -1200 42 AQL/"),
-            Some(Ok(VoiceLine::Data { turn: 3, seq: 7, predictor: -1200, index: 42, bytes: vec![1, 2, 255] }))
+            Some(Ok(VoiceLine::Data {
+                turn: 3,
+                seq: 7,
+                predictor: -1200,
+                index: 42,
+                bytes: vec![1, 2, 255]
+            }))
         );
         assert!(parse_line("VOICES hsiaoyu").is_none());
         assert!(parse_line("MODE LEISURE").is_none());
-        for bad in ["VOICE DATA 3 7 -1200 89 AQL/", "VOICE DATA 3 7 40000 1 AQL/", "VOICE DATA 3 x 0 0 AQL/", "VOICE DATA 3 7 0 0 !!", "VOICE END 3", "VOICE SING 1"] {
+        for bad in [
+            "VOICE DATA 3 7 -1200 89 AQL/",
+            "VOICE DATA 3 7 40000 1 AQL/",
+            "VOICE DATA 3 x 0 0 AQL/",
+            "VOICE DATA 3 7 0 0 !!",
+            "VOICE END 3",
+            "VOICE SING 1",
+        ] {
             assert!(matches!(parse_line(bad), Some(Err(_))), "{bad}");
         }
     }
@@ -758,20 +975,35 @@ pub mod tests {
         let mut straight = Vec::new();
         let mut separately = Vec::new();
         for line in &lines {
-            if let Some(Ok(VoiceLine::Data { predictor, index, bytes, .. })) = parse_line(line) {
-                straight.extend(bytes.iter().flat_map(|byte| [byte & 15, byte >> 4]).map(|nibble| box_side.decode(nibble)));
+            if let Some(Ok(VoiceLine::Data {
+                predictor,
+                index,
+                bytes,
+                ..
+            })) = parse_line(line)
+            {
+                straight.extend(
+                    bytes
+                        .iter()
+                        .flat_map(|byte| [byte & 15, byte >> 4])
+                        .map(|nibble| box_side.decode(nibble)),
+                );
                 separately.extend(decode_line(predictor, index, &bytes));
             }
         }
         assert_eq!(straight[..10_000], separately[..10_000]);
         for (k, (&decoded, &expected)) in separately.iter().zip(&original).enumerate().skip(60) {
-            assert!((i32::from(decoded) - i32::from(expected)).abs() < 600, "sample {k}: {decoded} vs {expected}");
+            assert!(
+                (i32::from(decoded) - i32::from(expected)).abs() < 600,
+                "sample {k}: {decoded} vs {expected}"
+            );
         }
     }
 
     #[test]
     fn lost_lines_become_silence_of_a_lines_length() {
-        let lines: BTreeMap<u32, Vec<i16>> = [(0, vec![1; 4]), (2, vec![3; 4]), (3, vec![4; 2])].into();
+        let lines: BTreeMap<u32, Vec<i16>> =
+            [(0, vec![1; 4]), (2, vec![3; 4]), (3, vec![4; 2])].into();
         let (audio, missing) = assemble(&lines, 14);
         assert_eq!(audio, [1, 1, 1, 1, 0, 0, 0, 0, 3, 3, 3, 3, 4, 4]);
         assert_eq!(missing, [1]);
@@ -802,7 +1034,10 @@ pub mod tests {
                 Ok(())
             }
         }
-        let busy = Busy { refusals: std::sync::Mutex::new(3), sent: std::sync::Mutex::new(0) };
+        let busy = Busy {
+            refusals: std::sync::Mutex::new(3),
+            sent: std::sync::Mutex::new(0),
+        };
         let stopped = AtomicBool::new(false);
         assert!(send_paced(&busy, audio_event(1, 0, 0), &stopped));
         assert_eq!(*busy.sent.lock().unwrap(), 1);
@@ -831,7 +1066,11 @@ pub mod tests {
         assert!(frame.len() <= MAX_MESSAGE_BYTES + 1);
         let text = event.extra["text"].as_str().unwrap();
         assert!(text.ends_with('…') && long.starts_with(text.trim_end_matches('…')));
-        assert!(frame.len() > MAX_MESSAGE_BYTES - 8, "cut no more than needed: {}", frame.len());
+        assert!(
+            frame.len() > MAX_MESSAGE_BYTES - 8,
+            "cut no more than needed: {}",
+            frame.len()
+        );
         // Quotes take two bytes of JSON each.
         let quoted = "\"".repeat(2000);
         assert!(text_event("voice.reply", 1, &quoted).to_ndjson().is_ok());
@@ -859,7 +1098,12 @@ pub mod tests {
 
     impl RecordingTransport {
         pub fn events(&self) -> Vec<Event> {
-            self.frames.lock().unwrap().iter().map(|frame| serde_json::from_slice(frame).unwrap()).collect()
+            self.frames
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|frame| serde_json::from_slice(frame).unwrap())
+                .collect()
         }
     }
 
@@ -870,10 +1114,16 @@ pub mod tests {
     }
 
     impl Recognizer for FakeRecognizer {
-        fn recognize(&self, wav: &[u8]) -> Result<crate::speech::Transcript, crate::speech::RecognitionError> {
+        fn recognize(
+            &self,
+            wav: &[u8],
+        ) -> Result<crate::speech::Transcript, crate::speech::RecognitionError> {
             self.heard.lock().unwrap().push(wav.to_vec());
             self.answer
-                .map(|text| crate::speech::Transcript { text: text.to_owned(), language: Some("en".to_owned()) })
+                .map(|text| crate::speech::Transcript {
+                    text: text.to_owned(),
+                    language: Some("en".to_owned()),
+                })
                 .map_err(|message| message.to_owned().into())
         }
     }
@@ -890,8 +1140,16 @@ pub mod tests {
     }
 
     impl Synthesizer for FakeSynthesizer {
-        fn synthesize(&self, text: &str, voice: &str, on_audio: &mut dyn FnMut(&[u8]) -> bool) -> Result<(), String> {
-            self.calls.lock().unwrap().push((text.to_owned(), voice.to_owned()));
+        fn synthesize(
+            &self,
+            text: &str,
+            voice: &str,
+            on_audio: &mut dyn FnMut(&[u8]) -> bool,
+        ) -> Result<(), String> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push((text.to_owned(), voice.to_owned()));
             if let Some(gate) = self.gate.lock().unwrap().take() {
                 let _ = gate.recv();
             }
@@ -900,7 +1158,11 @@ pub mod tests {
                     return Ok(());
                 }
             }
-            if text.starts_with("fail") { Err("the connection was cut".to_owned()) } else { Ok(()) }
+            if text.starts_with("fail") {
+                Err("the connection was cut".to_owned())
+            } else {
+                Ok(())
+            }
         }
     }
 
@@ -926,27 +1188,54 @@ pub mod tests {
             character: Option<&'static str>,
         ) -> Self {
             let dir = temp_dir(&format!("voice-{name}"));
-            let recognizer = Arc::new(FakeRecognizer { answer, heard: Default::default() });
+            let recognizer = Arc::new(FakeRecognizer {
+                answer,
+                heard: Default::default(),
+            });
             let resident = Arc::new(resident(&dir, &script, Arc::default()));
-            let voice = Voice::new(Some(recognizer.clone()), Some(resident)).with_synthesizer(synthesizer);
-            Self { voice, transport: Arc::default(), recognizer, script, dir, character }
+            let voice =
+                Voice::new(Some(recognizer.clone()), Some(resident)).with_synthesizer(synthesizer);
+            Self {
+                voice,
+                transport: Arc::default(),
+                recognizer,
+                script,
+                dir,
+                character,
+            }
         }
 
         /// Feeds the lines; returns the task the last one started, if any.
         fn feed(&self, lines: &[String]) -> Option<JoinHandle<()>> {
             let transport: Arc<dyn Transport> = self.transport.clone();
-            let wearing = Wearing { character: self.character.map(str::to_owned), address: None };
-            lines.iter().filter_map(|line| self.voice.handle_line(line, &transport, &wearing)).last()
+            let wearing = Wearing {
+                character: self.character.map(str::to_owned),
+                address: None,
+            };
+            lines
+                .iter()
+                .filter_map(|line| self.voice.handle_line(line, &transport, &wearing))
+                .last()
         }
 
         fn names(&self) -> Vec<String> {
-            self.transport.events().iter().map(|event| event.event.clone()).collect()
+            self.transport
+                .events()
+                .iter()
+                .map(|event| event.event.clone())
+                .collect()
         }
 
         fn error(&self) -> (String, String) {
             let events = self.transport.events();
-            let error = events.iter().find(|event| event.event == "voice.error").expect("a voice.error");
-            (error.extra["reason"].as_str().unwrap().to_owned(), error.message.clone().unwrap_or_default())
+            let error = events
+                .iter()
+                .find(|event| event.event == "voice.error")
+                .expect("a voice.error");
+            (
+                error.extra["reason"].as_str().unwrap().to_owned(),
+                error.message.clone().unwrap_or_default(),
+            )
         }
     }
 
@@ -959,11 +1248,17 @@ pub mod tests {
     #[tokio::test]
     async fn a_turns_events_wait_for_room_in_a_full_queue_instead_of_dropping() {
         let script = logged_in();
-        script.lock().unwrap().turn_requests = vec![tool_call("speak", json!({"text": "Two agents are working."}))];
+        script.lock().unwrap().turn_requests = vec![tool_call(
+            "speak",
+            json!({"text": "Two agents are working."}),
+        )];
         let rig = Rig::new("full", Ok("what are my agents doing"), script);
         // The queue is full when the turn's events go out, as it is behind a reply's audio.
         *rig.transport.refusals.lock().unwrap() = 20;
-        rig.feed(&voice_lines(4, &sine(30_000))).expect("the turn runs").await.unwrap();
+        rig.feed(&voice_lines(4, &sine(30_000)))
+            .expect("the turn runs")
+            .await
+            .unwrap();
         assert_eq!(rig.names(), ["voice.heard", "voice.reply", "voice.done"]);
     }
 
@@ -972,11 +1267,15 @@ pub mod tests {
         let script = logged_in();
         let hold = Arc::new(tokio::sync::Notify::new());
         script.lock().unwrap().hold = Some(hold.clone());
-        script.lock().unwrap().turn_requests =
-            vec![tool_call("speak", json!({"text": "Two agents are working."})), tool_call("speak", json!({"text": "One needs you."}))];
+        script.lock().unwrap().turn_requests = vec![
+            tool_call("speak", json!({"text": "Two agents are working."})),
+            tool_call("speak", json!({"text": "One needs you."})),
+        ];
         let rig = Rig::new("turn", Ok("what are my agents doing"), script);
 
-        let task = rig.feed(&voice_lines(4, &sine(30_000))).expect("the turn runs");
+        let task = rig
+            .feed(&voice_lines(4, &sine(30_000)))
+            .expect("the turn runs");
         // Both replies reach the box while the turn is still open in the app-server.
         while rig.names().len() < 3 {
             tokio::time::sleep(std::time::Duration::from_millis(5)).await;
@@ -987,15 +1286,28 @@ pub mod tests {
         task.await.unwrap();
 
         let events = rig.transport.events();
-        assert_eq!(rig.names(), ["voice.heard", "voice.reply", "voice.reply", "voice.done"]);
+        assert_eq!(
+            rig.names(),
+            ["voice.heard", "voice.reply", "voice.reply", "voice.done"]
+        );
         assert!(events.iter().all(|event| event.extra["turn"] == 4));
         assert_eq!(events[0].extra["text"], "what are my agents doing");
         assert_eq!(events[1].extra["text"], "Two agents are working.");
         assert_eq!(events[2].extra["text"], "One needs you.");
         let wav = rig.recognizer.heard.lock().unwrap()[0].clone();
-        assert_eq!(wav.len(), 44 + 30_000 * 2, "the whole recording, as 16-bit samples");
-        let turn_text = rig.script.lock().unwrap().received.iter().find(|message| message["method"] == "turn/start").unwrap()
-            ["params"]["input"][1]["text"]
+        assert_eq!(
+            wav.len(),
+            44 + 30_000 * 2,
+            "the whole recording, as 16-bit samples"
+        );
+        let turn_text = rig
+            .script
+            .lock()
+            .unwrap()
+            .received
+            .iter()
+            .find(|message| message["method"] == "turn/start")
+            .unwrap()["params"]["input"][1]["text"]
             .clone();
         assert_eq!(turn_text, "what are my agents doing");
     }
@@ -1012,28 +1324,53 @@ pub mod tests {
                 let data = event.extra.get("data").map(|data| {
                     let data = data.as_str().unwrap();
                     assert!(data.len() <= 768, "{} base64 characters", data.len());
-                    base64::engine::general_purpose::STANDARD.decode(data).unwrap()
+                    base64::engine::general_purpose::STANDARD
+                        .decode(data)
+                        .unwrap()
                 });
                 assert_eq!(data.is_none(), event.extra.get("end") == Some(&json!(true)));
-                let error = event.extra.get("error").map(|error| error.as_str().unwrap().to_owned());
-                (event.extra["reply"].as_u64().unwrap(), event.extra["seq"].as_u64().unwrap(), data, error)
+                let error = event
+                    .extra
+                    .get("error")
+                    .map(|error| error.as_str().unwrap().to_owned());
+                (
+                    event.extra["reply"].as_u64().unwrap(),
+                    event.extra["seq"].as_u64().unwrap(),
+                    data,
+                    error,
+                )
             })
             .collect()
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn each_reply_is_spoken_in_order_without_holding_up_the_text_and_done_comes_after_the_audio() {
+    async fn each_reply_is_spoken_in_order_without_holding_up_the_text_and_done_comes_after_the_audio()
+     {
         let script = logged_in();
         let hold = Arc::new(tokio::sync::Notify::new());
         script.lock().unwrap().hold = Some(hold.clone());
-        script.lock().unwrap().turn_requests =
-            vec![tool_call("speak", json!({"text": "Two agents are working."})), tool_call("speak", json!({"text": "One needs you."}))];
+        script.lock().unwrap().turn_requests = vec![
+            tool_call("speak", json!({"text": "Two agents are working."})),
+            tool_call("speak", json!({"text": "One needs you."})),
+        ];
         let (open, gate) = std::sync::mpsc::channel();
         let pieces = vec![(0..=255).cycle().take(1300).collect(), vec![7; 10]];
-        let synthesizer = Arc::new(FakeSynthesizer { pieces, gate: std::sync::Mutex::new(Some(gate)), ..Default::default() });
-        let rig = Rig::speaking("speak", Ok("what are my agents doing"), script, Some(synthesizer.clone()), Some("ada"));
+        let synthesizer = Arc::new(FakeSynthesizer {
+            pieces,
+            gate: std::sync::Mutex::new(Some(gate)),
+            ..Default::default()
+        });
+        let rig = Rig::speaking(
+            "speak",
+            Ok("what are my agents doing"),
+            script,
+            Some(synthesizer.clone()),
+            Some("ada"),
+        );
 
-        let task = rig.feed(&voice_lines(4, &sine(30_000))).expect("the turn runs");
+        let task = rig
+            .feed(&voice_lines(4, &sine(30_000)))
+            .expect("the turn runs");
         // The first reply's audio is held up, and both replies' text still reach the box.
         while rig.names().len() < 3 {
             tokio::time::sleep(std::time::Duration::from_millis(5)).await;
@@ -1048,32 +1385,70 @@ pub mod tests {
 
         let events = rig.transport.events();
         assert!(events.iter().all(|event| event.extra["turn"] == 4));
-        assert!(events.iter().all(|event| event.to_ndjson().unwrap().len() <= MAX_MESSAGE_BYTES + 1));
+        assert!(
+            events
+                .iter()
+                .all(|event| event.to_ndjson().unwrap().len() <= MAX_MESSAGE_BYTES + 1)
+        );
         assert_eq!(rig.names().last().map(String::as_str), Some("voice.done"));
         let audio = audio(&events);
-        let order: Vec<(u64, u64, bool)> = audio.iter().map(|(reply, seq, data, _)| (*reply, *seq, data.is_none())).collect();
+        let order: Vec<(u64, u64, bool)> = audio
+            .iter()
+            .map(|(reply, seq, data, _)| (*reply, *seq, data.is_none()))
+            .collect();
         // 1300 bytes are three pieces of at most 576; then the 10, then the end.
-        let expected: Vec<(u64, u64, bool)> = [0, 1].into_iter().flat_map(|reply| (0..5).map(move |seq| (reply, seq, seq == 4))).collect();
+        let expected: Vec<(u64, u64, bool)> = [0, 1]
+            .into_iter()
+            .flat_map(|reply| (0..5).map(move |seq| (reply, seq, seq == 4)))
+            .collect();
         assert_eq!(order, expected);
         for reply in [0, 1] {
-            let bytes: Vec<u8> = audio.iter().filter(|(r, ..)| *r == reply).filter_map(|(_, _, data, _)| data.clone()).flatten().collect();
+            let bytes: Vec<u8> = audio
+                .iter()
+                .filter(|(r, ..)| *r == reply)
+                .filter_map(|(_, _, data, _)| data.clone())
+                .flatten()
+                .collect();
             assert_eq!(bytes.len(), 1310);
-            assert_eq!(bytes[..1300], (0..=255).cycle().take(1300).collect::<Vec<u8>>()[..]);
+            assert_eq!(
+                bytes[..1300],
+                (0..=255).cycle().take(1300).collect::<Vec<u8>>()[..]
+            );
         }
         assert!(audio.iter().all(|(.., error)| error.is_none()));
         let calls = synthesizer.calls.lock().unwrap().clone();
         let voice = "elevenlabs:tcSsCJFYrsHpK5rCQZMf".to_owned();
-        assert_eq!(calls, [("Two agents are working.".to_owned(), voice.clone()), ("One needs you.".to_owned(), voice)]);
+        assert_eq!(
+            calls,
+            [
+                ("Two agents are working.".to_owned(), voice.clone()),
+                ("One needs you.".to_owned(), voice)
+            ]
+        );
     }
 
     #[tokio::test]
     async fn a_failed_synthesis_ends_its_reply_early_marked_and_the_next_one_is_still_spoken() {
         let script = logged_in();
-        script.lock().unwrap().turn_requests =
-            vec![tool_call("speak", json!({"text": "fail: cut short"})), tool_call("speak", json!({"text": "还在。"}))];
-        let synthesizer = Arc::new(FakeSynthesizer { pieces: vec![vec![1; 100]], ..Default::default() });
-        let rig = Rig::speaking("speak-fail", Ok("hi"), script, Some(synthesizer.clone()), None);
-        rig.feed(&voice_lines(1, &sine(12_000))).unwrap().await.unwrap();
+        script.lock().unwrap().turn_requests = vec![
+            tool_call("speak", json!({"text": "fail: cut short"})),
+            tool_call("speak", json!({"text": "还在。"})),
+        ];
+        let synthesizer = Arc::new(FakeSynthesizer {
+            pieces: vec![vec![1; 100]],
+            ..Default::default()
+        });
+        let rig = Rig::speaking(
+            "speak-fail",
+            Ok("hi"),
+            script,
+            Some(synthesizer.clone()),
+            None,
+        );
+        rig.feed(&voice_lines(1, &sine(12_000)))
+            .unwrap()
+            .await
+            .unwrap();
 
         let audio = audio(&rig.transport.events());
         assert_eq!(
@@ -1087,15 +1462,38 @@ pub mod tests {
         );
         assert_eq!(rig.names().last().map(String::as_str), Some("voice.done"));
         // No Character pack: the built-in Character's voice, and a Chinese one for Chinese.
-        let voices: Vec<String> = synthesizer.calls.lock().unwrap().iter().map(|(_, voice)| voice.clone()).collect();
-        assert_eq!(voices, ["elevenlabs:cgSgspJ2msm6clMCkdW9", "elevenlabs:cgSgspJ2msm6clMCkdW9"]);
+        let voices: Vec<String> = synthesizer
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(_, voice)| voice.clone())
+            .collect();
+        assert_eq!(
+            voices,
+            [
+                "elevenlabs:cgSgspJ2msm6clMCkdW9",
+                "elevenlabs:cgSgspJ2msm6clMCkdW9"
+            ]
+        );
     }
 
     #[test]
     fn a_stopped_speaker_sends_nothing_more() {
-        let synthesizer = FakeSynthesizer { pieces: vec![vec![1; 10]], ..Default::default() };
+        let synthesizer = FakeSynthesizer {
+            pieces: vec![vec![1; 10]],
+            ..Default::default()
+        };
         let transport = RecordingTransport::default();
-        speak(1, 0, "hello", None, &synthesizer, &transport, &AtomicBool::new(true));
+        speak(
+            1,
+            0,
+            "hello",
+            None,
+            &synthesizer,
+            &transport,
+            &AtomicBool::new(true),
+        );
         assert!(transport.events().is_empty());
         assert!(synthesizer.calls.lock().unwrap().is_empty());
     }
@@ -1103,7 +1501,12 @@ pub mod tests {
     #[test]
     fn the_largest_audio_piece_fits_a_line() {
         let mut event = audio_event(u32::MAX, u32::MAX, u32::MAX);
-        event.extra.insert("data".to_owned(), base64::engine::general_purpose::STANDARD.encode([255u8; AUDIO_BYTES]).into());
+        event.extra.insert(
+            "data".to_owned(),
+            base64::engine::general_purpose::STANDARD
+                .encode([255u8; AUDIO_BYTES])
+                .into(),
+        );
         assert_eq!(event.extra["data"].as_str().unwrap().len(), 768);
         assert!(event.to_ndjson().unwrap().len() <= MAX_MESSAGE_BYTES + 1);
     }
@@ -1114,17 +1517,32 @@ pub mod tests {
         let original = sine(5_000);
         let mut lines = voice_lines(1, &original);
         assert_eq!(lines.last().map(String::as_str), Some("VOICE END 1 5000"));
-        assert_eq!(lines.len(), 7, "START, four full lines of 1152 samples and one of 392, END");
+        assert_eq!(
+            lines.len(),
+            7,
+            "START, four full lines of 1152 samples and one of 392, END"
+        );
         // No START and no line 2 (samples 2304 to 3455): the rest still counts.
-        lines.retain(|line| !line.starts_with("VOICE START") && !line.starts_with("VOICE DATA 1 2 "));
+        lines.retain(|line| {
+            !line.starts_with("VOICE START") && !line.starts_with("VOICE DATA 1 2 ")
+        });
         rig.feed(&lines).expect("the turn runs").await.unwrap();
         let wav = rig.recognizer.heard.lock().unwrap()[0].clone();
         assert_eq!(wav.len(), 44 + 5_000 * 2);
-        let decoded: Vec<i16> = wav[44..].chunks(2).map(|pair| i16::from_le_bytes([pair[0], pair[1]])).collect();
-        assert!(decoded[2_304..3_456].iter().all(|sample| *sample == 0), "line 2 is silence");
+        let decoded: Vec<i16> = wav[44..]
+            .chunks(2)
+            .map(|pair| i16::from_le_bytes([pair[0], pair[1]]))
+            .collect();
+        assert!(
+            decoded[2_304..3_456].iter().all(|sample| *sample == 0),
+            "line 2 is silence"
+        );
         // END counts the lost line's samples too, as the box's does, so what follows the gap keeps its place.
         for k in (3_456 + 60..5_000).step_by(97) {
-            assert!((i32::from(decoded[k]) - i32::from(original[k])).abs() < 600, "sample {k}");
+            assert!(
+                (i32::from(decoded[k]) - i32::from(original[k])).abs() < 600,
+                "sample {k}"
+            );
         }
         assert_eq!(rig.names().last().map(String::as_str), Some("voice.done"));
 
@@ -1141,7 +1559,10 @@ pub mod tests {
     #[tokio::test]
     async fn nothing_recognised_is_not_heard_and_the_session_is_not_asked() {
         let rig = Rig::new("empty", Ok(""), logged_in());
-        rig.feed(&voice_lines(2, &sine(12_000))).unwrap().await.unwrap();
+        rig.feed(&voice_lines(2, &sine(12_000)))
+            .unwrap()
+            .await
+            .unwrap();
         assert_eq!(rig.names(), ["voice.error"]);
         assert_eq!(rig.error().0, "not_heard");
         assert_eq!(rig.script.lock().unwrap().starts, 0);
@@ -1149,13 +1570,33 @@ pub mod tests {
 
     #[tokio::test]
     async fn a_failed_recognizer_or_session_is_unavailable() {
-        let rig = Rig::new("stt-down", Err("Workers AI answered 401: Authentication error"), logged_in());
-        rig.feed(&voice_lines(1, &sine(12_000))).unwrap().await.unwrap();
-        assert_eq!(rig.error(), ("unavailable".to_owned(), "Workers AI answered 401: Authentication error".to_owned()));
+        let rig = Rig::new(
+            "stt-down",
+            Err("Workers AI answered 401: Authentication error"),
+            logged_in(),
+        );
+        rig.feed(&voice_lines(1, &sine(12_000)))
+            .unwrap()
+            .await
+            .unwrap();
+        assert_eq!(
+            rig.error(),
+            (
+                "unavailable".to_owned(),
+                "Workers AI answered 401: Authentication error".to_owned()
+            )
+        );
 
         // Codex isn't logged in: what was heard is still shown, then the error.
-        let rig = Rig::new("no-login", Ok("hi"), Arc::new(std::sync::Mutex::new(Default::default())));
-        rig.feed(&voice_lines(1, &sine(12_000))).unwrap().await.unwrap();
+        let rig = Rig::new(
+            "no-login",
+            Ok("hi"),
+            Arc::new(std::sync::Mutex::new(Default::default())),
+        );
+        rig.feed(&voice_lines(1, &sine(12_000)))
+            .unwrap()
+            .await
+            .unwrap();
         assert_eq!(rig.names(), ["voice.heard", "voice.error"]);
         assert_eq!(rig.error().0, "unavailable");
     }
@@ -1170,16 +1611,31 @@ pub mod tests {
         let second = voice_lines(2, &sine(12_000));
         // Refused as soon as it starts, so the box stops recording; the rest of it gets no second answer.
         assert!(rig.feed(&second[..1]).is_none());
-        let errors = || rig.transport.events().into_iter().filter(|event| event.event == "voice.error").collect::<Vec<_>>();
+        let errors = || {
+            rig.transport
+                .events()
+                .into_iter()
+                .filter(|event| event.event == "voice.error")
+                .collect::<Vec<_>>()
+        };
         assert_eq!(errors().len(), 1);
-        assert_eq!((errors()[0].extra["turn"].as_u64(), errors()[0].extra["reason"].as_str()), (Some(2), Some("busy")));
+        assert_eq!(
+            (
+                errors()[0].extra["turn"].as_u64(),
+                errors()[0].extra["reason"].as_str()
+            ),
+            (Some(2), Some("busy"))
+        );
         assert!(rig.feed(&second[1..]).is_none());
         assert_eq!(errors().len(), 1);
         hold.notify_one();
         first.await.unwrap();
         // Once it is over, the next turn runs.
         hold.notify_one();
-        rig.feed(&voice_lines(3, &sine(12_000))).expect("not busy any more").await.unwrap();
+        rig.feed(&voice_lines(3, &sine(12_000)))
+            .expect("not busy any more")
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -1206,10 +1662,17 @@ pub mod tests {
                 b"fmt " => {
                     channels = u16::from_le_bytes([body[2], body[3]]) as usize;
                     rate = u32::from_le_bytes(body[4..8].try_into().unwrap());
-                    assert_eq!(u16::from_le_bytes([body[14], body[15]]), 16, "16-bit PCM only");
+                    assert_eq!(
+                        u16::from_le_bytes([body[14], body[15]]),
+                        16,
+                        "16-bit PCM only"
+                    );
                 }
                 b"data" => {
-                    let samples = body.chunks_exact(2 * channels).map(|frame| i16::from_le_bytes([frame[0], frame[1]])).collect();
+                    let samples = body
+                        .chunks_exact(2 * channels)
+                        .map(|frame| i16::from_le_bytes([frame[0], frame[1]]))
+                        .collect();
                     return (samples, rate);
                 }
                 _ => {}
@@ -1229,8 +1692,16 @@ pub mod tests {
         fn send(&self, frame: Vec<u8>) -> Result<(), crate::serial_transport::TransportError> {
             assert!(frame.len() <= MAX_MESSAGE_BYTES + 1);
             let event: Event = serde_json::from_slice(&frame).unwrap();
-            let ms = self.end.lock().unwrap().map(|end| end.elapsed().as_millis()).unwrap_or_default();
-            println!("+{ms:>6} ms  {}", String::from_utf8_lossy(&frame).trim_end());
+            let ms = self
+                .end
+                .lock()
+                .unwrap()
+                .map(|end| end.elapsed().as_millis())
+                .unwrap_or_default();
+            println!(
+                "+{ms:>6} ms  {}",
+                String::from_utf8_lossy(&frame).trim_end()
+            );
             self.events.lock().unwrap().push((ms, event));
             Ok(())
         }
@@ -1249,30 +1720,56 @@ pub mod tests {
     #[tokio::test(flavor = "multi_thread")]
     #[ignore = "uses the network, a speech recognizer's credentials and the user's Codex"]
     async fn e2e_a_real_recording_through_the_real_recognizer_and_resident_session() {
-        let _ = tracing_subscriber::fmt().with_env_filter("vibebuddyd=info").with_test_writer().try_init();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter("vibebuddyd=info")
+            .with_test_writer()
+            .try_init();
         let path = std::env::var("VIBEBUDDY_E2E_WAV").expect("VIBEBUDDY_E2E_WAV names a recording");
         let (left, rate) = left_channel(&std::fs::read(path).unwrap());
         assert_eq!(rate, SAMPLE_RATE, "the box records at 24 kHz");
         let recognizer = crate::speech::from_env(None).expect("a speech recognizer is configured");
         let dir = temp_dir("voice-e2e");
-        let resident = Arc::new(Resident::new(true, &dir, crate::resident::Launcher::Codex, Arc::default()));
+        let resident = Arc::new(Resident::new(
+            true,
+            &dir,
+            crate::resident::Launcher::Codex,
+            Arc::default(),
+        ));
         let voice = Voice::new(Some(recognizer), Some(resident));
-        let timed = Arc::new(TimedTransport { end: Default::default(), events: Default::default() });
+        let timed = Arc::new(TimedTransport {
+            end: Default::default(),
+            events: Default::default(),
+        });
         let transport: Arc<dyn Transport> = timed.clone();
 
         // 1152 samples are 576 bytes, 768 base64 characters: the most a line may carry.
         let lines = voice_lines(1, &left);
         assert!(lines.iter().all(|line| line.len() < 1024));
-        println!("{:.2} s of audio in {} lines", left.len() as f32 / SAMPLE_RATE as f32, lines.len());
+        println!(
+            "{:.2} s of audio in {} lines",
+            left.len() as f32 / SAMPLE_RATE as f32,
+            lines.len()
+        );
         let (end, data) = lines.split_last().unwrap();
         for line in data {
-            assert!(voice.handle_line(line, &transport, &Wearing::default()).is_none());
+            assert!(
+                voice
+                    .handle_line(line, &transport, &Wearing::default())
+                    .is_none()
+            );
         }
         *timed.end.lock().unwrap() = Some(Instant::now());
-        voice.handle_line(end, &transport, &Wearing::default()).expect("the turn runs").await.unwrap();
+        voice
+            .handle_line(end, &transport, &Wearing::default())
+            .expect("the turn runs")
+            .await
+            .unwrap();
 
         let events = timed.events.lock().unwrap();
-        let names: Vec<&str> = events.iter().map(|(_, event)| event.event.as_str()).collect();
+        let names: Vec<&str> = events
+            .iter()
+            .map(|(_, event)| event.event.as_str())
+            .collect();
         assert_eq!(names.first(), Some(&"voice.heard"), "{names:?}");
         assert_eq!(names.last(), Some(&"voice.done"), "{names:?}");
         assert!(names.contains(&"voice.reply"), "{names:?}");
@@ -1290,21 +1787,47 @@ pub mod tests {
     #[test]
     #[ignore = "uses the network and the voice service"]
     fn e2e_spoken_replies_through_the_real_voice_service() {
-        let out = std::path::PathBuf::from(std::env::var("VIBEBUDDY_E2E_OUT").expect("VIBEBUDDY_E2E_OUT names a directory"));
-        let synthesizer = synthesis::from_env(None, Arc::new(crate::voice_keys::VoiceKeys::new(None)));
+        let out = std::path::PathBuf::from(
+            std::env::var("VIBEBUDDY_E2E_OUT").expect("VIBEBUDDY_E2E_OUT names a directory"),
+        );
+        let synthesizer =
+            synthesis::from_env(None, Arc::new(crate::voice_keys::VoiceKeys::new(None)));
         for (name, character, text) in [
-            ("zh", Some("wanwanxiaohe"), "两个智能体正在工作，有一个在等你回复。"),
-            ("en", Some("ada"), "Two agents are working, and one of them is waiting for you."),
+            (
+                "zh",
+                Some("wanwanxiaohe"),
+                "两个智能体正在工作，有一个在等你回复。",
+            ),
+            (
+                "en",
+                Some("ada"),
+                "Two agents are working, and one of them is waiting for you.",
+            ),
         ] {
-            let timed = TimedTransport { end: std::sync::Mutex::new(Some(Instant::now())), events: Default::default() };
-            speak(1, 0, text, character, &*synthesizer, &timed, &AtomicBool::new(false));
+            let timed = TimedTransport {
+                end: std::sync::Mutex::new(Some(Instant::now())),
+                events: Default::default(),
+            };
+            speak(
+                1,
+                0,
+                text,
+                character,
+                &*synthesizer,
+                &timed,
+                &AtomicBool::new(false),
+            );
             let events = timed.events.lock().unwrap();
             let (first_ms, _) = events.first().expect("some audio");
             let (total_ms, last) = events.last().unwrap();
             assert_eq!(last.extra.get("end"), Some(&json!(true)));
             assert!(!last.extra.contains_key("error"), "synthesis failed");
             let pieces: Vec<Event> = events.iter().map(|(_, event)| event.clone()).collect();
-            let bytes: Vec<u8> = audio(&pieces).into_iter().filter_map(|(_, _, data, _)| data).flatten().collect();
+            let bytes: Vec<u8> = audio(&pieces)
+                .into_iter()
+                .filter_map(|(_, _, data, _)| data)
+                .flatten()
+                .collect();
             let path = out.join(format!("reply-{name}.mp3"));
             std::fs::write(&path, &bytes).unwrap();
             println!(
@@ -1320,30 +1843,61 @@ pub mod tests {
     #[test]
     fn each_reason_goes_with_voice_off_and_the_text_the_box_shows() {
         let on = serde_json::to_value(available_event(Availability::On)).unwrap();
-        assert_eq!(on, json!({"version": 1, "event": "voice.available", "on": true}));
-        assert_eq!(serde_json::to_value(available_event(Availability::Unset)).unwrap(), json!({"version": 1, "event": "voice.available", "on": false}));
+        assert_eq!(
+            on,
+            json!({"version": 1, "event": "voice.available", "on": true})
+        );
+        assert_eq!(
+            serde_json::to_value(available_event(Availability::Unset)).unwrap(),
+            json!({"version": 1, "event": "voice.available", "on": false})
+        );
         for reason in ["signed_out", "allowance", "global_cap", "not_ready"] {
             let event = available_event(Availability::Off(reason));
-            assert_eq!((event.extra["on"].clone(), event.extra["reason"].clone()), (json!(false), json!(reason)));
+            assert_eq!(
+                (event.extra["on"].clone(), event.extra["reason"].clone()),
+                (json!(false), json!(reason))
+            );
             assert_eq!(event.message, refusal_message(reason));
             assert!(event.message.is_some(), "{reason} has a text");
         }
         let back = comes_back_at(chrono::Utc::now(), &chrono::Local);
-        assert_eq!(refusal_message("allowance").unwrap(), format!("Today's voice is used up. It comes back at {back}."));
-        assert_eq!(refusal_message("global_cap").unwrap(), format!("Voice is paused for everyone today. It comes back at {back}."));
+        assert_eq!(
+            refusal_message("allowance").unwrap(),
+            format!("Today's voice is used up. It comes back at {back}.")
+        );
+        assert_eq!(
+            refusal_message("global_cap").unwrap(),
+            format!("Voice is paused for everyone today. It comes back at {back}.")
+        );
         assert_eq!(refusal_message("busy"), None);
     }
 
     #[test]
     fn voice_comes_back_at_the_next_midnight_utc_in_local_time() {
-        let at = |text: &str| chrono::DateTime::parse_from_rfc3339(text).unwrap().with_timezone(&chrono::Utc);
+        let at = |text: &str| {
+            chrono::DateTime::parse_from_rfc3339(text)
+                .unwrap()
+                .with_timezone(&chrono::Utc)
+        };
         let zone = |hours: i32| chrono::FixedOffset::east_opt(hours * 3600).unwrap();
         assert_eq!(comes_back_at(at("2026-10-27T03:00:00Z"), &zone(8)), "08:00");
         // Late in the local evening, the UTC day still ends the next morning.
         assert_eq!(comes_back_at(at("2026-10-27T15:59:00Z"), &zone(8)), "08:00");
-        assert_eq!(comes_back_at(at("2026-10-27T20:00:00Z"), &zone(-5)), "19:00");
-        assert_eq!(comes_back_at(at("2026-10-27T20:00:00Z"), &chrono::FixedOffset::east_opt(5 * 3600 + 1800).unwrap()), "05:30");
-        assert_eq!(comes_back_at(at("2026-10-27T20:00:00Z"), &chrono::Utc), "00:00");
+        assert_eq!(
+            comes_back_at(at("2026-10-27T20:00:00Z"), &zone(-5)),
+            "19:00"
+        );
+        assert_eq!(
+            comes_back_at(
+                at("2026-10-27T20:00:00Z"),
+                &chrono::FixedOffset::east_opt(5 * 3600 + 1800).unwrap()
+            ),
+            "05:30"
+        );
+        assert_eq!(
+            comes_back_at(at("2026-10-27T20:00:00Z"), &chrono::Utc),
+            "00:00"
+        );
     }
 
     #[tokio::test]
@@ -1355,23 +1909,57 @@ pub mod tests {
             Some(Arc::new(resident))
         };
         let on = || with(None);
-        let off = Resident::new(false, &dir, crate::resident::Launcher::Codex, Arc::default());
+        let off = Resident::new(
+            false,
+            &dir,
+            crate::resident::Launcher::Codex,
+            Arc::default(),
+        );
         off.note(None);
-        let recognizer = || Some(Arc::new(FakeRecognizer { answer: Ok(""), heard: Default::default() }) as Arc<dyn Recognizer>);
+        let recognizer = || {
+            Some(Arc::new(FakeRecognizer {
+                answer: Ok(""),
+                heard: Default::default(),
+            }) as Arc<dyn Recognizer>)
+        };
         use Availability::{Off, On, Unset};
         assert_eq!(Voice::new(recognizer(), on()).availability(), On);
         assert_eq!(Voice::new(None, on()).availability(), Unset);
-        assert_eq!(Voice::new(recognizer(), Some(Arc::new(off))).availability(), Unset);
+        assert_eq!(
+            Voice::new(recognizer(), Some(Arc::new(off))).availability(),
+            Unset
+        );
         assert_eq!(Voice::new(recognizer(), None).availability(), Unset);
         let unchecked = Some(Arc::new(resident(&dir, &logged_in(), Arc::default())));
-        assert_eq!(Voice::new(recognizer(), unchecked).availability(), Off("not_ready"), "not before the first check");
-        assert_eq!(Voice::new(recognizer(), with(Some(crate::resident::Problem::CodexMissing))).availability(), Off("not_ready"));
-        assert_eq!(Voice::new(recognizer(), with(Some(crate::resident::Problem::CodexLoggedOut))).availability(), Off("not_ready"));
+        assert_eq!(
+            Voice::new(recognizer(), unchecked).availability(),
+            Off("not_ready"),
+            "not before the first check"
+        );
+        assert_eq!(
+            Voice::new(
+                recognizer(),
+                with(Some(crate::resident::Problem::CodexMissing))
+            )
+            .availability(),
+            Off("not_ready")
+        );
+        assert_eq!(
+            Voice::new(
+                recognizer(),
+                with(Some(crate::resident::Problem::CodexLoggedOut))
+            )
+            .availability(),
+            Off("not_ready")
+        );
 
         // The recognizer's refusals: signing in comes before the session, the day's refusals after it.
         struct Refusing(&'static str);
         impl Recognizer for Refusing {
-            fn recognize(&self, _wav: &[u8]) -> Result<crate::speech::Transcript, crate::speech::RecognitionError> {
+            fn recognize(
+                &self,
+                _wav: &[u8],
+            ) -> Result<crate::speech::Transcript, crate::speech::RecognitionError> {
                 unreachable!("voice is off")
             }
             fn refusal(&self) -> Option<&'static str> {
@@ -1380,11 +1968,20 @@ pub mod tests {
         }
         let refusing = |reason| Some(Arc::new(Refusing(reason)) as Arc<dyn Recognizer>);
         for reason in ["signed_out", "allowance", "global_cap"] {
-            assert_eq!(Voice::new(refusing(reason), on()).availability(), Off(reason));
+            assert_eq!(
+                Voice::new(refusing(reason), on()).availability(),
+                Off(reason)
+            );
         }
         let not_ready = || with(Some(crate::resident::Problem::CodexLoggedOut));
-        assert_eq!(Voice::new(refusing("signed_out"), not_ready()).availability(), Off("signed_out"));
-        assert_eq!(Voice::new(refusing("allowance"), not_ready()).availability(), Off("not_ready"));
+        assert_eq!(
+            Voice::new(refusing("signed_out"), not_ready()).availability(),
+            Off("signed_out")
+        );
+        assert_eq!(
+            Voice::new(refusing("allowance"), not_ready()).availability(),
+            Off("not_ready")
+        );
 
         // Lines that arrive anyway are told voice is off.
         let voice = Voice::new(None, on());

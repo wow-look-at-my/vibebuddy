@@ -19,7 +19,9 @@ pub enum Claim {
 
 /// `replacing` is set by a restart: the old copy is still on its way out, so wait for its name instead of handing off.
 pub fn claim(replacing: bool) -> Claim {
-    let Some(address) = address() else { return Claim::Unavailable };
+    let Some(address) = address() else {
+        return Claim::Unavailable;
+    };
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         match UnixListener::bind_addr(&address) {

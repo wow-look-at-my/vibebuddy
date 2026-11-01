@@ -1,22 +1,22 @@
 mod account;
 mod activity;
+mod agent_hooks;
 mod app_server;
 mod ci;
-mod agent_hooks;
 mod claude_hooks;
 mod codex_hooks;
 mod config;
 mod identity;
 mod lan;
-mod noise_link;
-mod relay;
-mod resident;
-mod resident_claude;
 mod link_alert;
 mod making;
+mod noise_link;
 mod occasions;
 mod own_voices;
 mod persona;
+mod relay;
+mod resident;
+mod resident_claude;
 mod rom_flasher;
 mod screenshot;
 mod serial_transport;
@@ -24,8 +24,8 @@ mod session_titles;
 mod source_opener;
 mod speech;
 mod status;
-mod transfer;
 mod synthesis;
+mod transfer;
 mod updates;
 mod voice;
 mod voice_keys;
@@ -39,29 +39,31 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use activity::{ActivitySource, ActivityTracker};
+use agent_hooks::AgentHook;
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, State};
 use axum::http::StatusCode;
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use vibebuddy_protocol::{Event, VERSION};
 use chrono::Timelike;
 use ci::CiWatcher;
-use agent_hooks::AgentHook;
 use claude_hooks::ClaudeHook;
 use codex_hooks::CodexHook;
 use config::Config;
 use serde::Serialize;
 use serial_transport::{DeviceMessage, SerialConfig, SerialTransport, Transport, TransportError};
 use session_titles::SessionTitles;
-use status::{DaemonInfo, DeviceState, HooksSeen, Operation, OperationKind, OperationState, Status};
+use status::{
+    DaemonInfo, DeviceState, HooksSeen, Operation, OperationKind, OperationState, Status,
+};
 use tokio::sync::{Mutex, Notify, broadcast};
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::BroadcastStream;
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 use updates::Updates;
+use vibebuddy_protocol::{Event, VERSION};
 
 /// Once the last session hangs there are no more hook events; only a periodic sweep can free the screen.
 const SWEEP_INTERVAL: Duration = Duration::from_secs(60);
@@ -130,10 +132,7 @@ impl AppState {
         titles: SessionTitles,
         config_path: Option<PathBuf>,
     ) -> Self {
-        let config = config_path
-            .as_deref()
-            .map(Config::load)
-            .unwrap_or_default();
+        let config = config_path.as_deref().map(Config::load).unwrap_or_default();
         let (device_bus, _) = broadcast::channel(1024);
         let (status_changed, _) = broadcast::channel(64);
         let account = Arc::new(account::Account::new(None, None, 7331));
@@ -149,7 +148,9 @@ impl AppState {
             operation: Arc::new(Mutex::new(None)),
             device_bus,
             status_changed,
-            app_version: env::var("VIBEBUDDY_APP_VERSION").ok().filter(|value| !value.is_empty()),
+            app_version: env::var("VIBEBUDDY_APP_VERSION")
+                .ok()
+                .filter(|value| !value.is_empty()),
             serial: None,
             identity: None,
             relay: None,
@@ -160,14 +161,26 @@ impl AppState {
             voice: Arc::new(voice::Voice::new(None, None)),
             noise_seen: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             written: Arc::default(),
-            making: Arc::new(making::Maker::new(None, None, account.clone(), voice_keys.clone(), Arc::new(own_voices::OwnVoices::new(None)))),
+            making: Arc::new(making::Maker::new(
+                None,
+                None,
+                account.clone(),
+                voice_keys.clone(),
+                Arc::new(own_voices::OwnVoices::new(None)),
+            )),
             account,
             voice_keys,
         }
     }
 
     async fn update_checks_enabled(&self) -> bool {
-        self.config.lock().await.check_updates.unwrap_or_else(updates::enabled_by_default)
+        updates::COMPILED_IN
+            && self
+                .config
+                .lock()
+                .await
+                .check_updates
+                .unwrap_or_else(updates::enabled_by_default)
     }
 
     fn notify_status(&self) {
@@ -177,7 +190,11 @@ impl AppState {
     async fn snapshot(&self) -> Status {
         let mut device = self.device.lock().await.clone();
         device.relay_refused = self.relay.as_ref().and_then(relay::RelayConfig::refused);
-        let updates = self.updates.lock().await.status(&device, self.update_checks_enabled().await);
+        let updates = self
+            .updates
+            .lock()
+            .await
+            .status(&device, self.update_checks_enabled().await);
         let (today, activities) = {
             let tracker = self.activities.lock().await;
             (tracker.today(), tracker.summaries())
@@ -240,7 +257,9 @@ async fn main() {
         .unwrap_or_else(|_| "127.0.0.1:7331".to_owned())
         .parse::<SocketAddr>()
         .unwrap_or_else(|error| panic!("invalid VIBEBUDDY_BIND: {error}"));
-    let identity = match identity::identity_file().map(|path| identity::Identity::load_or_create(&path, identity::computer_name())) {
+    let identity = match identity::identity_file()
+        .map(|path| identity::Identity::load_or_create(&path, identity::computer_name()))
+    {
         Some(Ok(identity)) => Some(Arc::new(identity)),
         Some(Err(error)) => {
             warn!(%error, "no pairing key; boxes won't be paired with this computer");
@@ -249,7 +268,10 @@ async fn main() {
         None => None,
     };
     let account = Arc::new(account::Account::new(
-        synthesis::service_base(env::var(synthesis::BASE_URL_VARIABLE).ok(), relay::release()),
+        synthesis::service_base(
+            env::var(synthesis::BASE_URL_VARIABLE).ok(),
+            relay::release(),
+        ),
         config::config_dir().as_deref(),
         bind_address.port(),
     ));
@@ -264,7 +286,12 @@ async fn main() {
             discovery: lan::Discovery::default(),
         });
         // VIBEBUDDY_RELAY_URL points at another Relay, such as `ws://127.0.0.1:8787` under `wrangler dev`.
-        let relay = relay::RelayConfig::new(identity.clone(), std::env::var("VIBEBUDDY_RELAY_URL").ok(), relay::release()).with_account(account.clone());
+        let relay = relay::RelayConfig::new(
+            identity.clone(),
+            std::env::var("VIBEBUDDY_RELAY_URL").ok(),
+            relay::release(),
+        )
+        .with_account(account.clone());
         serial_config = serial_config.with_relay(relay.clone());
         relay_config = Some(relay);
     }
@@ -295,14 +322,21 @@ async fn main() {
     state.account = account;
     state.state_dir = config::state_dir();
     if let Some(dir) = &state.state_dir {
-        state.written = Arc::new(Mutex::new(persona::Written::load(&dir.join(persona::RECORD_FILE))));
+        state.written = Arc::new(Mutex::new(persona::Written::load(
+            &dir.join(persona::RECORD_FILE),
+        )));
     }
-    state.resident =state.state_dir.as_deref().map(|dir| {
+    state.resident = state.state_dir.as_deref().map(|dir| {
         let enabled = resident::enabled_by_env();
         if enabled {
             warn!("the experimental resident session is on");
         }
-        let resident = resident::Resident::new(enabled, dir, resident::Launcher::Codex, state.activities.clone());
+        let resident = resident::Resident::new(
+            enabled,
+            dir,
+            resident::Launcher::Codex,
+            state.activities.clone(),
+        );
         Arc::new(match config::config_dir() {
             Some(config) => resident.with_settings_file(config.join(resident::SETTINGS_FILE)),
             None => resident,
@@ -319,12 +353,18 @@ async fn main() {
     let _ = making::OWN.set((own_voices.clone(), state.voice_keys.clone()));
     state.making = Arc::new(making::Maker::new(
         made,
-        synthesis::service_base(env::var(synthesis::BASE_URL_VARIABLE).ok(), relay::release()),
+        synthesis::service_base(
+            env::var(synthesis::BASE_URL_VARIABLE).ok(),
+            relay::release(),
+        ),
         state.account.clone(),
         state.voice_keys.clone(),
         own_voices,
     ));
-    state.voice = Arc::new(voice::Voice::new(speech::from_env(session), state.resident.clone()).with_synthesizer(Some(synthesizer)));
+    state.voice = Arc::new(
+        voice::Voice::new(speech::from_env(session), state.resident.clone())
+            .with_synthesizer(Some(synthesizer)),
+    );
     if let Some(resident) = state.resident.clone() {
         let wearing = wearing(&state).await;
         tokio::spawn(async move { resident.warm(&wearing).await });
@@ -345,7 +385,9 @@ async fn main() {
     tokio::spawn(send_heartbeats(state.clone()));
     tokio::spawn(poll_ci(state.clone()));
     tokio::spawn(handle_device_events(state.clone(), device_events));
-    tokio::spawn(check_for_updates(state.clone()));
+    if updates::COMPILED_IN {
+        tokio::spawn(check_for_updates(state.clone()));
+    }
     if let Some(resident) = state.resident.clone().filter(|resident| resident.enabled()) {
         follow_resident_readiness(&state, resident);
     }
@@ -385,7 +427,11 @@ async fn publish_device_message(state: &AppState, message: DeviceMessage) {
         let mut device = state.device.lock().await;
         let had_build = device.firmware_build.is_some();
         let changed = device.apply(&message);
-        (changed, !had_build && device.firmware_build.is_some(), device.usb_serial.clone())
+        (
+            changed,
+            !had_build && device.firmware_build.is_some(),
+            device.usb_serial.clone(),
+        )
     };
     // Our firmware reported its build: this device is the box, so prefer it when others are plugged in too.
     if booted && let (Some(serial), Some(path)) = (usb_serial, known_box_file()) {
@@ -416,7 +462,9 @@ async fn publish_device_message(state: &AppState, message: DeviceMessage) {
         {
             let memory = noise_link::Memory::new(dir);
             match lan::decode_key(key.trim()) {
-                Some(key) if state.noise_seen.swap(false, Ordering::Relaxed) => memory.learned(&key),
+                Some(key) if state.noise_seen.swap(false, Ordering::Relaxed) => {
+                    memory.learned(&key)
+                }
                 _ => memory.forget(),
             }
         }
@@ -457,7 +505,12 @@ async fn publish_device_message(state: &AppState, message: DeviceMessage) {
     }
     let _ = state.device_bus.send(message.clone());
     // Ask right after connecting; the device reports its mode, firmware build and voice again.
-    if matches!(message, DeviceMessage::Connected { .. } | DeviceMessage::ConnectedNetwork { .. } | DeviceMessage::ConnectedRelay { .. }) {
+    if matches!(
+        message,
+        DeviceMessage::Connected { .. }
+            | DeviceMessage::ConnectedNetwork { .. }
+            | DeviceMessage::ConnectedRelay { .. }
+    ) {
         send_event(state, device_command("device.hello"));
         // Then this computer's cards, which replace any the box kept from another computer.
         let screen = {
@@ -494,7 +547,9 @@ async fn handle_voice_line(state: &AppState, line: &str) -> Option<tokio::task::
     if !line.starts_with("VOICE ") {
         return None;
     }
-    state.voice.handle_line(line, &state.transport, &wearing(state).await)
+    state
+        .voice
+        .handle_line(line, &state.transport, &wearing(state).await)
 }
 
 /// What to tell the box about voice now: None when voice isn't set up on this computer, or while the bridge's rate
@@ -515,7 +570,10 @@ async fn voice_offer(state: &AppState) -> Option<Event> {
         }
         Some(serial_transport::FAST_BAUD_RATE) => Some(voice::available_event(availability)),
         Some(_) => {
-            info!(firmware_switches = device.bridge_switches, "voice commands off: the UART bridge runs at 115200, too slow for the audio");
+            info!(
+                firmware_switches = device.bridge_switches,
+                "voice commands off: the UART bridge runs at 115200, too slow for the audio"
+            );
             Some(voice::slow_link_event(device.bridge_switches))
         }
     }
@@ -526,8 +584,20 @@ async fn voice_offer(state: &AppState) -> Option<Event> {
 /// `allowance`, `global_cap`). The resident session not being ready is the tab's `problem` already.
 async fn voice_off(state: &AppState) -> Option<String> {
     let device = state.device.lock().await.clone();
-    if device.connected && device.bridge && device.bridge_baud.is_some_and(|baud| baud != serial_transport::FAST_BAUD_RATE) {
-        return Some(if device.bridge_switches { "bridge_slow" } else { "bridge_firmware" }.to_owned());
+    if device.connected
+        && device.bridge
+        && device
+            .bridge_baud
+            .is_some_and(|baud| baud != serial_transport::FAST_BAUD_RATE)
+    {
+        return Some(
+            if device.bridge_switches {
+                "bridge_slow"
+            } else {
+                "bridge_firmware"
+            }
+            .to_owned(),
+        );
     }
     match state.voice.availability() {
         voice::Availability::Off(reason) if reason != "not_ready" => Some(reason.to_owned()),
@@ -673,7 +743,9 @@ async fn open_k2_source(state: &AppState) {
 
 /// A tap on a task card on a box with a touchscreen (ADR-0019): the card's id.
 fn tapped_card(event: &Event) -> Option<&str> {
-    (event.event == "focus").then(|| event.extra.get("task").and_then(|value| value.as_str())).flatten()
+    (event.event == "focus")
+        .then(|| event.extra.get("task").and_then(|value| value.as_str()))
+        .flatten()
 }
 
 /// Opens the agent behind a tapped card. If it has ended since, or has nothing to open, nothing happens: opening
@@ -788,14 +860,20 @@ fn app(state: AppState) -> Router {
         .route("/v1/resident/say", post(post_resident_say))
         .route("/v1/resident/history", get(get_resident_history))
         .route("/v1/resident/brain", axum::routing::put(put_resident_brain))
-        .route("/v1/resident/anthropic-key", axum::routing::put(put_anthropic_key).delete(delete_anthropic_key))
+        .route(
+            "/v1/resident/anthropic-key",
+            axum::routing::put(put_anthropic_key).delete(delete_anthropic_key),
+        )
         .route("/v1/voice-keys", axum::routing::put(put_voice_keys))
         .route("/v1/voices", get(get_voices).post(post_voice))
         .route("/v1/voices/elevenlabs", get(get_elevenlabs_voices))
         .route("/v1/voices/{id}", axum::routing::delete(delete_voice))
         .route("/v1/characters", get(get_characters).post(post_character))
         .route("/v1/characters/presets/{id}/lines", get(get_preset_lines))
-        .route("/v1/characters/{id}", axum::routing::delete(delete_character))
+        .route(
+            "/v1/characters/{id}",
+            axum::routing::delete(delete_character),
+        )
         .route("/v1/account", axum::routing::delete(delete_account))
         .route("/v1/account/sign-in", post(post_sign_in))
         .route("/v1/account/callback", get(get_account_callback))
@@ -807,8 +885,13 @@ fn app(state: AppState) -> Router {
 /// Capture the box's current screen and return a PNG. Refused while writing a voice pack or flashing: screenshot lines would crowd out acks.
 async fn post_screenshot(State(state): State<AppState>) -> axum::response::Response {
     use axum::response::IntoResponse;
-    if matches!(&*state.operation.lock().await, Some(current) if current.state == OperationState::Running) {
-        return (StatusCode::CONFLICT, "another device operation is in progress").into_response();
+    if matches!(&*state.operation.lock().await, Some(current) if current.state == OperationState::Running)
+    {
+        return (
+            StatusCode::CONFLICT,
+            "another device operation is in progress",
+        )
+            .into_response();
     }
     let bus = state.device_bus.subscribe();
     let silence = screenshot::silence_timeout(state.device.lock().await.bridge);
@@ -866,15 +949,25 @@ async fn check_for_updates(state: AppState) {
 }
 
 async fn check_once(state: &AppState) {
-    let Some(source) = state.updates.lock().await.source.clone() else { return };
+    let Some(source) = state.updates.lock().await.source.clone() else {
+        return;
+    };
     let firmware_version = state.device.lock().await.firmware_version.clone();
-    let fetched = tokio::task::spawn_blocking(move || updates::fetch(&source, env!("CARGO_PKG_VERSION"), firmware_version.as_deref()))
-        .await
-        .unwrap_or_else(|error| Err(error.to_string()));
+    let fetched = tokio::task::spawn_blocking(move || {
+        updates::fetch(
+            &source,
+            env!("CARGO_PKG_VERSION"),
+            firmware_version.as_deref(),
+        )
+    })
+    .await
+    .unwrap_or_else(|error| Err(error.to_string()));
     let wanted = match fetched {
         Ok((text, manifest)) => {
             let mut updates = state.updates.lock().await;
-            let accepted = updates.accept(&text, manifest).map(|firmware| (firmware, updates.firmware_root()));
+            let accepted = updates
+                .accept(&text, manifest)
+                .map(|firmware| (firmware, updates.firmware_root()));
             if let (Some(relay), Some(url)) = (&state.relay, updates.relay_url()) {
                 relay.offer(&url);
                 state.device.lock().await.relay_server = Some(relay.url());
@@ -886,9 +979,10 @@ async fn check_once(state: &AppState) {
     let error = match wanted {
         Ok((Some(firmware), Some(root))) => {
             let version = firmware.download.version.clone();
-            let downloaded = tokio::task::spawn_blocking(move || updates::download(&firmware, &root))
-                .await
-                .unwrap_or_else(|error| Err(error.to_string()));
+            let downloaded =
+                tokio::task::spawn_blocking(move || updates::download(&firmware, &root))
+                    .await
+                    .unwrap_or_else(|error| Err(error.to_string()));
             match downloaded {
                 Ok(dir) => {
                     info!(%version, dir = %dir.display(), "downloaded firmware");
@@ -909,10 +1003,22 @@ async fn check_once(state: &AppState) {
 
 async fn post_check_updates(State(state): State<AppState>) -> (StatusCode, Json<ApiResponse>) {
     if !state.update_checks_enabled().await || state.updates.lock().await.source.is_none() {
-        return (StatusCode::CONFLICT, Json(ApiResponse { accepted: false, message: "update checks are off".to_owned() }));
+        return (
+            StatusCode::CONFLICT,
+            Json(ApiResponse {
+                accepted: false,
+                message: "update checks are off".to_owned(),
+            }),
+        );
     }
     state.check_updates.notify_one();
-    (StatusCode::ACCEPTED, Json(ApiResponse { accepted: true, message: "checking for updates".to_owned() }))
+    (
+        StatusCode::ACCEPTED,
+        Json(ApiResponse {
+            accepted: true,
+            message: "checking for updates".to_owned(),
+        }),
+    )
 }
 
 async fn put_config(State(state): State<AppState>, Json(config): Json<Config>) -> Json<Config> {
@@ -932,8 +1038,12 @@ const WIFI_ADDRESS_PREFIX: &str = "WIFI ADDRESS ";
 
 fn pair_command(identity: &identity::Identity) -> Event {
     let mut event = device_command("device.pair");
-    event.extra.insert("key".to_owned(), identity.public_key().into());
-    event.extra.insert("name".to_owned(), identity.name.clone().into());
+    event
+        .extra
+        .insert("key".to_owned(), identity.public_key().into());
+    event
+        .extra
+        .insert("name".to_owned(), identity.name.clone().into());
     event
 }
 
@@ -947,10 +1057,18 @@ async fn begin_operation(
     if matches!(&*operation, Some(current) if current.state == OperationState::Running) {
         return Some((
             StatusCode::CONFLICT,
-            Json(ApiResponse { accepted: false, message: "another device operation is in progress".to_owned() }),
+            Json(ApiResponse {
+                accepted: false,
+                message: "another device operation is in progress".to_owned(),
+            }),
         ));
     }
-    *operation = Some(Operation { kind, state: OperationState::Running, progress: 0.0, message });
+    *operation = Some(Operation {
+        kind,
+        state: OperationState::Running,
+        progress: 0.0,
+        message,
+    });
     drop(operation);
     state.notify_status();
     None
@@ -1013,7 +1131,11 @@ async fn post_volume(
             StatusCode::BAD_REQUEST,
             Json(ApiResponse {
                 accepted: false,
-                message: format!("volume must be between {} and {}", VOLUME_RANGE.start(), VOLUME_RANGE.end()),
+                message: format!(
+                    "volume must be between {} and {}",
+                    VOLUME_RANGE.start(),
+                    VOLUME_RANGE.end()
+                ),
             }),
         );
     }
@@ -1042,7 +1164,10 @@ async fn post_screens(
     if !SCREEN_STYLES.contains(&request.style.as_str()) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse { accepted: false, message: format!("style must be one of {}", SCREEN_STYLES.join(", ")) }),
+            Json(ApiResponse {
+                accepted: false,
+                message: format!("style must be one of {}", SCREEN_STYLES.join(", ")),
+            }),
         );
     }
     let mut event = device_command("device.screens");
@@ -1071,7 +1196,13 @@ async fn post_unpair(
         }
     };
     if let Some(message) = refusal {
-        return (StatusCode::CONFLICT, Json(ApiResponse { accepted: false, message: message.to_owned() }));
+        return (
+            StatusCode::CONFLICT,
+            Json(ApiResponse {
+                accepted: false,
+                message: message.to_owned(),
+            }),
+        );
     }
     let mut event = device_command("device.unpair");
     event.extra.insert("key".to_owned(), request.key.into());
@@ -1091,13 +1222,31 @@ async fn post_takeover(State(state): State<AppState>) -> (StatusCode, Json<ApiRe
         }
     };
     if let Some(message) = refusal {
-        return (StatusCode::CONFLICT, Json(ApiResponse { accepted: false, message: message.to_owned() }));
+        return (
+            StatusCode::CONFLICT,
+            Json(ApiResponse {
+                accepted: false,
+                message: message.to_owned(),
+            }),
+        );
     }
     let Some(serial) = &state.serial else {
-        return (StatusCode::NOT_IMPLEMENTED, Json(ApiResponse { accepted: false, message: "no link worker".to_owned() }));
+        return (
+            StatusCode::NOT_IMPLEMENTED,
+            Json(ApiResponse {
+                accepted: false,
+                message: "no link worker".to_owned(),
+            }),
+        );
     };
     serial.request_takeover();
-    (StatusCode::ACCEPTED, Json(ApiResponse { accepted: true, message: "taking the box over".to_owned() }))
+    (
+        StatusCode::ACCEPTED,
+        Json(ApiResponse {
+            accepted: true,
+            message: "taking the box over".to_owned(),
+        }),
+    )
 }
 
 #[derive(serde::Deserialize)]
@@ -1108,19 +1257,27 @@ struct WifiRequest {
 
 /// Tells the box which Wi-Fi network to join. Only over the cable: the box refuses it over the network, and
 /// firmware that can't pair would show it as agent activity. The password is passed on, never logged or kept.
-async fn post_wifi(State(state): State<AppState>, Json(request): Json<WifiRequest>) -> (StatusCode, Json<ApiResponse>) {
+async fn post_wifi(
+    State(state): State<AppState>,
+    Json(request): Json<WifiRequest>,
+) -> (StatusCode, Json<ApiResponse>) {
     if let Some(refused) = wifi_refusal(&state).await {
         return refused;
     }
     if request.ssid.is_empty() || request.ssid.len() > 32 || request.password.len() > 63 {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse { accepted: false, message: "a network name is 1 to 32 bytes and a password at most 63".to_owned() }),
+            Json(ApiResponse {
+                accepted: false,
+                message: "a network name is 1 to 32 bytes and a password at most 63".to_owned(),
+            }),
         );
     }
     let mut event = device_command("device.wifi.set");
     event.extra.insert("ssid".to_owned(), request.ssid.into());
-    event.extra.insert("password".to_owned(), request.password.into());
+    event
+        .extra
+        .insert("password".to_owned(), request.password.into());
     let response = post_event(State(state.clone()), Json(event)).await;
     if response.1.accepted {
         // The last failure was the old password's: this try says how it went once the box has tried.
@@ -1154,7 +1311,13 @@ async fn wifi_refusal(state: &AppState) -> Option<(StatusCode, Json<ApiResponse>
     } else {
         return None;
     };
-    Some((StatusCode::CONFLICT, Json(ApiResponse { accepted: false, message: message.to_owned() })))
+    Some((
+        StatusCode::CONFLICT,
+        Json(ApiResponse {
+            accepted: false,
+            message: message.to_owned(),
+        }),
+    ))
 }
 
 #[derive(serde::Deserialize)]
@@ -1168,24 +1331,45 @@ async fn post_choice(
     State(state): State<AppState>,
     Json(request): Json<ChoiceRequest>,
 ) -> (StatusCode, Json<ApiResponse>) {
-    let offered = state.device.lock().await.candidates.iter().any(|candidate| {
-        candidate.usb_serial.as_deref().is_some_and(|serial| serial_transport::serials_equal(serial, &request.usb_serial))
-    });
+    let offered = state
+        .device
+        .lock()
+        .await
+        .candidates
+        .iter()
+        .any(|candidate| {
+            candidate
+                .usb_serial
+                .as_deref()
+                .is_some_and(|serial| serial_transport::serials_equal(serial, &request.usb_serial))
+        });
     if !offered {
         return (
             StatusCode::CONFLICT,
-            Json(ApiResponse { accepted: false, message: "that device isn't one of the candidates".to_owned() }),
+            Json(ApiResponse {
+                accepted: false,
+                message: "that device isn't one of the candidates".to_owned(),
+            }),
         );
     }
     let Some(path) = known_box_file() else {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse { accepted: false, message: "no state directory to remember the box in".to_owned() }),
+            Json(ApiResponse {
+                accepted: false,
+                message: "no state directory to remember the box in".to_owned(),
+            }),
         );
     };
     serial_transport::remember_box(&path, &request.usb_serial);
     info!(usb_serial = %request.usb_serial, "the user chose the box");
-    (StatusCode::ACCEPTED, Json(ApiResponse { accepted: true, message: "remembered".to_owned() }))
+    (
+        StatusCode::ACCEPTED,
+        Json(ApiResponse {
+            accepted: true,
+            message: "remembered".to_owned(),
+        }),
+    )
 }
 
 /// What the App may say about a Character pack it writes, which the pack itself doesn't carry: the preset lending a
@@ -1205,10 +1389,15 @@ async fn post_voice_pack(
     let Some(voice) = voice_writer::voice_id_of(&body) else {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse { accepted: false, message: "request body is not a voice pack".to_owned() }),
+            Json(ApiResponse {
+                accepted: false,
+                message: "request body is not a voice pack".to_owned(),
+            }),
         );
     };
-    if let Some(refused) = begin_operation(&state, OperationKind::VoicePack, format!("writing {voice}")).await {
+    if let Some(refused) =
+        begin_operation(&state, OperationKind::VoicePack, format!("writing {voice}")).await
+    {
         return refused;
     }
     let bus = state.device_bus.subscribe();
@@ -1229,7 +1418,13 @@ async fn post_voice_pack(
                 move || report_message(&resuming_state, "waiting for the link to come back"),
             )
             .await
-            .and_then(|done| done.extra.get("voice").and_then(|voice| voice.as_str()).map(str::to_owned).ok_or_else(|| "the box didn't say which Character it has".to_owned()))
+            .and_then(|done| {
+                done.extra
+                    .get("voice")
+                    .and_then(|voice| voice.as_str())
+                    .map(str::to_owned)
+                    .ok_or_else(|| "the box didn't say which Character it has".to_owned())
+            })
         } else {
             voice_writer::write_pack(task_state.transport.clone(), bus, pack, move |fraction| {
                 report_progress(&progress_state, fraction, None);
@@ -1239,8 +1434,14 @@ async fn post_voice_pack(
         match result {
             Ok(written) => {
                 info!(voice = %written, "voice pack written to device");
-                task_state.save_config(|config| config.voice = Some(written.clone())).await;
-                let record = persona::Written { id: Some(written.clone()), lender: query.lender, address: query.address };
+                task_state
+                    .save_config(|config| config.voice = Some(written.clone()))
+                    .await;
+                let record = persona::Written {
+                    id: Some(written.clone()),
+                    lender: query.lender,
+                    address: query.address,
+                };
                 if let Some(dir) = &task_state.state_dir
                     && let Err(error) = record.save(&dir.join(persona::RECORD_FILE))
                 {
@@ -1271,7 +1472,10 @@ async fn post_voice_pack(
     });
     (
         StatusCode::ACCEPTED,
-        Json(ApiResponse { accepted: true, message: format!("started writing {voice}") }),
+        Json(ApiResponse {
+            accepted: true,
+            message: format!("started writing {voice}"),
+        }),
     )
 }
 
@@ -1290,7 +1494,11 @@ async fn post_firmware(
     Json(request): Json<FirmwareRequest>,
 ) -> (StatusCode, Json<ApiResponse>) {
     let mut segments = Vec::new();
-    for (address, path) in [(0x0_u32, &request.bootloader), (0x8000, &request.partition_table), (0x10000, &request.app)] {
+    for (address, path) in [
+        (0x0_u32, &request.bootloader),
+        (0x8000, &request.partition_table),
+        (0x10000, &request.app),
+    ] {
         match std::fs::read(path) {
             Ok(data) if !data.is_empty() => {
                 if address == 0x8000 {
@@ -1301,7 +1509,10 @@ async fn post_firmware(
             _ => {
                 return (
                     StatusCode::BAD_REQUEST,
-                    Json(ApiResponse { accepted: false, message: format!("cannot read firmware file {}", path.display()) }),
+                    Json(ApiResponse {
+                        accepted: false,
+                        message: format!("cannot read firmware file {}", path.display()),
+                    }),
                 );
             }
         }
@@ -1318,14 +1529,21 @@ async fn post_firmware(
             Some(_) if device.connected && device.network => {
                 return (
                     StatusCode::CONFLICT,
-                    Json(ApiResponse { accepted: false, message: "the box is linked over Wi-Fi; plug in the cable to flash it".to_owned() }),
+                    Json(ApiResponse {
+                        accepted: false,
+                        message: "the box is linked over Wi-Fi; plug in the cable to flash it"
+                            .to_owned(),
+                    }),
                 );
             }
             Some(port) if device.connected => (port.clone(), device.bridge),
             _ => {
                 return (
                     StatusCode::CONFLICT,
-                    Json(ApiResponse { accepted: false, message: "no box connected".to_owned() }),
+                    Json(ApiResponse {
+                        accepted: false,
+                        message: "no box connected".to_owned(),
+                    }),
                 );
             }
         }
@@ -1333,10 +1551,19 @@ async fn post_firmware(
     let Some(serial) = state.serial.clone() else {
         return (
             StatusCode::NOT_IMPLEMENTED,
-            Json(ApiResponse { accepted: false, message: "no serial worker".to_owned() }),
+            Json(ApiResponse {
+                accepted: false,
+                message: "no serial worker".to_owned(),
+            }),
         );
     };
-    if let Some(refused) = begin_operation(&state, OperationKind::Firmware, "releasing the serial port".to_owned()).await {
+    if let Some(refused) = begin_operation(
+        &state,
+        OperationKind::Firmware,
+        "releasing the serial port".to_owned(),
+    )
+    .await
+    {
         return refused;
     }
     let task_state = state.clone();
@@ -1365,12 +1592,23 @@ async fn post_firmware(
             }
             Err(error) => {
                 warn!(%error, "firmware flash failed");
-                let operation = Operation { kind: OperationKind::Firmware, state: OperationState::Failed, progress: 0.0, message: error };
+                let operation = Operation {
+                    kind: OperationKind::Firmware,
+                    state: OperationState::Failed,
+                    progress: 0.0,
+                    message: error,
+                };
                 task_state.set_operation(Some(operation)).await;
             }
         }
     });
-    (StatusCode::ACCEPTED, Json(ApiResponse { accepted: true, message: "started flashing".to_owned() }))
+    (
+        StatusCode::ACCEPTED,
+        Json(ApiResponse {
+            accepted: true,
+            message: "started flashing".to_owned(),
+        }),
+    )
 }
 
 /// The reset after flashing doesn't always start the new firmware: a box put into download mode by hand (K0 held while
@@ -1384,11 +1622,30 @@ const OTA_SETTLE: Duration = Duration::from_secs(8);
 
 /// Sends the app image over the link (ADR-0016), then waits for the box to come back on it. Success is the box
 /// reporting its build again without `FIRMWARE ROLLED BACK`.
-async fn update_over_the_link(state: AppState, segments: Vec<rom_flasher::Segment>) -> (StatusCode, Json<ApiResponse>) {
-    let Some(image) = segments.into_iter().find(|segment| segment.address == 0x10000).map(|segment| segment.data) else {
-        return (StatusCode::BAD_REQUEST, Json(ApiResponse { accepted: false, message: "no app image".to_owned() }));
+async fn update_over_the_link(
+    state: AppState,
+    segments: Vec<rom_flasher::Segment>,
+) -> (StatusCode, Json<ApiResponse>) {
+    let Some(image) = segments
+        .into_iter()
+        .find(|segment| segment.address == 0x10000)
+        .map(|segment| segment.data)
+    else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse {
+                accepted: false,
+                message: "no app image".to_owned(),
+            }),
+        );
     };
-    if let Some(refused) = begin_operation(&state, OperationKind::Firmware, "sending the firmware to the box".to_owned()).await {
+    if let Some(refused) = begin_operation(
+        &state,
+        OperationKind::Firmware,
+        "sending the firmware to the box".to_owned(),
+    )
+    .await
+    {
         return refused;
     }
     let task_state = state.clone();
@@ -1401,22 +1658,49 @@ async fn update_over_the_link(state: AppState, segments: Vec<rom_flasher::Segmen
             bus,
             "firmware",
             image,
-            move |fraction| report_progress(&progress_state, fraction * 0.95, Some("sending the firmware to the box".to_owned())),
+            move |fraction| {
+                report_progress(
+                    &progress_state,
+                    fraction * 0.95,
+                    Some("sending the firmware to the box".to_owned()),
+                )
+            },
             move || report_message(&resuming_state, "waiting for the link to come back"),
         )
         .await;
-        let firmware = |state, progress, message: &str| Some(Operation { kind: OperationKind::Firmware, state, progress, message: message.to_owned() });
+        let firmware = |state, progress, message: &str| {
+            Some(Operation {
+                kind: OperationKind::Firmware,
+                state,
+                progress,
+                message: message.to_owned(),
+            })
+        };
         if let Err(error) = result {
             warn!(%error, "firmware update over the link failed");
-            task_state.set_operation(firmware(OperationState::Failed, 0.0, &error)).await;
+            task_state
+                .set_operation(firmware(OperationState::Failed, 0.0, &error))
+                .await;
             return;
         }
         info!("firmware sent over the link, waiting for the box to restart");
         // Forget the old build, so only what the box reports after its restart counts.
         task_state.device.lock().await.firmware_build = None;
-        task_state.set_operation(firmware(OperationState::Running, 0.95, "waiting for the box to restart")).await;
+        task_state
+            .set_operation(firmware(
+                OperationState::Running,
+                0.95,
+                "waiting for the box to restart",
+            ))
+            .await;
         if !wait_for_firmware_build(&task_state, OTA_BOOT_TIMEOUT).await {
-            task_state.set_operation(firmware(OperationState::Failed, 0.0, "the box didn't come back after the update")).await;
+            task_state
+                .set_operation(firmware(
+                    OperationState::Failed,
+                    0.0,
+                    "the box didn't come back after the update",
+                ))
+                .await;
             return;
         }
         // On the cable the new image reports its build before it confirms itself; one that fails in between restarts
@@ -1424,33 +1708,81 @@ async fn update_over_the_link(state: AppState, segments: Vec<rom_flasher::Segmen
         // answer that counts is the one after a short wait, and the rollback comes right after its build.
         tokio::time::sleep(OTA_SETTLE).await;
         if !wait_for_firmware_build(&task_state, OTA_BOOT_TIMEOUT).await {
-            task_state.set_operation(firmware(OperationState::Failed, 0.0, "the box didn't come back after the update")).await;
+            task_state
+                .set_operation(firmware(
+                    OperationState::Failed,
+                    0.0,
+                    "the box didn't come back after the update",
+                ))
+                .await;
             return;
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
         if task_state.device.lock().await.rolled_back {
             warn!("the new firmware didn't confirm itself; the box went back");
-            task_state.set_operation(firmware(OperationState::Failed, 0.0, "the update didn't take; the box went back to its previous firmware")).await;
+            task_state
+                .set_operation(firmware(
+                    OperationState::Failed,
+                    0.0,
+                    "the update didn't take; the box went back to its previous firmware",
+                ))
+                .await;
         } else {
-            task_state.set_operation(firmware(OperationState::Done, 1.0, "updated, box restarted")).await;
+            task_state
+                .set_operation(firmware(
+                    OperationState::Done,
+                    1.0,
+                    "updated, box restarted",
+                ))
+                .await;
         }
     });
-    (StatusCode::ACCEPTED, Json(ApiResponse { accepted: true, message: "sending the firmware to the box".to_owned() }))
+    (
+        StatusCode::ACCEPTED,
+        Json(ApiResponse {
+            accepted: true,
+            message: "sending the firmware to the box".to_owned(),
+        }),
+    )
 }
 
 async fn await_first_boot(state: &AppState, boot_timeout: Duration) {
-    let firmware = |state, message: &str| Some(Operation { kind: OperationKind::Firmware, state, progress: 1.0, message: message.to_owned() });
-    state.set_operation(firmware(OperationState::Running, "waiting for the box to restart")).await;
+    let firmware = |state, message: &str| {
+        Some(Operation {
+            kind: OperationKind::Firmware,
+            state,
+            progress: 1.0,
+            message: message.to_owned(),
+        })
+    };
+    state
+        .set_operation(firmware(
+            OperationState::Running,
+            "waiting for the box to restart",
+        ))
+        .await;
     if wait_for_firmware_build(state, boot_timeout).await {
-        state.set_operation(firmware(OperationState::Done, "flash complete, box restarted")).await;
+        state
+            .set_operation(firmware(
+                OperationState::Done,
+                "flash complete, box restarted",
+            ))
+            .await;
         return;
     }
     warn!("the box did not start the new firmware, asking for a replug");
-    state.set_operation(firmware(OperationState::Replug, "firmware flashed but not started, replug the box")).await;
+    state
+        .set_operation(firmware(
+            OperationState::Replug,
+            "firmware flashed but not started, replug the box",
+        ))
+        .await;
     firmware_build_reported(state).await;
     let mut operation = state.operation.lock().await;
     // Another operation may have started in the meantime; only finish our own.
-    if operation.as_ref().is_some_and(|operation| operation.kind == OperationKind::Firmware && operation.state == OperationState::Replug) {
+    if operation.as_ref().is_some_and(|operation| {
+        operation.kind == OperationKind::Firmware && operation.state == OperationState::Replug
+    }) {
         *operation = firmware(OperationState::Done, "flash complete, box restarted");
         drop(operation);
         state.notify_status();
@@ -1458,7 +1790,9 @@ async fn await_first_boot(state: &AppState, boot_timeout: Duration) {
 }
 
 async fn wait_for_firmware_build(state: &AppState, timeout: Duration) -> bool {
-    tokio::time::timeout(timeout, firmware_build_reported(state)).await.is_ok()
+    tokio::time::timeout(timeout, firmware_build_reported(state))
+        .await
+        .is_ok()
 }
 
 async fn firmware_build_reported(state: &AppState) {
@@ -1474,7 +1808,13 @@ async fn post_restart() -> (StatusCode, Json<ApiResponse>) {
         info!("exiting at the app's request; it will relaunch us");
         std::process::exit(0);
     });
-    (StatusCode::ACCEPTED, Json(ApiResponse { accepted: true, message: "daemon is restarting".to_owned() }))
+    (
+        StatusCode::ACCEPTED,
+        Json(ApiResponse {
+            accepted: true,
+            message: "daemon is restarting".to_owned(),
+        }),
+    )
 }
 
 /// Periodically tell the device the link is still alive.
@@ -1635,12 +1975,19 @@ async fn post_codex_hook(
 ) -> (StatusCode, Json<ApiResponse>) {
     // The resident session is an Agent, but never an Activity: no card, announcement or stats (ADR-0017).
     if let Some(resident) = &state.resident
-        && resident.owns_hook(&hook.session_id, hook.thread_id.as_deref(), hook.cwd.as_deref())
+        && resident.owns_hook(
+            &hook.session_id,
+            hook.thread_id.as_deref(),
+            hook.cwd.as_deref(),
+        )
     {
         tracing::debug!(event = %hook.hook_event_name, "ignoring a hook from the resident session");
         return (
             StatusCode::ACCEPTED,
-            Json(ApiResponse { accepted: true, message: "resident session, ignored".to_owned() }),
+            Json(ApiResponse {
+                accepted: true,
+                message: "resident session, ignored".to_owned(),
+            }),
         );
     }
     state.hooks_seen.lock().await.codex = Some(chrono::Local::now());
@@ -1667,7 +2014,10 @@ async fn post_claude_hook(
         tracing::debug!(event = %hook.hook_event_name, "ignoring a Claude Code hook from the resident session");
         return (
             StatusCode::ACCEPTED,
-            Json(ApiResponse { accepted: true, message: "resident session, ignored".to_owned() }),
+            Json(ApiResponse {
+                accepted: true,
+                message: "resident session, ignored".to_owned(),
+            }),
         );
     }
     state.hooks_seen.lock().await.claude = Some(chrono::Local::now());
@@ -1776,7 +2126,11 @@ async fn get_resident(State(state): State<AppState>) -> Json<ResidentInfo> {
         revision: resident.revision(),
         ready: resident.ready(),
         problem: if on { readiness.problem } else { None },
-        brain: if resident.ready() { readiness.brain } else { None },
+        brain: if resident.ready() {
+            readiness.brain
+        } else {
+            None
+        },
         brain_setting: resident.brain_setting(),
         anthropic_key_set: resident.anthropic_key_set(),
         voice_off: if on { voice_off(&state).await } else { None },
@@ -1789,14 +2143,24 @@ struct BrainRequest {
 }
 
 /// Sets which brain the resident session runs on. Its own endpoint, kept out of `PUT /v1/config`.
-async fn put_resident_brain(State(state): State<AppState>, Json(request): Json<BrainRequest>) -> axum::response::Response {
+async fn put_resident_brain(
+    State(state): State<AppState>,
+    Json(request): Json<BrainRequest>,
+) -> axum::response::Response {
     use axum::response::IntoResponse;
     let Some(resident) = state.resident.clone() else {
         return no_state_directory();
     };
     if let Err(error) = resident.set_brain(request.brain).await {
         warn!(%error, "failed to save the resident session's brain setting");
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse { accepted: false, message: error.to_string() })).into_response();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse {
+                accepted: false,
+                message: error.to_string(),
+            }),
+        )
+            .into_response();
     }
     get_resident(State(state)).await.into_response()
 }
@@ -1808,10 +2172,20 @@ struct AnthropicKeyRequest {
 
 /// Stores the user's Anthropic API key for Claude Code (mode 0600, in its own file); it is never sent back or
 /// logged. Its own endpoint, so an App that doesn't know it can't wipe it.
-async fn put_anthropic_key(State(state): State<AppState>, Json(request): Json<AnthropicKeyRequest>) -> axum::response::Response {
+async fn put_anthropic_key(
+    State(state): State<AppState>,
+    Json(request): Json<AnthropicKeyRequest>,
+) -> axum::response::Response {
     use axum::response::IntoResponse;
     if request.api_key.trim().is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(ApiResponse { accepted: false, message: "api_key is empty".to_owned() })).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse {
+                accepted: false,
+                message: "api_key is empty".to_owned(),
+            }),
+        )
+            .into_response();
     }
     set_anthropic_key(state, Some(request.api_key)).await
 }
@@ -1827,19 +2201,40 @@ async fn set_anthropic_key(state: AppState, key: Option<String>) -> axum::respon
     };
     if let Err(error) = resident.set_anthropic_key(key).await {
         warn!(%error, "failed to save the Anthropic API key");
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse { accepted: false, message: error.to_string() })).into_response();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse {
+                accepted: false,
+                message: error.to_string(),
+            }),
+        )
+            .into_response();
     }
     get_resident(State(state)).await.into_response()
 }
 
 /// Sets or clears the user's own keys for spoken replies (ADR-0020): `{"elevenlabs"?, "volc"?}`, each a key, or null
 /// or "" to clear it; one left out stays. Answers which are set, as in the status; a key is never sent back or logged.
-async fn put_voice_keys(State(state): State<AppState>, Json(request): Json<serde_json::Map<String, serde_json::Value>>) -> axum::response::Response {
+async fn put_voice_keys(
+    State(state): State<AppState>,
+    Json(request): Json<serde_json::Map<String, serde_json::Value>>,
+) -> axum::response::Response {
     use axum::response::IntoResponse;
-    let refuse = |message: String| (StatusCode::BAD_REQUEST, Json(ApiResponse { accepted: false, message })).into_response();
+    let refuse = |message: String| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse {
+                accepted: false,
+                message,
+            }),
+        )
+            .into_response()
+    };
     let mut changes = Vec::new();
     for (name, value) in request {
-        let Some(provider) = voice_keys::Provider::named(&name) else { return refuse(format!("{name} is not a provider: elevenlabs or volc")) };
+        let Some(provider) = voice_keys::Provider::named(&name) else {
+            return refuse(format!("{name} is not a provider: elevenlabs or volc"));
+        };
         match value {
             serde_json::Value::Null => changes.push((provider, None)),
             serde_json::Value::String(key) => changes.push((provider, Some(key))),
@@ -1848,7 +2243,14 @@ async fn put_voice_keys(State(state): State<AppState>, Json(request): Json<serde
     }
     if let Err(error) = state.voice_keys.set(&changes) {
         warn!(%error, "failed to save the own keys");
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse { accepted: false, message: error.to_string() })).into_response();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse {
+                accepted: false,
+                message: error.to_string(),
+            }),
+        )
+            .into_response();
     }
     Json(state.voice_keys.status()).into_response()
 }
@@ -1876,14 +2278,28 @@ struct OwnVoiceAnswer {
 
 /// Tries a voice in the user's own account with their own key and keeps it when the provider speaks it: the voice and
 /// the line it said. 400 for a request that can't be tried, 502 when the provider said no.
-async fn post_voice(State(state): State<AppState>, Json(request): Json<OwnVoiceRequest>) -> axum::response::Response {
+async fn post_voice(
+    State(state): State<AppState>,
+    Json(request): Json<OwnVoiceRequest>,
+) -> axum::response::Response {
     use axum::response::IntoResponse;
     let making = state.making.clone();
-    let tried = tokio::task::spawn_blocking(move || making.add_own(&request.provider, &request.voice, &request.name, &request.text)).await;
+    let tried = tokio::task::spawn_blocking(move || {
+        making.add_own(
+            &request.provider,
+            &request.voice,
+            &request.name,
+            &request.text,
+        )
+    })
+    .await;
     let (status, message) = match tried {
         Ok(Ok((voice, samples))) => {
             state.notify_status();
-            let audio = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, making::wav(&samples));
+            let audio = base64::Engine::encode(
+                &base64::engine::general_purpose::STANDARD,
+                making::wav(&samples),
+            );
             return Json(OwnVoiceAnswer { voice, audio }).into_response();
         }
         Ok(Err(making::OwnVoiceError::Invalid(message))) => (StatusCode::BAD_REQUEST, message),
@@ -1891,7 +2307,14 @@ async fn post_voice(State(state): State<AppState>, Json(request): Json<OwnVoiceR
         Ok(Err(error)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{error:?}")),
         Err(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
     };
-    (status, Json(ApiResponse { accepted: false, message })).into_response()
+    (
+        status,
+        Json(ApiResponse {
+            accepted: false,
+            message,
+        }),
+    )
+        .into_response()
 }
 
 /// The voices in the account of the user's own ElevenLabs key: `[{"voice", "name", "category"}]`. 400 without the
@@ -1899,25 +2322,56 @@ async fn post_voice(State(state): State<AppState>, Json(request): Json<OwnVoiceR
 async fn get_elevenlabs_voices(State(state): State<AppState>) -> axum::response::Response {
     use axum::response::IntoResponse;
     let making = state.making.clone();
-    let (status, message) = match tokio::task::spawn_blocking(move || making.elevenlabs_voices()).await {
-        Ok(Ok(voices)) => return Json(voices).into_response(),
-        Ok(Err(making::OwnVoiceError::Invalid(message))) => (StatusCode::BAD_REQUEST, message),
-        Ok(Err(making::OwnVoiceError::Provider(message))) => (StatusCode::BAD_GATEWAY, message),
-        Ok(Err(error)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{error:?}")),
-        Err(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
-    };
-    (status, Json(ApiResponse { accepted: false, message })).into_response()
+    let (status, message) =
+        match tokio::task::spawn_blocking(move || making.elevenlabs_voices()).await {
+            Ok(Ok(voices)) => return Json(voices).into_response(),
+            Ok(Err(making::OwnVoiceError::Invalid(message))) => (StatusCode::BAD_REQUEST, message),
+            Ok(Err(making::OwnVoiceError::Provider(message))) => (StatusCode::BAD_GATEWAY, message),
+            Ok(Err(error)) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{error:?}")),
+            Err(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
+        };
+    (
+        status,
+        Json(ApiResponse {
+            accepted: false,
+            message,
+        }),
+    )
+        .into_response()
 }
 
 /// Forgets one of the user's own voices: 404 for one not kept, 409 while a Character made here speaks with it.
-async fn delete_voice(State(state): State<AppState>, axum::extract::Path(id): axum::extract::Path<String>) -> (StatusCode, Json<ApiResponse>) {
+async fn delete_voice(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> (StatusCode, Json<ApiResponse>) {
     let (status, message) = match state.making.remove_own(&id) {
-        Ok(()) => return (StatusCode::OK, Json(ApiResponse { accepted: true, message: format!("forgot {id}") })),
-        Err(making::OwnVoiceError::NotFound) => (StatusCode::NOT_FOUND, format!("{id} is not one of your voices")),
-        Err(making::OwnVoiceError::InUse(names)) => (StatusCode::CONFLICT, format!("{} speak with it", names.join(", "))),
+        Ok(()) => {
+            return (
+                StatusCode::OK,
+                Json(ApiResponse {
+                    accepted: true,
+                    message: format!("forgot {id}"),
+                }),
+            );
+        }
+        Err(making::OwnVoiceError::NotFound) => (
+            StatusCode::NOT_FOUND,
+            format!("{id} is not one of your voices"),
+        ),
+        Err(making::OwnVoiceError::InUse(names)) => (
+            StatusCode::CONFLICT,
+            format!("{} speak with it", names.join(", ")),
+        ),
         Err(error) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{error:?}")),
     };
-    (status, Json(ApiResponse { accepted: false, message }))
+    (
+        status,
+        Json(ApiResponse {
+            accepted: false,
+            message,
+        }),
+    )
 }
 
 /// The Characters made here, for the App to list beside the presets.
@@ -1926,35 +2380,79 @@ async fn get_characters(State(state): State<AppState>) -> Json<Vec<making::MadeC
 }
 
 /// Deletes a Character made here: 404 for one not made here, 409 while it is being made.
-async fn delete_character(State(state): State<AppState>, axum::extract::Path(id): axum::extract::Path<String>) -> (StatusCode, Json<ApiResponse>) {
+async fn delete_character(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> (StatusCode, Json<ApiResponse>) {
     let (status, message) = match state.making.delete(&id) {
-        Ok(()) => return (StatusCode::OK, Json(ApiResponse { accepted: true, message: format!("deleted {id}") })),
-        Err(making::DeleteError::NotFound) => (StatusCode::NOT_FOUND, format!("{id} is not a Character made here")),
+        Ok(()) => {
+            return (
+                StatusCode::OK,
+                Json(ApiResponse {
+                    accepted: true,
+                    message: format!("deleted {id}"),
+                }),
+            );
+        }
+        Err(making::DeleteError::NotFound) => (
+            StatusCode::NOT_FOUND,
+            format!("{id} is not a Character made here"),
+        ),
         Err(making::DeleteError::Busy) => (StatusCode::CONFLICT, format!("{id} is being made")),
         Err(making::DeleteError::Io(message)) => (StatusCode::INTERNAL_SERVER_ERROR, message),
     };
-    (status, Json(ApiResponse { accepted: false, message }))
+    (
+        status,
+        Json(ApiResponse {
+            accepted: false,
+            message,
+        }),
+    )
 }
 
 /// A preset's lines, which a made Character starts from: `[{"occasion", "text"}]`; 404 for anything not a preset.
-async fn get_preset_lines(axum::extract::Path(id): axum::extract::Path<String>) -> axum::response::Response {
+async fn get_preset_lines(
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> axum::response::Response {
     use axum::response::IntoResponse;
     match making::preset_lines(&id) {
         Some(lines) => Json(lines).into_response(),
-        None => (StatusCode::NOT_FOUND, Json(ApiResponse { accepted: false, message: format!("{id} is not a preset Character") })).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse {
+                accepted: false,
+                message: format!("{id} is not a preset Character"),
+            }),
+        )
+            .into_response(),
     }
 }
 
 /// Starts making a Character's line audio (`making` in the status follows it); 409 while another is being made.
-async fn post_character(State(state): State<AppState>, Json(request): Json<making::Request>) -> axum::response::Response {
+async fn post_character(
+    State(state): State<AppState>,
+    Json(request): Json<making::Request>,
+) -> axum::response::Response {
     use axum::response::IntoResponse;
     let (status, message) = match state.making.start(request) {
         Ok(making) => return (StatusCode::ACCEPTED, Json(making)).into_response(),
-        Err(making::StartError::Busy) => (StatusCode::CONFLICT, "another Character is being made".to_owned()),
+        Err(making::StartError::Busy) => (
+            StatusCode::CONFLICT,
+            "another Character is being made".to_owned(),
+        ),
         Err(making::StartError::Invalid(message)) => (StatusCode::BAD_REQUEST, message),
-        Err(making::StartError::Unavailable(message)) => (StatusCode::INTERNAL_SERVER_ERROR, message),
+        Err(making::StartError::Unavailable(message)) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, message)
+        }
     };
-    (status, Json(ApiResponse { accepted: false, message })).into_response()
+    (
+        status,
+        Json(ApiResponse {
+            accepted: false,
+            message,
+        }),
+    )
+        .into_response()
 }
 
 #[derive(Serialize)]
@@ -1984,9 +2482,11 @@ async fn get_account_callback(
 ) -> (StatusCode, axum::response::Html<String>) {
     let account = state.account.clone();
     let result = match (query.code, query.state) {
-        (Some(code), Some(sign_in)) => tokio::task::spawn_blocking(move || account.finish(&code, &sign_in))
-            .await
-            .unwrap_or_else(|error| Err(account::AccountError::Service(error.to_string()))),
+        (Some(code), Some(sign_in)) => {
+            tokio::task::spawn_blocking(move || account.finish(&code, &sign_in))
+                .await
+                .unwrap_or_else(|error| Err(account::AccountError::Service(error.to_string())))
+        }
         _ => Err(account::AccountError::UnknownSignIn),
     };
     if let Err(error) = &result {
@@ -1994,15 +2494,26 @@ async fn get_account_callback(
     }
     state.notify_status();
     let (status, page) = account::callback_page(&result);
-    (StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY), axum::response::Html(page))
+    (
+        StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY),
+        axum::response::Html(page),
+    )
 }
 
 async fn post_sign_out(State(state): State<AppState>) -> (StatusCode, Json<ApiResponse>) {
     let account = state.account.clone();
-    let result = tokio::task::spawn_blocking(move || account.sign_out()).await.unwrap_or_else(|error| Err(account::AccountError::Service(error.to_string())));
+    let result = tokio::task::spawn_blocking(move || account.sign_out())
+        .await
+        .unwrap_or_else(|error| Err(account::AccountError::Service(error.to_string())));
     state.notify_status();
     match result {
-        Ok(()) => (StatusCode::OK, Json(ApiResponse { accepted: true, message: "signed out".to_owned() })),
+        Ok(()) => (
+            StatusCode::OK,
+            Json(ApiResponse {
+                accepted: true,
+                message: "signed out".to_owned(),
+            }),
+        ),
         Err(error) => account_refusal(&error),
     }
 }
@@ -2010,18 +2521,35 @@ async fn post_sign_out(State(state): State<AppState>) -> (StatusCode, Json<ApiRe
 /// Reads today's voice use and the plan from the service, for the App's Account tab; the status stream carries them.
 async fn post_account_refresh(State(state): State<AppState>) -> (StatusCode, Json<ApiResponse>) {
     let account = state.account.clone();
-    match tokio::task::spawn_blocking(move || account.refresh_usage()).await.unwrap_or_else(|error| Err(account::AccountError::Service(error.to_string()))) {
-        Ok(()) => (StatusCode::OK, Json(ApiResponse { accepted: true, message: "refreshed".to_owned() })),
+    match tokio::task::spawn_blocking(move || account.refresh_usage())
+        .await
+        .unwrap_or_else(|error| Err(account::AccountError::Service(error.to_string())))
+    {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(ApiResponse {
+                accepted: true,
+                message: "refreshed".to_owned(),
+            }),
+        ),
         Err(error) => account_refusal(&error),
     }
 }
 
 async fn delete_account(State(state): State<AppState>) -> (StatusCode, Json<ApiResponse>) {
     let account = state.account.clone();
-    let result = tokio::task::spawn_blocking(move || account.delete()).await.unwrap_or_else(|error| Err(account::AccountError::Service(error.to_string())));
+    let result = tokio::task::spawn_blocking(move || account.delete())
+        .await
+        .unwrap_or_else(|error| Err(account::AccountError::Service(error.to_string())));
     state.notify_status();
     match result {
-        Ok(()) => (StatusCode::OK, Json(ApiResponse { accepted: true, message: "account deleted".to_owned() })),
+        Ok(()) => (
+            StatusCode::OK,
+            Json(ApiResponse {
+                accepted: true,
+                message: "account deleted".to_owned(),
+            }),
+        ),
         Err(error) => account_refusal(&error),
     }
 }
@@ -2033,12 +2561,25 @@ fn account_refusal(error: &account::AccountError) -> (StatusCode, Json<ApiRespon
         account::AccountError::UnknownSignIn => StatusCode::BAD_REQUEST,
         account::AccountError::Service(_) => StatusCode::BAD_GATEWAY,
     };
-    (status, Json(ApiResponse { accepted: false, message: error.to_string() }))
+    (
+        status,
+        Json(ApiResponse {
+            accepted: false,
+            message: error.to_string(),
+        }),
+    )
 }
 
 fn no_state_directory() -> axum::response::Response {
     use axum::response::IntoResponse;
-    (StatusCode::SERVICE_UNAVAILABLE, Json(ApiResponse { accepted: false, message: "no state directory".to_owned() })).into_response()
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ApiResponse {
+            accepted: false,
+            message: "no state directory".to_owned(),
+        }),
+    )
+        .into_response()
 }
 
 #[derive(serde::Deserialize)]
@@ -2053,36 +2594,75 @@ async fn get_resident_history(
 ) -> axum::response::Response {
     use axum::response::IntoResponse;
     let Some(resident) = state.resident.clone() else {
-        return (StatusCode::SERVICE_UNAVAILABLE, Json(ApiResponse { accepted: false, message: "no state directory".to_owned() }))
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse {
+                accepted: false,
+                message: "no state directory".to_owned(),
+            }),
+        )
             .into_response();
     };
-    match resident.history(query.limit.unwrap_or(5).clamp(1, 50)).await {
-        Ok(exchanges) => Json(serde_json::json!({"thread_id": resident.thread_id(), "exchanges": exchanges})).into_response(),
+    match resident
+        .history(query.limit.unwrap_or(5).clamp(1, 50))
+        .await
+    {
+        Ok(exchanges) => {
+            Json(serde_json::json!({"thread_id": resident.thread_id(), "exchanges": exchanges}))
+                .into_response()
+        }
         Err(error) => {
             let status = match error {
                 resident::ResidentError::Disabled => StatusCode::NOT_FOUND,
                 _ => StatusCode::SERVICE_UNAVAILABLE,
             };
-            (status, Json(ApiResponse { accepted: false, message: error.to_string() })).into_response()
+            (
+                status,
+                Json(ApiResponse {
+                    accepted: false,
+                    message: error.to_string(),
+                }),
+            )
+                .into_response()
         }
     }
 }
 
 /// One voice command, typed for now: waits for the resident session's spoken replies.
-async fn post_resident_say(State(state): State<AppState>, Json(request): Json<SayRequest>) -> axum::response::Response {
+async fn post_resident_say(
+    State(state): State<AppState>,
+    Json(request): Json<SayRequest>,
+) -> axum::response::Response {
     use axum::response::IntoResponse;
     let Some(resident) = state.resident.clone() else {
-        return (StatusCode::SERVICE_UNAVAILABLE, Json(ApiResponse { accepted: false, message: "no state directory".to_owned() }))
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse {
+                accepted: false,
+                message: "no state directory".to_owned(),
+            }),
+        )
             .into_response();
     };
     let text = request.text.trim();
     if text.is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(ApiResponse { accepted: false, message: "text is empty".to_owned() })).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse {
+                accepted: false,
+                message: "text is empty".to_owned(),
+            }),
+        )
+            .into_response();
     }
     let started = std::time::Instant::now();
     match resident.say(text, &wearing(&state).await).await {
         Ok(answer) => {
-            info!(elapsed_ms = started.elapsed().as_millis() as u64, replies = answer.replies.len(), "voice command answered");
+            info!(
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                replies = answer.replies.len(),
+                "voice command answered"
+            );
             Json(serde_json::json!({
                 "thread_id": answer.thread_id,
                 "replies": answer.replies,
@@ -2097,7 +2677,14 @@ async fn post_resident_say(State(state): State<AppState>, Json(request): Json<Sa
                 resident::ResidentError::Timeout => StatusCode::GATEWAY_TIMEOUT,
                 _ => StatusCode::SERVICE_UNAVAILABLE,
             };
-            (status, Json(ApiResponse { accepted: false, message: error.to_string() })).into_response()
+            (
+                status,
+                Json(ApiResponse {
+                    accepted: false,
+                    message: error.to_string(),
+                }),
+            )
+                .into_response()
         }
     }
 }
@@ -2115,7 +2702,10 @@ mod tests {
 
     impl Transport for RecordingTransport {
         fn send(&self, frame: Vec<u8>) -> Result<(), TransportError> {
-            self.frames.lock().expect("mutex should not be poisoned").push(frame);
+            self.frames
+                .lock()
+                .expect("mutex should not be poisoned")
+                .push(frame);
             Ok(())
         }
     }
@@ -2154,9 +2744,19 @@ mod tests {
     async fn a_callback_this_daemon_did_not_start_shows_a_refusal_page() {
         let mut state = test_state(Arc::new(RecordingTransport::default()));
         let dir = std::env::temp_dir().join(format!("vibebuddy-callback-{}", std::process::id()));
-        state.account = Arc::new(account::Account::new(Some("http://127.0.0.1:9".to_owned()), Some(&dir), 7331));
+        state.account = Arc::new(account::Account::new(
+            Some("http://127.0.0.1:9".to_owned()),
+            Some(&dir),
+            7331,
+        ));
         let callback = |code: Option<&str>, sign_in: Option<&str>| {
-            get_account_callback(State(state.clone()), axum::extract::Query(CallbackQuery { code: code.map(Into::into), state: sign_in.map(Into::into) }))
+            get_account_callback(
+                State(state.clone()),
+                axum::extract::Query(CallbackQuery {
+                    code: code.map(Into::into),
+                    state: sign_in.map(Into::into),
+                }),
+            )
         };
         let (status, page) = callback(Some("c"), Some("forged")).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -2174,11 +2774,31 @@ mod tests {
         });
 
         tokio::time::sleep(Duration::from_secs(2)).await;
-        assert_eq!(state.operation.lock().await.as_ref().map(|operation| operation.state), Some(OperationState::Running));
+        assert_eq!(
+            state
+                .operation
+                .lock()
+                .await
+                .as_ref()
+                .map(|operation| operation.state),
+            Some(OperationState::Running)
+        );
 
-        publish_device_message(&state, DeviceMessage::Line("DISPLAY READY BUILD v9 2026-10-01".to_owned())).await;
+        publish_device_message(
+            &state,
+            DeviceMessage::Line("DISPLAY READY BUILD v9 2026-10-01".to_owned()),
+        )
+        .await;
         waiting.await.unwrap();
-        assert_eq!(state.operation.lock().await.as_ref().map(|operation| operation.state), Some(OperationState::Done));
+        assert_eq!(
+            state
+                .operation
+                .lock()
+                .await
+                .as_ref()
+                .map(|operation| operation.state),
+            Some(OperationState::Done)
+        );
     }
 
     #[tokio::test(start_paused = true)]
@@ -2190,14 +2810,42 @@ mod tests {
         });
 
         tokio::time::sleep(Duration::from_secs(20)).await;
-        assert_eq!(state.operation.lock().await.as_ref().map(|operation| operation.state), Some(OperationState::Replug));
+        assert_eq!(
+            state
+                .operation
+                .lock()
+                .await
+                .as_ref()
+                .map(|operation| operation.state),
+            Some(OperationState::Replug)
+        );
         // No deadline on the replug: an hour later it is still waiting, not stuck in a state nothing watches.
         tokio::time::sleep(Duration::from_secs(3600)).await;
-        assert_eq!(state.operation.lock().await.as_ref().map(|operation| operation.state), Some(OperationState::Replug));
+        assert_eq!(
+            state
+                .operation
+                .lock()
+                .await
+                .as_ref()
+                .map(|operation| operation.state),
+            Some(OperationState::Replug)
+        );
 
-        publish_device_message(&state, DeviceMessage::Line("DISPLAY READY BUILD v9 2026-10-01".to_owned())).await;
+        publish_device_message(
+            &state,
+            DeviceMessage::Line("DISPLAY READY BUILD v9 2026-10-01".to_owned()),
+        )
+        .await;
         waiting.await.unwrap();
-        assert_eq!(state.operation.lock().await.as_ref().map(|operation| operation.state), Some(OperationState::Done));
+        assert_eq!(
+            state
+                .operation
+                .lock()
+                .await
+                .as_ref()
+                .map(|operation| operation.state),
+            Some(OperationState::Done)
+        );
     }
 
     #[tokio::test]
@@ -2205,25 +2853,61 @@ mod tests {
         let transport = Arc::new(RecordingTransport::default());
         let mut state = test_state(transport.clone());
         let dir = std::env::temp_dir().join(format!("vibebuddy-pair-test-{}", std::process::id()));
-        let identity = identity::Identity::load_or_create(&dir.join("identity"), "dragon's MacBook".to_owned()).unwrap();
+        let identity = identity::Identity::load_or_create(
+            &dir.join("identity"),
+            "dragon's MacBook".to_owned(),
+        )
+        .unwrap();
         let key = identity.public_key();
         state.identity = Some(Arc::new(identity));
 
-        publish_device_message(&state, DeviceMessage::Line("DISPLAY READY BUILD v9 2026-10-01".to_owned())).await;
-        let pairs = || transport.events().into_iter().filter(|event| event.event == "device.pair").collect::<Vec<_>>();
-        assert!(pairs().is_empty(), "firmware that can't pair gets no pair event");
-        publish_device_message(&state, DeviceMessage::Line("BOX KEY 1Uc4Vh8Aby1bV4I08TphnmbwAm0AzHkw5RelizUGdRE".to_owned())).await;
+        publish_device_message(
+            &state,
+            DeviceMessage::Line("DISPLAY READY BUILD v9 2026-10-01".to_owned()),
+        )
+        .await;
+        let pairs = || {
+            transport
+                .events()
+                .into_iter()
+                .filter(|event| event.event == "device.pair")
+                .collect::<Vec<_>>()
+        };
+        assert!(
+            pairs().is_empty(),
+            "firmware that can't pair gets no pair event"
+        );
+        publish_device_message(
+            &state,
+            DeviceMessage::Line("BOX KEY 1Uc4Vh8Aby1bV4I08TphnmbwAm0AzHkw5RelizUGdRE".to_owned()),
+        )
+        .await;
         let pair = pairs().pop().expect("a pair event");
         assert_eq!(pair.event, "device.pair");
         assert_eq!(pair.extra["key"], key.as_str());
         assert_eq!(pair.extra["name"], "dragon's MacBook");
         assert!(
-            !transport.events().iter().any(|event| event.event == "device.relay.set"),
+            !transport
+                .events()
+                .iter()
+                .any(|event| event.event == "device.relay.set"),
             "nothing to give the box without a Relay"
         );
-        state.relay = Some(relay::RelayConfig::new(state.identity.clone().unwrap(), None, false));
-        publish_device_message(&state, DeviceMessage::Line("BOX KEY 1Uc4Vh8Aby1bV4I08TphnmbwAm0AzHkw5RelizUGdRE".to_owned())).await;
-        let set = transport.events().into_iter().find(|event| event.event == "device.relay.set").expect("the Relay for the box");
+        state.relay = Some(relay::RelayConfig::new(
+            state.identity.clone().unwrap(),
+            None,
+            false,
+        ));
+        publish_device_message(
+            &state,
+            DeviceMessage::Line("BOX KEY 1Uc4Vh8Aby1bV4I08TphnmbwAm0AzHkw5RelizUGdRE".to_owned()),
+        )
+        .await;
+        let set = transport
+            .events()
+            .into_iter()
+            .find(|event| event.event == "device.relay.set")
+            .expect("the Relay for the box");
         assert_eq!(set.extra["url"], relay::STAGING_URL);
         std::fs::remove_dir_all(dir).ok();
     }
@@ -2232,21 +2916,40 @@ mod tests {
     async fn only_the_cable_changes_the_remembered_box_key() {
         let transport = Arc::new(RecordingTransport::default());
         let mut state = test_state(transport.clone());
-        let dir = std::env::temp_dir().join(format!("vibebuddy-box-key-test-{}", std::process::id()));
-        state.identity = Some(Arc::new(identity::Identity::load_or_create(&dir.join("identity"), "a".to_owned()).unwrap()));
+        let dir =
+            std::env::temp_dir().join(format!("vibebuddy-box-key-test-{}", std::process::id()));
+        state.identity = Some(Arc::new(
+            identity::Identity::load_or_create(&dir.join("identity"), "a".to_owned()).unwrap(),
+        ));
         state.state_dir = Some(dir.clone());
-        let remembered = || std::fs::read_to_string(lan::box_key_file(&dir)).ok().map(|key| key.trim().to_owned());
+        let remembered = || {
+            std::fs::read_to_string(lan::box_key_file(&dir))
+                .ok()
+                .map(|key| key.trim().to_owned())
+        };
         let old = "1Uc4Vh8Aby1bV4I08TphnmbwAm0AzHkw5RelizUGdRE";
         let new = "pm3f5yT3yi4s2P90TalP1NcUZD3xBTfETdlii-KnvWM";
 
-        publish_device_message(&state, DeviceMessage::Connected { port: "/dev/cu.x".to_owned(), bridge: false, usb_serial: None }).await;
+        publish_device_message(
+            &state,
+            DeviceMessage::Connected {
+                port: "/dev/cu.x".to_owned(),
+                bridge: false,
+                usb_serial: None,
+            },
+        )
+        .await;
         publish_device_message(&state, DeviceMessage::Line(format!("BOX KEY {old}"))).await;
         assert_eq!(remembered().as_deref(), Some(old));
 
         // A box on the network or the Relay saying it has a new identity is not believed.
         for linked in [
-            DeviceMessage::ConnectedNetwork { address: "192.168.1.23:7340".to_owned() },
-            DeviceMessage::ConnectedRelay { url: "wss://relay.example".to_owned() },
+            DeviceMessage::ConnectedNetwork {
+                address: "192.168.1.23:7340".to_owned(),
+            },
+            DeviceMessage::ConnectedRelay {
+                url: "wss://relay.example".to_owned(),
+            },
         ] {
             publish_device_message(&state, linked).await;
             publish_device_message(&state, DeviceMessage::Line(format!("BOX KEY {new}"))).await;
@@ -2254,7 +2957,15 @@ mod tests {
         }
 
         // The box itself, on the cable, after a reset.
-        publish_device_message(&state, DeviceMessage::Connected { port: "/dev/cu.x".to_owned(), bridge: false, usb_serial: None }).await;
+        publish_device_message(
+            &state,
+            DeviceMessage::Connected {
+                port: "/dev/cu.x".to_owned(),
+                bridge: false,
+                usb_serial: None,
+            },
+        )
+        .await;
         publish_device_message(&state, DeviceMessage::Line(format!("BOX KEY {new}"))).await;
         assert_eq!(remembered().as_deref(), Some(new));
         std::fs::remove_dir_all(dir).ok();
@@ -2264,25 +2975,71 @@ mod tests {
     async fn wifi_is_set_only_over_the_cable_on_firmware_that_can() {
         let transport = Arc::new(RecordingTransport::default());
         let state = test_state(transport.clone());
-        let request = || Json(WifiRequest { ssid: "Home".to_owned(), password: "secret".to_owned() });
+        let request = || {
+            Json(WifiRequest {
+                ssid: "Home".to_owned(),
+                password: "secret".to_owned(),
+            })
+        };
         let (status, _) = post_wifi(State(state.clone()), request()).await;
         assert_eq!(status, StatusCode::CONFLICT, "nothing connected");
 
-        publish_device_message(&state, DeviceMessage::Connected { port: "/dev/cu.x".to_owned(), bridge: false, usb_serial: None }).await;
+        publish_device_message(
+            &state,
+            DeviceMessage::Connected {
+                port: "/dev/cu.x".to_owned(),
+                bridge: false,
+                usb_serial: None,
+            },
+        )
+        .await;
         let (status, _) = post_wifi(State(state.clone()), request()).await;
-        assert_eq!(status, StatusCode::CONFLICT, "firmware that can't pair would show it as agent activity");
+        assert_eq!(
+            status,
+            StatusCode::CONFLICT,
+            "firmware that can't pair would show it as agent activity"
+        );
 
-        publish_device_message(&state, DeviceMessage::Line("BOX KEY 1Uc4Vh8Aby1bV4I08TphnmbwAm0AzHkw5RelizUGdRE".to_owned())).await;
+        publish_device_message(
+            &state,
+            DeviceMessage::Line("BOX KEY 1Uc4Vh8Aby1bV4I08TphnmbwAm0AzHkw5RelizUGdRE".to_owned()),
+        )
+        .await;
         publish_device_message(&state, DeviceMessage::Line("WIFI NETWORK Home".to_owned())).await;
-        publish_device_message(&state, DeviceMessage::Line("WIFI FAILED FourWayHandshakeTimeout".to_owned())).await;
+        publish_device_message(
+            &state,
+            DeviceMessage::Line("WIFI FAILED FourWayHandshakeTimeout".to_owned()),
+        )
+        .await;
         let (status, _) = post_wifi(State(state.clone()), request()).await;
         assert_eq!(status, StatusCode::ACCEPTED);
-        assert_eq!(state.device.lock().await.wifi_error, None, "joining again forgets the old password's failure");
-        let set = transport.events().into_iter().find(|event| event.event == "device.wifi.set").expect("sent");
-        assert_eq!((set.extra["ssid"].as_str(), set.extra["password"].as_str()), (Some("Home"), Some("secret")));
+        assert_eq!(
+            state.device.lock().await.wifi_error,
+            None,
+            "joining again forgets the old password's failure"
+        );
+        let set = transport
+            .events()
+            .into_iter()
+            .find(|event| event.event == "device.wifi.set")
+            .expect("sent");
+        assert_eq!(
+            (set.extra["ssid"].as_str(), set.extra["password"].as_str()),
+            (Some("Home"), Some("secret"))
+        );
 
-        publish_device_message(&state, DeviceMessage::ConnectedNetwork { address: "192.168.1.23:7340".to_owned() }).await;
-        publish_device_message(&state, DeviceMessage::Line("BOX KEY 1Uc4Vh8Aby1bV4I08TphnmbwAm0AzHkw5RelizUGdRE".to_owned())).await;
+        publish_device_message(
+            &state,
+            DeviceMessage::ConnectedNetwork {
+                address: "192.168.1.23:7340".to_owned(),
+            },
+        )
+        .await;
+        publish_device_message(
+            &state,
+            DeviceMessage::Line("BOX KEY 1Uc4Vh8Aby1bV4I08TphnmbwAm0AzHkw5RelizUGdRE".to_owned()),
+        )
+        .await;
         let (status, _) = post_wifi_forget(State(state.clone())).await;
         assert_eq!(status, StatusCode::CONFLICT, "not over the network");
     }
@@ -2304,7 +3061,10 @@ mod tests {
 
     #[tokio::test]
     async fn the_resident_sessions_own_hooks_make_no_card_announcement_or_stats() {
-        let dir = std::env::temp_dir().join(format!("vibebuddy-main-resident-hooks-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "vibebuddy-main-resident-hooks-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         let transport = Arc::new(RecordingTransport::default());
         let mut state = test_state(transport.clone());
@@ -2339,7 +3099,11 @@ mod tests {
         .unwrap();
         let _ = post_codex_hook(State(state.clone()), Json(hook)).await;
         assert_eq!(state.activities.lock().await.summaries().len(), 1);
-        assert_eq!(state.snapshot().await.activities.len(), 1, "the status carries the Activities");
+        assert_eq!(
+            state.snapshot().await.activities.len(),
+            1,
+            "the status carries the Activities"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -2350,27 +3114,62 @@ mod tests {
         let mut state = test_state(transport.clone());
         let claude = resident_claude::tests::script();
         state.resident = Some(Arc::new(
-            resident::tests::resident(&dir, &resident::tests::logged_in(), state.activities.clone())
-                .with_claude(resident_claude::tests::brain(&dir, &claude, state.activities.clone())),
+            resident::tests::resident(
+                &dir,
+                &resident::tests::logged_in(),
+                state.activities.clone(),
+            )
+            .with_claude(resident_claude::tests::brain(
+                &dir,
+                &claude,
+                state.activities.clone(),
+            )),
         ));
 
-        let request = AnthropicKeyRequest { api_key: " ".to_owned() };
-        assert_eq!(put_anthropic_key(State(state.clone()), Json(request)).await.status(), StatusCode::BAD_REQUEST);
-        let request = AnthropicKeyRequest { api_key: "sk-ant-secret".to_owned() };
+        let request = AnthropicKeyRequest {
+            api_key: " ".to_owned(),
+        };
+        assert_eq!(
+            put_anthropic_key(State(state.clone()), Json(request))
+                .await
+                .status(),
+            StatusCode::BAD_REQUEST
+        );
+        let request = AnthropicKeyRequest {
+            api_key: "sk-ant-secret".to_owned(),
+        };
         let response = put_anthropic_key(State(state.clone()), Json(request)).await;
         assert_eq!(response.status(), StatusCode::OK);
-        let body = http_body_util::BodyExt::collect(response.into_body()).await.unwrap().to_bytes();
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
         let info: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(info["anthropic_key_set"], true);
         assert!(!String::from_utf8_lossy(&body).contains("sk-ant-secret"));
-        let request = BrainRequest { brain: resident::BrainChoice::Claude };
+        let request = BrainRequest {
+            brain: resident::BrainChoice::Claude,
+        };
         let response = put_resident_brain(State(state.clone()), Json(request)).await;
-        let body = http_body_util::BodyExt::collect(response.into_body()).await.unwrap().to_bytes();
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
         let info: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!((info["brain_setting"].as_str(), info["brain"].as_str(), info["ready"].as_bool()), (Some("claude"), Some("claude"), Some(true)));
+        assert_eq!(
+            (
+                info["brain_setting"].as_str(),
+                info["brain"].as_str(),
+                info["ready"].as_bool()
+            ),
+            (Some("claude"), Some("claude"), Some(true))
+        );
 
         let resident = state.resident.clone().unwrap();
-        resident.say("hi", &persona::Wearing::default()).await.unwrap();
+        resident
+            .say("hi", &persona::Wearing::default())
+            .await
+            .unwrap();
         let session = resident.thread_id().unwrap();
         for event in ["UserPromptSubmit", "Stop"] {
             let hook: ClaudeHook = serde_json::from_value(serde_json::json!({
@@ -2386,9 +3185,18 @@ mod tests {
         assert!(state.activities.lock().await.summaries().is_empty());
 
         let response = delete_anthropic_key(State(state.clone())).await;
-        let body = http_body_util::BodyExt::collect(response.into_body()).await.unwrap().to_bytes();
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
         let info: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!((info["anthropic_key_set"].as_bool(), info["problem"].as_str()), (Some(false), Some("anthropic_key_missing")));
+        assert_eq!(
+            (
+                info["anthropic_key_set"].as_bool(),
+                info["problem"].as_str()
+            ),
+            (Some(false), Some("anthropic_key_missing"))
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -2397,23 +3205,53 @@ mod tests {
         let dir = voice_keys::tests::scratch("main");
         let mut state = test_state(Arc::new(RecordingTransport::default()));
         state.voice_keys = Arc::new(voice_keys::VoiceKeys::new(Some(&dir)));
-        let put = |body: serde_json::Value| put_voice_keys(State(state.clone()), Json(serde_json::from_value(body).unwrap()));
+        let put = |body: serde_json::Value| {
+            put_voice_keys(
+                State(state.clone()),
+                Json(serde_json::from_value(body).unwrap()),
+            )
+        };
 
-        let response = put(serde_json::json!({"elevenlabs": "sk_eleven_secret", "volc": "volc_secret"})).await;
+        let response =
+            put(serde_json::json!({"elevenlabs": "sk_eleven_secret", "volc": "volc_secret"})).await;
         assert_eq!(response.status(), StatusCode::OK);
-        let body = http_body_util::BodyExt::collect(response.into_body()).await.unwrap().to_bytes();
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
         let answer: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(answer, serde_json::json!({"elevenlabs": {"set": true, "refused": false}, "volc": {"set": true, "refused": false}}));
+        assert_eq!(
+            answer,
+            serde_json::json!({"elevenlabs": {"set": true, "refused": false}, "volc": {"set": true, "refused": false}})
+        );
         let status = serde_json::to_string(&state.snapshot().await).unwrap();
-        assert!(status.contains(r#""voice_keys":{"elevenlabs":{"set":true"#), "{status}");
+        assert!(
+            status.contains(r#""voice_keys":{"elevenlabs":{"set":true"#),
+            "{status}"
+        );
         assert!(!status.contains("secret") && !String::from_utf8_lossy(&body).contains("secret"));
 
         let response = put(serde_json::json!({"volc": null})).await;
-        let body = http_body_util::BodyExt::collect(response.into_body()).await.unwrap().to_bytes();
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
         let answer: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!((answer["elevenlabs"]["set"].as_bool(), answer["volc"]["set"].as_bool()), (Some(true), Some(false)));
-        assert_eq!(put(serde_json::json!({"openai": "k"})).await.status(), StatusCode::BAD_REQUEST);
-        assert_eq!(put(serde_json::json!({"volc": 1})).await.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            (
+                answer["elevenlabs"]["set"].as_bool(),
+                answer["volc"]["set"].as_bool()
+            ),
+            (Some(true), Some(false))
+        );
+        assert_eq!(
+            put(serde_json::json!({"openai": "k"})).await.status(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            put(serde_json::json!({"volc": 1})).await.status(),
+            StatusCode::BAD_REQUEST
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -2421,14 +3259,30 @@ mod tests {
     async fn voices_are_listed_and_only_a_character_in_one_of_them_starts() {
         let dir = voice_keys::tests::scratch("making-main");
         let mut state = test_state(Arc::new(RecordingTransport::default()));
-        state.making = Arc::new(making::Maker::new(Some(dir.clone()), None, state.account.clone(), state.voice_keys.clone(), Arc::new(own_voices::OwnVoices::new(Some(&dir)))));
+        state.making = Arc::new(making::Maker::new(
+            Some(dir.clone()),
+            None,
+            state.account.clone(),
+            state.voice_keys.clone(),
+            Arc::new(own_voices::OwnVoices::new(Some(&dir))),
+        ));
         let voices = get_voices(State(state.clone())).await.0;
-        assert!(voices.iter().any(|voice| voice.id == "wanwanxiaohe" && voice.provider == "volc" && !voice.own));
+        assert!(
+            voices
+                .iter()
+                .any(|voice| voice.id == "wanwanxiaohe" && voice.provider == "volc" && !voice.own)
+        );
         let post = |voice: &str| {
             let body = serde_json::json!({"name": "Owl", "base": "ada", "voice": voice, "lines": [{"occasion": "done", "text": "Done."}]});
-            post_character(State(state.clone()), Json(serde_json::from_value(body).unwrap()))
+            post_character(
+                State(state.clone()),
+                Json(serde_json::from_value(body).unwrap()),
+            )
         };
-        assert_eq!(post("elevenlabs:somebody").await.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            post("elevenlabs:somebody").await.status(),
+            StatusCode::BAD_REQUEST
+        );
         assert_eq!(post("ada").await.status(), StatusCode::ACCEPTED);
         let status = serde_json::to_string(&state.snapshot().await).unwrap();
         assert!(status.contains(r#""making":{"id":"owl-"#), "{status}");
@@ -2439,14 +3293,35 @@ mod tests {
     async fn a_voice_of_ones_own_is_refused_without_a_key_and_an_unknown_one_isnt_forgotten() {
         let dir = voice_keys::tests::scratch("own-voice-main");
         let mut state = test_state(Arc::new(RecordingTransport::default()));
-        state.making = Arc::new(making::Maker::new(Some(dir.clone()), None, state.account.clone(), state.voice_keys.clone(), Arc::new(own_voices::OwnVoices::new(Some(&dir)))));
+        state.making = Arc::new(making::Maker::new(
+            Some(dir.clone()),
+            None,
+            state.account.clone(),
+            state.voice_keys.clone(),
+            Arc::new(own_voices::OwnVoices::new(Some(&dir))),
+        ));
         let post = |provider: &str| {
             let body = serde_json::json!({"provider": provider, "voice": "S_me", "name": "Me", "text": "Hi."});
-            post_voice(State(state.clone()), Json(serde_json::from_value(body).unwrap()))
+            post_voice(
+                State(state.clone()),
+                Json(serde_json::from_value(body).unwrap()),
+            )
         };
-        assert_eq!(post("volc").await.status(), StatusCode::BAD_REQUEST, "no own key");
+        assert_eq!(
+            post("volc").await.status(),
+            StatusCode::BAD_REQUEST,
+            "no own key"
+        );
         assert_eq!(post("openai").await.status(), StatusCode::BAD_REQUEST);
-        assert_eq!(delete_voice(State(state.clone()), axum::extract::Path("own-00000000".to_owned())).await.0, StatusCode::NOT_FOUND);
+        assert_eq!(
+            delete_voice(
+                State(state.clone()),
+                axum::extract::Path("own-00000000".to_owned())
+            )
+            .await
+            .0,
+            StatusCode::NOT_FOUND
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -2454,15 +3329,36 @@ mod tests {
     async fn a_made_character_is_deleted_through_the_api_but_not_while_it_is_made() {
         let dir = voice_keys::tests::scratch("making-delete-main");
         let mut state = test_state(Arc::new(RecordingTransport::default()));
-        state.making = Arc::new(making::Maker::new(Some(dir.clone()), None, state.account.clone(), state.voice_keys.clone(), Arc::new(own_voices::OwnVoices::new(Some(&dir)))));
+        state.making = Arc::new(making::Maker::new(
+            Some(dir.clone()),
+            None,
+            state.account.clone(),
+            state.voice_keys.clone(),
+            Arc::new(own_voices::OwnVoices::new(Some(&dir))),
+        ));
         let body = serde_json::json!({"name": "Owl", "base": "ada", "voice": "ada", "lines": [{"occasion": "done", "text": "Done."}]});
-        let started = post_character(State(state.clone()), Json(serde_json::from_value(body.clone()).unwrap())).await;
-        let bytes = http_body_util::BodyExt::collect(started.into_body()).await.unwrap().to_bytes();
-        let id = serde_json::from_slice::<serde_json::Value>(&bytes).unwrap()["id"].as_str().unwrap().to_owned();
-        let delete = |id: &str| delete_character(State(state.clone()), axum::extract::Path(id.to_owned()));
+        let started = post_character(
+            State(state.clone()),
+            Json(serde_json::from_value(body.clone()).unwrap()),
+        )
+        .await;
+        let bytes = http_body_util::BodyExt::collect(started.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let id = serde_json::from_slice::<serde_json::Value>(&bytes).unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let delete =
+            |id: &str| delete_character(State(state.clone()), axum::extract::Path(id.to_owned()));
         // No service: the job fails at once, leaving its manifest; wait for that.
         for _ in 0..200 {
-            if state.making.status().is_some_and(|status| status.state != "making") {
+            if state
+                .making
+                .status()
+                .is_some_and(|status| status.state != "making")
+            {
                 break;
             }
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
@@ -2474,7 +3370,10 @@ mod tests {
         assert!(!dir.join(&id).exists() && dir.is_dir());
         assert_eq!(delete(&id).await.0, StatusCode::NOT_FOUND);
         // One whose job runs (marked, not run) stays.
-        let (running, _) = state.making.begin(&serde_json::from_value(body).unwrap()).unwrap();
+        let (running, _) = state
+            .making
+            .begin(&serde_json::from_value(body).unwrap())
+            .unwrap();
         assert_eq!(delete(&running).await.0, StatusCode::CONFLICT);
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -2484,10 +3383,17 @@ mod tests {
         let get = |id: &str| get_preset_lines(axum::extract::Path(id.to_owned()));
         let response = get("wanwanxiaohe").await;
         assert_eq!(response.status(), StatusCode::OK);
-        let body = http_body_util::BodyExt::collect(response.into_body()).await.unwrap().to_bytes();
+        let body = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
         let lines: Vec<serde_json::Value> = serde_json::from_slice(&body).unwrap();
         assert_eq!(lines.len(), 55);
-        assert!(lines[0]["occasion"].is_string() && lines[0]["text"].is_string(), "{:?}", lines[0]);
+        assert!(
+            lines[0]["occasion"].is_string() && lines[0]["text"].is_string(),
+            "{:?}",
+            lines[0]
+        );
         assert_eq!(get("robot").await.status(), StatusCode::NOT_FOUND);
     }
 
@@ -2511,62 +3417,166 @@ mod tests {
 
     #[tokio::test]
     async fn voice_is_offered_after_each_build_report_over_every_link_and_the_fast_uart_bridge() {
-        let dir = std::env::temp_dir().join(format!("vibebuddy-voice-offer-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("vibebuddy-voice-offer-{}", std::process::id()));
         let offers = |transport: &RecordingTransport| {
-            transport.events().iter().filter(|event| event.event == "voice.available").map(|event| event.extra["on"].clone()).collect::<Vec<_>>()
+            transport
+                .events()
+                .iter()
+                .filter(|event| event.event == "voice.available")
+                .map(|event| event.extra["on"].clone())
+                .collect::<Vec<_>>()
         };
         let build = || DeviceMessage::Line("DISPLAY READY BUILD v9 2026-10-01".to_owned());
         for enabled in [true, false] {
             let transport = Arc::new(RecordingTransport::default());
             let mut state = test_state(transport.clone());
-            let resident = Arc::new(resident::Resident::new(enabled, &dir, resident::Launcher::Codex, Arc::default()));
+            let resident = Arc::new(resident::Resident::new(
+                enabled,
+                &dir,
+                resident::Launcher::Codex,
+                Arc::default(),
+            ));
             resident.note(None);
-            state.voice = Arc::new(voice::Voice::new(Some(Arc::new(SilentRecognizer)), Some(resident)));
+            state.voice = Arc::new(voice::Voice::new(
+                Some(Arc::new(SilentRecognizer)),
+                Some(resident),
+            ));
 
-            publish_device_message(&state, DeviceMessage::Connected { port: "/dev/cu.x".to_owned(), bridge: false, usb_serial: None }).await;
-            assert!(offers(&transport).is_empty(), "a new link starts with voice off");
+            publish_device_message(
+                &state,
+                DeviceMessage::Connected {
+                    port: "/dev/cu.x".to_owned(),
+                    bridge: false,
+                    usb_serial: None,
+                },
+            )
+            .await;
+            assert!(
+                offers(&transport).is_empty(),
+                "a new link starts with voice off"
+            );
             publish_device_message(&state, build()).await;
             // The box rebooting on the same link reports its build again, and forgets.
             publish_device_message(&state, build()).await;
-            publish_device_message(&state, DeviceMessage::ConnectedNetwork { address: "192.168.1.23:7340".to_owned() }).await;
+            publish_device_message(
+                &state,
+                DeviceMessage::ConnectedNetwork {
+                    address: "192.168.1.23:7340".to_owned(),
+                },
+            )
+            .await;
             publish_device_message(&state, build()).await;
-            let expected = if enabled { vec![serde_json::json!(true); 3] } else { Vec::new() };
+            let expected = if enabled {
+                vec![serde_json::json!(true); 3]
+            } else {
+                Vec::new()
+            };
             assert_eq!(offers(&transport), expected);
 
             // Over the Relay too: the audio comes over the link, which is end-to-end encrypted there (ADR-0018).
-            publish_device_message(&state, DeviceMessage::ConnectedRelay { url: "wss://relay.example".to_owned() }).await;
+            publish_device_message(
+                &state,
+                DeviceMessage::ConnectedRelay {
+                    url: "wss://relay.example".to_owned(),
+                },
+            )
+            .await;
             publish_device_message(&state, build()).await;
-            let expected = if enabled { vec![serde_json::json!(true); 4] } else { Vec::new() };
+            let expected = if enabled {
+                vec![serde_json::json!(true); 4]
+            } else {
+                Vec::new()
+            };
             assert_eq!(offers(&transport), expected, "over the Relay");
             // Over the UART bridge only once it runs fast; until its rate settles, nothing.
-            publish_device_message(&state, DeviceMessage::Connected { port: "/dev/cu.wchusbserial1".to_owned(), bridge: true, usb_serial: None }).await;
+            publish_device_message(
+                &state,
+                DeviceMessage::Connected {
+                    port: "/dev/cu.wchusbserial1".to_owned(),
+                    bridge: true,
+                    usb_serial: None,
+                },
+            )
+            .await;
             publish_device_message(&state, build()).await;
-            assert_eq!(offers(&transport), expected, "not before the bridge's rate settles");
-            publish_device_message(&state, DeviceMessage::BridgeRate { baud: serial_transport::FAST_BAUD_RATE, switches: true }).await;
+            assert_eq!(
+                offers(&transport),
+                expected,
+                "not before the bridge's rate settles"
+            );
+            publish_device_message(
+                &state,
+                DeviceMessage::BridgeRate {
+                    baud: serial_transport::FAST_BAUD_RATE,
+                    switches: true,
+                },
+            )
+            .await;
             publish_device_message(&state, build()).await;
-            let expected = if enabled { vec![serde_json::json!(true); 6] } else { Vec::new() };
-            assert_eq!(offers(&transport), expected, "on the bridge at 921600, as the rate settles and on each build");
+            let expected = if enabled {
+                vec![serde_json::json!(true); 6]
+            } else {
+                Vec::new()
+            };
+            assert_eq!(
+                offers(&transport),
+                expected,
+                "on the bridge at 921600, as the rate settles and on each build"
+            );
 
             // Firmware that can't move the bridge: off, saying why and what to do.
-            publish_device_message(&state, DeviceMessage::Connected { port: "/dev/cu.wchusbserial1".to_owned(), bridge: true, usb_serial: None }).await;
+            publish_device_message(
+                &state,
+                DeviceMessage::Connected {
+                    port: "/dev/cu.wchusbserial1".to_owned(),
+                    bridge: true,
+                    usb_serial: None,
+                },
+            )
+            .await;
             publish_device_message(&state, build()).await;
-            publish_device_message(&state, DeviceMessage::BridgeRate { baud: 115_200, switches: false }).await;
+            publish_device_message(
+                &state,
+                DeviceMessage::BridgeRate {
+                    baud: 115_200,
+                    switches: false,
+                },
+            )
+            .await;
             let mut expected = expected;
             if enabled {
                 expected.push(serde_json::json!(false));
                 let off = transport.events().last().unwrap().clone();
                 assert_eq!(off.extra["reason"], "slow_link");
-                assert_eq!(off.message.as_deref(), Some("Update my firmware, or use my other USB port, to talk to me."));
+                assert_eq!(
+                    off.message.as_deref(),
+                    Some("Update my firmware, or use my other USB port, to talk to me.")
+                );
             }
             assert_eq!(offers(&transport), expected, "off at 115200");
             assert_eq!(voice_off(&state).await.as_deref(), Some("bridge_firmware"));
-            publish_device_message(&state, DeviceMessage::BridgeRate { baud: 115_200, switches: true }).await;
+            publish_device_message(
+                &state,
+                DeviceMessage::BridgeRate {
+                    baud: 115_200,
+                    switches: true,
+                },
+            )
+            .await;
             if enabled {
-                assert_eq!(transport.events().last().unwrap().message.as_deref(), Some("This port is too slow for voice. Use my other USB port."));
+                assert_eq!(
+                    transport.events().last().unwrap().message.as_deref(),
+                    Some("This port is too slow for voice. Use my other USB port.")
+                );
             }
             assert_eq!(voice_off(&state).await.as_deref(), Some("bridge_slow"));
             publish_device_message(&state, DeviceMessage::Disconnected).await;
-            assert_eq!(voice_off(&state).await, None, "no box, nothing about its cable");
+            assert_eq!(
+                voice_off(&state).await,
+                None,
+                "no box, nothing about its cable"
+            );
         }
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -2576,41 +3586,107 @@ mod tests {
         let dir = resident::tests::temp_dir("main-readiness-offer");
         let transport = Arc::new(RecordingTransport::default());
         let mut state = test_state(transport.clone());
-        let resident = Arc::new(resident::tests::resident(&dir, &resident::tests::logged_in(), Arc::default()));
+        let resident = Arc::new(resident::tests::resident(
+            &dir,
+            &resident::tests::logged_in(),
+            Arc::default(),
+        ));
         state.resident = Some(resident.clone());
-        state.voice = Arc::new(voice::Voice::new(Some(Arc::new(SilentRecognizer)), Some(resident.clone())));
+        state.voice = Arc::new(voice::Voice::new(
+            Some(Arc::new(SilentRecognizer)),
+            Some(resident.clone()),
+        ));
         let offers = || {
-            transport.events().iter().filter(|event| event.event == "voice.available").map(|event| event.extra["on"].clone()).collect::<Vec<_>>()
+            transport
+                .events()
+                .iter()
+                .filter(|event| event.event == "voice.available")
+                .map(|event| event.extra["on"].clone())
+                .collect::<Vec<_>>()
         };
         let settle = || tokio::time::sleep(Duration::from_millis(50));
         let build = || DeviceMessage::Line("DISPLAY READY BUILD v9 2026-10-01".to_owned());
 
-        publish_device_message(&state, DeviceMessage::Connected { port: "/dev/cu.x".to_owned(), bridge: false, usb_serial: None }).await;
+        publish_device_message(
+            &state,
+            DeviceMessage::Connected {
+                port: "/dev/cu.x".to_owned(),
+                bridge: false,
+                usb_serial: None,
+            },
+        )
+        .await;
         publish_device_message(&state, build()).await;
-        assert_eq!(offers(), [serde_json::json!(false)], "not offered before the session is found ready");
-        assert_eq!(transport.events().last().unwrap().extra["reason"], "not_ready");
+        assert_eq!(
+            offers(),
+            [serde_json::json!(false)],
+            "not offered before the session is found ready"
+        );
+        assert_eq!(
+            transport.events().last().unwrap().extra["reason"],
+            "not_ready"
+        );
 
         // The first check finds Codex installed and logged in.
         follow_resident_readiness(&state, resident.clone());
         settle().await;
-        assert_eq!(offers(), [serde_json::json!(false), serde_json::json!(true)]);
+        assert_eq!(
+            offers(),
+            [serde_json::json!(false), serde_json::json!(true)]
+        );
         resident.note(Some(resident::Problem::CodexLoggedOut));
         settle().await;
-        assert_eq!(offers(), [serde_json::json!(false), serde_json::json!(true), serde_json::json!(false)], "withdrawn when the user logs out");
-        assert_eq!(transport.events().last().unwrap().extra["reason"], "not_ready");
+        assert_eq!(
+            offers(),
+            [
+                serde_json::json!(false),
+                serde_json::json!(true),
+                serde_json::json!(false)
+            ],
+            "withdrawn when the user logs out"
+        );
+        assert_eq!(
+            transport.events().last().unwrap().extra["reason"],
+            "not_ready"
+        );
         resident.note(Some(resident::Problem::CodexMissing));
         settle().await;
         assert_eq!(offers().len(), 3, "still not ready: nothing new to tell");
 
         // On the UART bridge at 115200 voice stays off whatever the session does, and the box hears why each time.
-        publish_device_message(&state, DeviceMessage::Connected { port: "/dev/cu.wchusbserial1".to_owned(), bridge: true, usb_serial: None }).await;
+        publish_device_message(
+            &state,
+            DeviceMessage::Connected {
+                port: "/dev/cu.wchusbserial1".to_owned(),
+                bridge: true,
+                usb_serial: None,
+            },
+        )
+        .await;
         publish_device_message(&state, build()).await;
-        assert_eq!(offers().len(), 3, "nothing before the bridge's rate settles");
-        publish_device_message(&state, DeviceMessage::BridgeRate { baud: 115_200, switches: false }).await;
+        assert_eq!(
+            offers().len(),
+            3,
+            "nothing before the bridge's rate settles"
+        );
+        publish_device_message(
+            &state,
+            DeviceMessage::BridgeRate {
+                baud: 115_200,
+                switches: false,
+            },
+        )
+        .await;
         resident.note(None);
         settle().await;
-        assert_eq!(offers()[3..], [serde_json::json!(false), serde_json::json!(false)]);
-        assert_eq!(transport.events().last().unwrap().extra["reason"], "slow_link");
+        assert_eq!(
+            offers()[3..],
+            [serde_json::json!(false), serde_json::json!(false)]
+        );
+        assert_eq!(
+            transport.events().last().unwrap().extra["reason"],
+            "slow_link"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -2631,35 +3707,71 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_refusal_for_the_day_withdraws_voice_with_its_reason_until_a_read_shows_voice_again() {
+    async fn a_refusal_for_the_day_withdraws_voice_with_its_reason_until_a_read_shows_voice_again()
+    {
         let dir = resident::tests::temp_dir("main-refusal-offer");
         let transport = Arc::new(RecordingTransport::default());
         let mut state = test_state(transport.clone());
-        let resident = Arc::new(resident::tests::resident(&dir, &resident::tests::logged_in(), Arc::default()));
+        let resident = Arc::new(resident::tests::resident(
+            &dir,
+            &resident::tests::logged_in(),
+            Arc::default(),
+        ));
         resident.note(None);
         state.account = Arc::new(account::signed_in_for_tests(&dir.join("config"), "tok"));
-        state.voice = Arc::new(voice::Voice::new(Some(Arc::new(AccountRecognizer(state.account.clone()))), Some(resident)));
+        state.voice = Arc::new(voice::Voice::new(
+            Some(Arc::new(AccountRecognizer(state.account.clone()))),
+            Some(resident),
+        ));
         let offers = || {
             transport
                 .events()
                 .iter()
                 .filter(|event| event.event == "voice.available")
-                .map(|event| (event.extra["on"].clone(), event.extra.get("reason").cloned(), event.message.clone()))
+                .map(|event| {
+                    (
+                        event.extra["on"].clone(),
+                        event.extra.get("reason").cloned(),
+                        event.message.clone(),
+                    )
+                })
                 .collect::<Vec<_>>()
         };
         let settle = || tokio::time::sleep(Duration::from_millis(50));
-        publish_device_message(&state, DeviceMessage::Connected { port: "/dev/cu.x".to_owned(), bridge: false, usb_serial: None }).await;
-        publish_device_message(&state, DeviceMessage::Line("DISPLAY READY BUILD v9 2026-10-01".to_owned())).await;
+        publish_device_message(
+            &state,
+            DeviceMessage::Connected {
+                port: "/dev/cu.x".to_owned(),
+                bridge: false,
+                usb_serial: None,
+            },
+        )
+        .await;
+        publish_device_message(
+            &state,
+            DeviceMessage::Line("DISPLAY READY BUILD v9 2026-10-01".to_owned()),
+        )
+        .await;
         follow_account(&state);
         assert_eq!(offers(), [(serde_json::json!(true), None, None)]);
 
         state.account.note_refusal("allowance");
         settle().await;
         let (on, reason, message) = offers()[1].clone();
-        assert_eq!((on, reason), (serde_json::json!(false), Some(serde_json::json!("allowance"))));
+        assert_eq!(
+            (on, reason),
+            (
+                serde_json::json!(false),
+                Some(serde_json::json!("allowance"))
+            )
+        );
         assert_eq!(message, voice::refusal_message("allowance"));
         // A rebooted box is told again, reason and all.
-        publish_device_message(&state, DeviceMessage::Line("DISPLAY READY BUILD v9 2026-10-01".to_owned())).await;
+        publish_device_message(
+            &state,
+            DeviceMessage::Line("DISPLAY READY BUILD v9 2026-10-01".to_owned()),
+        )
+        .await;
         assert_eq!(offers().len(), 3);
         assert_eq!(offers()[2].1, Some(serde_json::json!("allowance")));
 
@@ -2675,7 +3787,10 @@ mod tests {
 
         state.account.forget();
         settle().await;
-        assert_eq!(offers().last().unwrap().1, Some(serde_json::json!("signed_out")));
+        assert_eq!(
+            offers().last().unwrap().1,
+            Some(serde_json::json!("signed_out"))
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -2684,7 +3799,11 @@ mod tests {
         let dir = resident::tests::temp_dir("main-revision");
         let script = resident::tests::logged_in();
         let mut state = test_state(Arc::new(RecordingTransport::default()));
-        state.resident = Some(Arc::new(resident::tests::resident(&dir, &script, Arc::default())));
+        state.resident = Some(Arc::new(resident::tests::resident(
+            &dir,
+            &script,
+            Arc::default(),
+        )));
 
         let Json(info) = get_resident(State(state.clone())).await;
         assert_eq!(
@@ -2701,9 +3820,19 @@ mod tests {
                 "voice_off": null,
             })
         );
-        assert_eq!(script.lock().unwrap().starts, 0, "asking never starts the app-server");
+        assert_eq!(
+            script.lock().unwrap().starts,
+            0,
+            "asking never starts the app-server"
+        );
 
-        state.resident.as_ref().unwrap().say("hi", &persona::Wearing::default()).await.unwrap();
+        state
+            .resident
+            .as_ref()
+            .unwrap()
+            .say("hi", &persona::Wearing::default())
+            .await
+            .unwrap();
         let Json(info) = get_resident(State(state.clone())).await;
         assert_eq!(info.thread_id.as_deref(), Some("new-thread"));
         assert_eq!(info.revision, 2, "a new thread and one turn");
@@ -2714,7 +3843,15 @@ mod tests {
     async fn status_reflects_device_lines_hooks_and_config() {
         let transport = Arc::new(RecordingTransport::default());
         let state = test_state(transport);
-        publish_device_message(&state, DeviceMessage::Connected { port: "/dev/cu.test".to_owned(), bridge: true, usb_serial: None }).await;
+        publish_device_message(
+            &state,
+            DeviceMessage::Connected {
+                port: "/dev/cu.test".to_owned(),
+                bridge: true,
+                usb_serial: None,
+            },
+        )
+        .await;
         publish_device_message(&state, DeviceMessage::Line("MODE LEISURE".to_owned())).await;
         publish_device_message(&state, DeviceMessage::Line("VOICES hsiaoyu".to_owned())).await;
         state.hooks_seen.lock().await.codex = Some(chrono::Local::now());
@@ -2739,13 +3876,29 @@ mod tests {
         let state = test_state(transport);
         let response = status_stream(State(state.clone())).await.into_response();
         let mut body = response.into_body();
-        let first = body.frame().await.expect("first snapshot is pushed").expect("frame is readable");
+        let first = body
+            .frame()
+            .await
+            .expect("first snapshot is pushed")
+            .expect("frame is readable");
         let first = String::from_utf8_lossy(first.data_ref().expect("data frame")).into_owned();
         assert!(first.starts_with("event: status\n"), "{first}");
         assert!(first.contains("\"connected\":false"), "{first}");
 
-        publish_device_message(&state, DeviceMessage::Connected { port: "/dev/cu.s".to_owned(), bridge: false, usb_serial: None }).await;
-        let second = body.frame().await.expect("another snapshot is pushed after the status changes").expect("frame is readable");
+        publish_device_message(
+            &state,
+            DeviceMessage::Connected {
+                port: "/dev/cu.s".to_owned(),
+                bridge: false,
+                usb_serial: None,
+            },
+        )
+        .await;
+        let second = body
+            .frame()
+            .await
+            .expect("another snapshot is pushed after the status changes")
+            .expect("frame is readable");
         let second = String::from_utf8_lossy(second.data_ref().expect("data frame")).into_owned();
         assert!(second.contains("\"connected\":true"), "{second}");
         let _ = to_bytes; // only the frame interface is used
@@ -2762,11 +3915,34 @@ mod tests {
             SessionTitles::disabled(),
             Some(path.clone()),
         );
-        let wanted = Config { voice: Some("hsiaochen".to_owned()), notify_link: false, check_updates: Some(true), relay: false };
+        let wanted = Config {
+            voice: Some("hsiaochen".to_owned()),
+            notify_link: false,
+            check_updates: Some(true),
+            relay: false,
+        };
         let Json(returned) = put_config(State(state.clone()), Json(wanted.clone())).await;
         assert_eq!(returned, wanted);
         assert_eq!(Config::load(&path), wanted);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn update_checks_follow_the_compile_time_switch_not_the_config() {
+        let state = test_state(Arc::new(RecordingTransport::default()));
+        state.config.lock().await.check_updates = Some(true);
+        assert_eq!(state.update_checks_enabled().await, updates::COMPILED_IN);
+        let (status, Json(response)) = post_check_updates(State(state.clone())).await;
+        if !updates::COMPILED_IN {
+            assert_eq!(status, StatusCode::CONFLICT);
+            assert!(!response.accepted);
+        }
+        let snapshot = state.snapshot().await;
+        assert!(
+            !snapshot.updates.enabled,
+            "a test state has no update source"
+        );
+        assert!(snapshot.updates.app.is_none() && snapshot.updates.firmware.is_none());
     }
 
     #[tokio::test]
@@ -2779,7 +3955,11 @@ mod tests {
         });
         nth_event(&transport, 0).await;
         assert_eq!(transport.events()[0].event, "device.screenshot");
-        publish_device_message(&state, DeviceMessage::Line("SHOT BEGIN 320x240 BACKLIGHT ON".to_owned())).await;
+        publish_device_message(
+            &state,
+            DeviceMessage::Line("SHOT BEGIN 320x240 BACKLIGHT ON".to_owned()),
+        )
+        .await;
         for _ in 0..240 {
             publish_device_message(&state, DeviceMessage::Line("SHOT 0000:320".to_owned())).await;
         }
@@ -2800,7 +3980,9 @@ mod tests {
     #[tokio::test]
     async fn only_an_offered_device_can_be_chosen_as_the_box() {
         let state = test_state(Arc::new(RecordingTransport::default()));
-        let request = ChoiceRequest { usb_serial: "98:88:E0:06:8B:CC".to_owned() };
+        let request = ChoiceRequest {
+            usb_serial: "98:88:E0:06:8B:CC".to_owned(),
+        };
         let (status, Json(response)) = post_choice(State(state), Json(request)).await;
         assert_eq!(status, StatusCode::CONFLICT, "nothing was offered");
         assert!(!response.accepted);
@@ -2809,7 +3991,10 @@ mod tests {
     #[tokio::test]
     async fn setting_the_volume_sends_the_level_to_the_device() {
         let transport = Arc::new(RecordingTransport::default());
-        let request = VolumeRequest { level: 40, preview: true };
+        let request = VolumeRequest {
+            level: 40,
+            preview: true,
+        };
         let (status, _) = post_volume(State(test_state(transport.clone())), Json(request)).await;
         assert_eq!(status, StatusCode::ACCEPTED);
         let event = &transport.events()[0];
@@ -2821,8 +4006,12 @@ mod tests {
     #[tokio::test]
     async fn a_volume_outside_the_range_is_refused_before_reaching_the_device() {
         let transport = Arc::new(RecordingTransport::default());
-        let request = VolumeRequest { level: 10, preview: false };
-        let (status, Json(response)) = post_volume(State(test_state(transport.clone())), Json(request)).await;
+        let request = VolumeRequest {
+            level: 10,
+            preview: false,
+        };
+        let (status, Json(response)) =
+            post_volume(State(test_state(transport.clone())), Json(request)).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert!(!response.accepted);
         assert!(transport.events().is_empty());
@@ -2831,7 +4020,9 @@ mod tests {
     #[tokio::test]
     async fn choosing_the_screens_sends_the_style_to_the_device() {
         let transport = Arc::new(RecordingTransport::default());
-        let request = ScreensRequest { style: "korekore".to_owned() };
+        let request = ScreensRequest {
+            style: "korekore".to_owned(),
+        };
         let (status, _) = post_screens(State(test_state(transport.clone())), Json(request)).await;
         assert_eq!(status, StatusCode::ACCEPTED);
         let event = &transport.events()[0];
@@ -2842,8 +4033,11 @@ mod tests {
     #[tokio::test]
     async fn an_unknown_screen_style_is_refused_before_reaching_the_device() {
         let transport = Arc::new(RecordingTransport::default());
-        let request = ScreensRequest { style: "Robot".to_owned() };
-        let (status, Json(response)) = post_screens(State(test_state(transport.clone())), Json(request)).await;
+        let request = ScreensRequest {
+            style: "Robot".to_owned(),
+        };
+        let (status, Json(response)) =
+            post_screens(State(test_state(transport.clone())), Json(request)).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert!(!response.accepted);
         assert!(transport.events().is_empty());
@@ -2869,46 +4063,88 @@ mod tests {
         let state = test_state(transport.clone());
         let pack = sample_pack("custom", 1000); // 1256 bytes → two chunks
 
-        let query = PackQuery { lender: Some("ada".to_owned()), address: Some("boss".to_owned()) };
-        let (status, _) = post_voice_pack(State(state.clone()), axum::extract::Query(query), Bytes::from(pack.clone())).await;
+        let query = PackQuery {
+            lender: Some("ada".to_owned()),
+            address: Some("boss".to_owned()),
+        };
+        let (status, _) = post_voice_pack(
+            State(state.clone()),
+            axum::extract::Query(query),
+            Bytes::from(pack.clone()),
+        )
+        .await;
         assert_eq!(status, StatusCode::ACCEPTED);
 
         let begin = nth_event(&transport, 0).await;
         assert_eq!(begin.event, "voice.begin");
         assert_eq!(begin.extra["size"], 1256);
         tokio::time::sleep(Duration::from_millis(20)).await;
-        assert_eq!(transport.events().len(), 1, "no chunk may be sent before ready arrives");
+        assert_eq!(
+            transport.events().len(),
+            1,
+            "no chunk may be sent before ready arrives"
+        );
 
-        publish_device_message(&state, device_event(r#"{"version":1,"event":"voice.ready","seq":-1}"#)).await;
+        publish_device_message(
+            &state,
+            device_event(r#"{"version":1,"event":"voice.ready","seq":-1}"#),
+        )
+        .await;
         let first = nth_event(&transport, 1).await;
         assert_eq!(first.event, "voice.chunk");
         assert_eq!(first.extra["seq"], 0);
         assert_eq!(first.extra["crc"], crc32fast::hash(&pack[..672]));
         tokio::time::sleep(Duration::from_millis(20)).await;
-        assert_eq!(transport.events().len(), 2, "the next chunk may not be sent before the ack arrives");
+        assert_eq!(
+            transport.events().len(),
+            2,
+            "the next chunk may not be sent before the ack arrives"
+        );
 
-        publish_device_message(&state, device_event(r#"{"version":1,"event":"voice.ack","seq":0}"#)).await;
+        publish_device_message(
+            &state,
+            device_event(r#"{"version":1,"event":"voice.ack","seq":0}"#),
+        )
+        .await;
         let second = nth_event(&transport, 2).await;
         assert_eq!(second.extra["seq"], 1);
         assert_eq!(second.extra["crc"], crc32fast::hash(&pack[672..]));
-        publish_device_message(&state, device_event(r#"{"version":1,"event":"voice.ack","seq":1}"#)).await;
+        publish_device_message(
+            &state,
+            device_event(r#"{"version":1,"event":"voice.ack","seq":1}"#),
+        )
+        .await;
         let end = nth_event(&transport, 3).await;
         assert_eq!(end.event, "voice.end");
 
-        publish_device_message(&state, device_event(r#"{"version":1,"event":"voice.written","voice":"custom"}"#)).await;
+        publish_device_message(
+            &state,
+            device_event(r#"{"version":1,"event":"voice.written","voice":"custom"}"#),
+        )
+        .await;
         for _ in 0..200 {
-            if state.operation.lock().await.as_ref().map(|op| op.state) == Some(OperationState::Done) {
+            if state.operation.lock().await.as_ref().map(|op| op.state)
+                == Some(OperationState::Done)
+            {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
-        let operation = state.operation.lock().await.clone().expect("an operation should be recorded");
+        let operation = state
+            .operation
+            .lock()
+            .await
+            .clone()
+            .expect("an operation should be recorded");
         assert_eq!(operation.state, OperationState::Done);
         assert_eq!(state.config.lock().await.voice.as_deref(), Some("custom"));
         // What the App said about it is kept: the custom Character speaks with Ada's persona and calls the user boss.
         assert_eq!(
             wearing(&state).await,
-            persona::Wearing { character: Some("ada".to_owned()), address: Some("boss".to_owned()) }
+            persona::Wearing {
+                character: Some("ada".to_owned()),
+                address: Some("boss".to_owned())
+            }
         );
     }
 
@@ -2921,18 +4157,31 @@ mod tests {
         nth_event(&transport, 0).await;
         publish_device_message(
             &state,
-            device_event(r#"{"version":1,"event":"voice.error","seq":-1,"message":"ESP_ERR_INVALID_SIZE"}"#),
+            device_event(
+                r#"{"version":1,"event":"voice.error","seq":-1,"message":"ESP_ERR_INVALID_SIZE"}"#,
+            ),
         )
         .await;
         for _ in 0..200 {
-            if state.operation.lock().await.as_ref().map(|op| op.state) == Some(OperationState::Failed) {
+            if state.operation.lock().await.as_ref().map(|op| op.state)
+                == Some(OperationState::Failed)
+            {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
-        let operation = state.operation.lock().await.clone().expect("an operation should be recorded");
+        let operation = state
+            .operation
+            .lock()
+            .await
+            .clone()
+            .expect("an operation should be recorded");
         assert_eq!(operation.state, OperationState::Failed);
-        assert!(operation.message.contains("ESP_ERR_INVALID_SIZE"), "{}", operation.message);
+        assert!(
+            operation.message.contains("ESP_ERR_INVALID_SIZE"),
+            "{}",
+            operation.message
+        );
         assert_eq!(state.config.lock().await.voice, None);
     }
 
@@ -2940,10 +4189,25 @@ mod tests {
     async fn a_second_write_is_refused_while_one_is_running_and_garbage_is_rejected() {
         let transport = Arc::new(RecordingTransport::default());
         let state = test_state(transport.clone());
-        let (status, _) = post_voice_pack(State(state.clone()), no_query(), Bytes::from_static(b"not a pack")).await;
+        let (status, _) = post_voice_pack(
+            State(state.clone()),
+            no_query(),
+            Bytes::from_static(b"not a pack"),
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        let _ = post_voice_pack(State(state.clone()), no_query(), Bytes::from(sample_pack("a", 10))).await;
-        let (status, _) = post_voice_pack(State(state.clone()), no_query(), Bytes::from(sample_pack("b", 10))).await;
+        let _ = post_voice_pack(
+            State(state.clone()),
+            no_query(),
+            Bytes::from(sample_pack("a", 10)),
+        )
+        .await;
+        let (status, _) = post_voice_pack(
+            State(state.clone()),
+            no_query(),
+            Bytes::from(sample_pack("b", 10)),
+        )
+        .await;
         assert_eq!(status, StatusCode::CONFLICT);
     }
 
@@ -2960,7 +4224,11 @@ mod tests {
         assert_eq!(status, StatusCode::ACCEPTED);
         assert!(response.accepted);
         assert_eq!(
-            transport.frames.lock().expect("mutex should not be poisoned").as_slice(),
+            transport
+                .frames
+                .lock()
+                .expect("mutex should not be poisoned")
+                .as_slice(),
             [b"{\"version\":1,\"event\":\"task.done\",\"title\":\"Hello\"}\n"]
         );
     }
@@ -2980,15 +4248,22 @@ mod tests {
     #[test]
     fn local_day_packs_year_month_and_day() {
         use chrono::TimeZone;
-        let now = chrono::Local.with_ymd_and_hms(2026, 9, 15, 23, 59, 0).unwrap();
+        let now = chrono::Local
+            .with_ymd_and_hms(2026, 9, 15, 23, 59, 0)
+            .unwrap();
         assert_eq!(local_day(&now), 20260915);
     }
 
     #[test]
     fn a_focus_event_names_the_tapped_card() {
-        let event: Event = serde_json::from_str(r#"{"version":1,"event":"focus","task":"0d4e77c3"}"#).expect("focus event should parse");
+        let event: Event =
+            serde_json::from_str(r#"{"version":1,"event":"focus","task":"0d4e77c3"}"#)
+                .expect("focus event should parse");
         assert_eq!(tapped_card(&event), Some("0d4e77c3"));
-        let button: Event = serde_json::from_str(r#"{"version":1,"event":"button","button":"K2","action":"press"}"#).expect("button event should parse");
+        let button: Event = serde_json::from_str(
+            r#"{"version":1,"event":"button","button":"K2","action":"press"}"#,
+        )
+        .expect("button event should parse");
         assert_eq!(tapped_card(&button), None);
     }
 

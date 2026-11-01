@@ -57,7 +57,10 @@ impl From<FlashError> for VoiceError {
 /// The largest header of the two formats; the header is kept in memory and written last.
 const MAX_HEADER_BYTES: usize = character_pack::HEADER_BYTES;
 
-#[allow(clippy::large_enum_variant, reason = "there is only ever one, inside Voices; boxing it would just move it to the heap")]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "there is only ever one, inside Voices; boxing it would just move it to the heap"
+)]
 enum Pack {
     Voice(VoicePack),
     Character(CharacterPack),
@@ -81,7 +84,11 @@ impl Pack {
 
 /// How long a header is, by the magic it starts with.
 fn header_bytes_for(magic: &[u8]) -> usize {
-    if magic == character_pack::MAGIC { character_pack::HEADER_BYTES } else { voice_pack::HEADER_BYTES }
+    if magic == character_pack::MAGIC {
+        character_pack::HEADER_BYTES
+    } else {
+        voice_pack::HEADER_BYTES
+    }
 }
 
 fn parse(header: &[u8], capacity: usize) -> Option<Pack> {
@@ -127,12 +134,22 @@ impl Default for Voices {
 
 impl Voices {
     pub const fn new() -> Self {
-        Self { partition: None, pack: None, session: None, header: [0; MAX_HEADER_BYTES], buffer: [0; BUFFER_BYTES + 4] }
+        Self {
+            partition: None,
+            pack: None,
+            session: None,
+            header: [0; MAX_HEADER_BYTES],
+            buffer: [0; BUFFER_BYTES + 4],
+        }
     }
 
     /// Records the partition and verifies the pack in it. Returns NotFound without one; the built-in
     /// voice still works.
-    pub fn init(&mut self, flash: &mut dyn Flash, partition: Option<Region>) -> Result<(), VoiceError> {
+    pub fn init(
+        &mut self,
+        flash: &mut dyn Flash,
+        partition: Option<Region>,
+    ) -> Result<(), VoiceError> {
         self.partition = partition;
         if partition.is_none() {
             return Err(VoiceError::NotFound);
@@ -192,9 +209,14 @@ impl Voices {
                         let line = Line {
                             offset: partition.offset + entry.offset,
                             length: entry.bytes(),
-                            codec: Codec::Adpcm16kMono { samples: entry.samples },
+                            codec: Codec::Adpcm16kMono {
+                                samples: entry.samples,
+                            },
                         };
-                        return Some(Pick { line, chime: candidate.chime() });
+                        return Some(Pick {
+                            line,
+                            chime: candidate.chime(),
+                        });
                     }
                     wanted = candidate.fallback();
                 }
@@ -226,7 +248,13 @@ impl Voices {
         }
     }
 
-    fn payload_crc(&mut self, flash: &mut dyn Flash, partition: Region, header_bytes: u32, length: u32) -> Result<u32, FlashError> {
+    fn payload_crc(
+        &mut self,
+        flash: &mut dyn Flash,
+        partition: Region,
+        header_bytes: u32,
+        length: u32,
+    ) -> Result<u32, FlashError> {
         let mut crc = 0;
         let mut offset = 0;
         while offset < length {
@@ -260,20 +288,34 @@ impl Voices {
         self.session = None;
         let erase_bytes = total_bytes.div_ceil(SECTOR_BYTES) * SECTOR_BYTES;
         flash.erase(partition.offset, partition.offset + erase_bytes)?;
-        self.session = Some(Session { expected_total: total_bytes, received: 0, next_seq: 0, header_bytes: 0, tail: [0; 4], tail_length: 0 });
+        self.session = Some(Session {
+            expected_total: total_bytes,
+            received: 0,
+            next_seq: 0,
+            header_bytes: 0,
+            tail: [0; 4],
+            tail_length: 0,
+        });
         Ok(())
     }
 
     /// `crc` is the CRC32 of this chunk's raw bytes: one bad byte over serial is rejected on the spot,
     /// not at the end.
-    pub fn chunk(&mut self, flash: &mut dyn Flash, seq: u32, base64: &[u8], crc: u32) -> Result<(), VoiceError> {
+    pub fn chunk(
+        &mut self,
+        flash: &mut dyn Flash,
+        seq: u32,
+        base64: &[u8],
+        crc: u32,
+    ) -> Result<(), VoiceError> {
         let partition = self.partition.ok_or(VoiceError::InvalidState)?;
         let session = self.session.as_mut().ok_or(VoiceError::InvalidState)?;
         if seq != session.next_seq {
             return Err(VoiceError::InvalidArg);
         }
         // The buffer's first 4 bytes are reserved for the previous chunk's tail; decoded bytes follow.
-        let decoded = match voice_pack::decode_base64(base64, &mut self.buffer[4..4 + BUFFER_BYTES]) {
+        let decoded = match voice_pack::decode_base64(base64, &mut self.buffer[4..4 + BUFFER_BYTES])
+        {
             Some(length) if length > 0 => length,
             _ => return Err(VoiceError::InvalidArg),
         };
@@ -334,7 +376,8 @@ impl Voices {
             flash.write(partition.offset + offset, &padded)?;
         }
         let header_bytes = session.header_bytes;
-        let parsed = parse(&self.header[..header_bytes], partition.size as usize).ok_or(VoiceError::InvalidResponse)?;
+        let parsed = parse(&self.header[..header_bytes], partition.size as usize)
+            .ok_or(VoiceError::InvalidResponse)?;
         let (length, expected) = parsed.payload();
         if parsed.header_bytes() + length != session.expected_total {
             return Err(VoiceError::InvalidSize);
@@ -346,7 +389,11 @@ impl Voices {
         }
         let header = self.header;
         flash.write(partition.offset, &header[..header_bytes])?;
-        if self.validate(flash) { Ok(()) } else { Err(VoiceError::Fail) }
+        if self.validate(flash) {
+            Ok(())
+        } else {
+            Err(VoiceError::Fail)
+        }
     }
 
     pub fn abort(&mut self, flash: &mut dyn Flash) {
@@ -373,19 +420,24 @@ impl Voices {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::tests::MemoryFlash;
     use crate::character_pack::tests::build_pack;
+    use crate::storage::tests::MemoryFlash;
     use crate::voice_pack::tests::build_header;
     use std::string::String;
     use std::vec::Vec;
 
-    const PARTITION: Region = Region { offset: 0x410000, size: 0x200000 };
+    const PARTITION: Region = Region {
+        offset: 0x410000,
+        size: 0x200000,
+    };
 
     fn encode_base64(bytes: &[u8]) -> String {
         const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
         let mut out = String::new();
         for chunk in bytes.chunks(3) {
-            let bits = (chunk[0] as u32) << 16 | (*chunk.get(1).unwrap_or(&0) as u32) << 8 | *chunk.get(2).unwrap_or(&0) as u32;
+            let bits = (chunk[0] as u32) << 16
+                | (*chunk.get(1).unwrap_or(&0) as u32) << 8
+                | *chunk.get(2).unwrap_or(&0) as u32;
             for index in 0..4 {
                 if index <= chunk.len() {
                     out.push(ALPHABET[(bits >> (18 - 6 * index) & 63) as usize] as char);
@@ -401,7 +453,9 @@ mod tests {
     /// edges.
     fn pack() -> Vec<u8> {
         let lengths = [1001, 2003, 3005, 4007, 5009];
-        let payload: Vec<u8> = (0..lengths.iter().sum::<u32>()).map(|index| (index * 7 % 251) as u8).collect();
+        let payload: Vec<u8> = (0..lengths.iter().sum::<u32>())
+            .map(|index| (index * 7 % 251) as u8)
+            .collect();
         let header = build_header("wanwanxiaohe", lengths, voice_pack::crc32(0, &payload));
         let mut pack = header.to_vec();
         pack.extend_from_slice(&payload);
@@ -412,7 +466,12 @@ mod tests {
         voices.begin(flash, pack.len() as u32)?;
         for (seq, piece) in pack.chunks(CHUNK_BYTES).enumerate() {
             let encoded = encode_base64(piece);
-            voices.chunk(flash, seq as u32, encoded.as_bytes(), voice_pack::crc32(0, piece))?;
+            voices.chunk(
+                flash,
+                seq as u32,
+                encoded.as_bytes(),
+                voice_pack::crc32(0, piece),
+            )?;
         }
         voices.end(flash)
     }
@@ -430,12 +489,29 @@ mod tests {
         assert_eq!(voices.current_id(), "wanwanxiaohe");
         let start = PARTITION.offset as usize;
         assert_eq!(&flash.bytes[start..start + pack.len()], &pack[..]);
-        let pick = voices.pick(Occasion::InputRequired, &mut LinePicker::new(1)).unwrap();
-        assert_eq!(pick, Pick { line: Line { offset: PARTITION.offset + 256, length: 1001, codec: Codec::Pcm24kStereo }, chime: None });
+        let pick = voices
+            .pick(Occasion::InputRequired, &mut LinePicker::new(1))
+            .unwrap();
+        assert_eq!(
+            pick,
+            Pick {
+                line: Line {
+                    offset: PARTITION.offset + 256,
+                    length: 1001,
+                    codec: Codec::Pcm24kStereo
+                },
+                chime: None
+            }
+        );
         // An old voice pack speaks a special occasion with its ordinary line, and has no greeting.
-        let pick = voices.pick(Occasion::FirstDone, &mut LinePicker::new(1)).unwrap();
+        let pick = voices
+            .pick(Occasion::FirstDone, &mut LinePicker::new(1))
+            .unwrap();
         assert_eq!(pick.line.offset, PARTITION.offset + 256 + 1001);
-        assert_eq!(voices.pick(Occasion::GreetingMorning, &mut LinePicker::new(1)), None);
+        assert_eq!(
+            voices.pick(Occasion::GreetingMorning, &mut LinePicker::new(1)),
+            None
+        );
 
         // Still recognized after a reboot.
         let mut again = Voices::new();
@@ -450,24 +526,51 @@ mod tests {
         voices.init(&mut flash, Some(PARTITION)).unwrap();
         // Pools: input required (2 lines), done (1), failed (none), focus done (1), break done (none),
         // first done (none), milestone (1).
-        let pack = build_pack("jessica", &[&[1001, 1003], &[2001], &[], &[4001], &[], &[], &[777]]);
+        let pack = build_pack(
+            "jessica",
+            &[&[1001, 1003], &[2001], &[], &[4001], &[], &[], &[777]],
+        );
         write(&mut voices, &mut flash, &pack).unwrap();
         assert_eq!(voices.current_id(), "jessica");
         let mut picker = LinePicker::new(5);
 
         let done = voices.pick(Occasion::Done, &mut picker).unwrap();
-        assert_eq!(done.line, Line { offset: PARTITION.offset + 1024 + 501 + 502, length: 1001, codec: Codec::Adpcm16kMono { samples: 2001 } });
+        assert_eq!(
+            done.line,
+            Line {
+                offset: PARTITION.offset + 1024 + 501 + 502,
+                length: 1001,
+                codec: Codec::Adpcm16kMono { samples: 2001 }
+            }
+        );
         assert_eq!(done.chime, None);
 
         let milestone = voices.pick(Occasion::Milestone, &mut picker).unwrap();
         assert_eq!(milestone.line.codec, Codec::Adpcm16kMono { samples: 777 });
-        assert_eq!(voices.pick(Occasion::FirstDone, &mut picker).unwrap().line, done.line, "first done falls back to done");
-        assert_eq!(voices.pick(Occasion::Failed, &mut picker), None, "no failed pool: the built-in line plays");
+        assert_eq!(
+            voices.pick(Occasion::FirstDone, &mut picker).unwrap().line,
+            done.line,
+            "first done falls back to done"
+        );
+        assert_eq!(
+            voices.pick(Occasion::Failed, &mut picker),
+            None,
+            "no failed pool: the built-in line plays"
+        );
         assert_eq!(voices.pick(Occasion::GreetingMorning, &mut picker), None);
-        assert_eq!(voices.pick(Occasion::FocusDone, &mut picker).unwrap().chime, Some(Chime::Focus));
+        assert_eq!(
+            voices.pick(Occasion::FocusDone, &mut picker).unwrap().chime,
+            Some(Chime::Focus)
+        );
 
-        let first = voices.pick(Occasion::InputRequired, &mut picker).unwrap().line;
-        let second = voices.pick(Occasion::InputRequired, &mut picker).unwrap().line;
+        let first = voices
+            .pick(Occasion::InputRequired, &mut picker)
+            .unwrap()
+            .line;
+        let second = voices
+            .pick(Occasion::InputRequired, &mut picker)
+            .unwrap()
+            .line;
         assert_ne!(first, second, "a pool of two alternates");
 
         // Still recognized after a reboot.
@@ -485,12 +588,24 @@ mod tests {
         voices.begin(&mut flash, pack.len() as u32).unwrap();
         let piece = &pack[..CHUNK_BYTES];
         let encoded = encode_base64(piece);
-        assert_eq!(voices.chunk(&mut flash, 1, encoded.as_bytes(), 0), Err(VoiceError::InvalidArg));
-        assert_eq!(voices.chunk(&mut flash, 0, encoded.as_bytes(), 1), Err(VoiceError::InvalidCrc));
-        assert_eq!(voices.chunk(&mut flash, 0, b"", 0), Err(VoiceError::InvalidArg));
+        assert_eq!(
+            voices.chunk(&mut flash, 1, encoded.as_bytes(), 0),
+            Err(VoiceError::InvalidArg)
+        );
+        assert_eq!(
+            voices.chunk(&mut flash, 0, encoded.as_bytes(), 1),
+            Err(VoiceError::InvalidCrc)
+        );
+        assert_eq!(
+            voices.chunk(&mut flash, 0, b"", 0),
+            Err(VoiceError::InvalidArg)
+        );
         voices.abort(&mut flash);
         assert_eq!(voices.current_id(), "builtin");
-        assert_eq!(voices.chunk(&mut flash, 0, encoded.as_bytes(), 0), Err(VoiceError::InvalidState));
+        assert_eq!(
+            voices.chunk(&mut flash, 0, encoded.as_bytes(), 0),
+            Err(VoiceError::InvalidState)
+        );
     }
 
     #[test]
@@ -501,7 +616,14 @@ mod tests {
         let pack = pack();
         voices.begin(&mut flash, pack.len() as u32 + 1).unwrap();
         for (seq, piece) in pack.chunks(CHUNK_BYTES).enumerate() {
-            voices.chunk(&mut flash, seq as u32, encode_base64(piece).as_bytes(), voice_pack::crc32(0, piece)).unwrap();
+            voices
+                .chunk(
+                    &mut flash,
+                    seq as u32,
+                    encode_base64(piece).as_bytes(),
+                    voice_pack::crc32(0, piece),
+                )
+                .unwrap();
         }
         assert_eq!(voices.end(&mut flash), Err(VoiceError::InvalidSize));
         assert_eq!(voices.current_id(), "builtin");

@@ -57,7 +57,9 @@ const TICKETS_SHOWN: usize = 3;
 impl BoxPicture {
     /// `None` means the daemon isn't answering.
     pub fn derive(status: Option<&Status>) -> Self {
-        let activities = status.map(|status| status.activities.as_slice()).unwrap_or_default();
+        let activities = status
+            .map(|status| status.activities.as_slice())
+            .unwrap_or_default();
         let device = status.map(|status| &status.device);
         let link = device.filter(|device| device.connected).map(|device| {
             if device.relay {
@@ -72,7 +74,12 @@ impl BoxPicture {
             (None, _) => Mood::NoLink,
             (_, Some("pomodoro")) => Mood::Pomodoro,
             (_, Some("leisure")) => Mood::Leisure,
-            _ if activities.iter().any(|activity| activity.state == "needs_input") => Mood::Input,
+            _ if activities
+                .iter()
+                .any(|activity| activity.state == "needs_input") =>
+            {
+                Mood::Input
+            }
             _ if !activities.is_empty() => Mood::Working,
             _ => Mood::Ready,
         };
@@ -90,7 +97,9 @@ impl BoxPicture {
             daemon_alive: status.is_some(),
             link,
             tickets,
-            today: status.map(|status| status.today.clone()).unwrap_or_default(),
+            today: status
+                .map(|status| status.today.clone())
+                .unwrap_or_default(),
             firmware_version: device.and_then(|device| device.firmware_version.clone()),
         }
     }
@@ -117,7 +126,10 @@ pub fn icon_for_agent(agent: &str) -> &'static str {
 pub fn card_title(title: &str) -> &str {
     match title.split_once(':') {
         Some((prefix, rest))
-            if prefix.chars().count() <= 3 && prefix.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()) =>
+            if prefix.chars().count() <= 3
+                && prefix
+                    .chars()
+                    .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()) =>
         {
             rest.trim_start()
         }
@@ -128,7 +140,11 @@ pub fn card_title(title: &str) -> &str {
 /// Busy time as the stat chips show it: `35m`, `4h12m`.
 pub fn busy(seconds: u64) -> String {
     let minutes = seconds / 60;
-    if minutes < 60 { format!("{minutes}m") } else { format!("{}h{:02}m", minutes / 60, minutes % 60) }
+    if minutes < 60 {
+        format!("{minutes}m")
+    } else {
+        format!("{}h{:02}m", minutes / 60, minutes % 60)
+    }
 }
 
 #[cfg(test)]
@@ -155,13 +171,31 @@ mod tests {
     #[test]
     fn the_mood_follows_the_link_the_mode_and_the_cards() {
         assert_eq!(BoxPicture::derive(None).mood, Mood::NoLink);
-        assert_eq!(BoxPicture::derive(Some(&status(false, "duty", &[]))).mood, Mood::NoLink);
-        assert_eq!(BoxPicture::derive(Some(&status(true, "duty", &[]))).mood, Mood::Ready);
+        assert_eq!(
+            BoxPicture::derive(Some(&status(false, "duty", &[]))).mood,
+            Mood::NoLink
+        );
+        assert_eq!(
+            BoxPicture::derive(Some(&status(true, "duty", &[]))).mood,
+            Mood::Ready
+        );
         let working = [("codex", "CX:Fix", "working")];
-        assert_eq!(BoxPicture::derive(Some(&status(true, "duty", &working))).mood, Mood::Working);
-        let asking = [("codex", "CX:Fix", "working"), ("claude-code", "CC:Ask", "needs_input")];
-        assert_eq!(BoxPicture::derive(Some(&status(true, "duty", &asking))).mood, Mood::Input);
-        assert_eq!(BoxPicture::derive(Some(&status(true, "pomodoro", &asking))).mood, Mood::Pomodoro);
+        assert_eq!(
+            BoxPicture::derive(Some(&status(true, "duty", &working))).mood,
+            Mood::Working
+        );
+        let asking = [
+            ("codex", "CX:Fix", "working"),
+            ("claude-code", "CC:Ask", "needs_input"),
+        ];
+        assert_eq!(
+            BoxPicture::derive(Some(&status(true, "duty", &asking))).mood,
+            Mood::Input
+        );
+        assert_eq!(
+            BoxPicture::derive(Some(&status(true, "pomodoro", &asking))).mood,
+            Mood::Pomodoro
+        );
     }
 
     #[test]
@@ -173,11 +207,18 @@ mod tests {
             ("pi", "PI:Older", "working"),
         ];
         let picture = BoxPicture::derive(Some(&status(true, "duty", &four)));
-        let tickets: Vec<(&str, &str, bool)> =
-            picture.tickets.iter().map(|ticket| (ticket.icon, ticket.title.as_str(), ticket.needs_input)).collect();
+        let tickets: Vec<(&str, &str, bool)> = picture
+            .tickets
+            .iter()
+            .map(|ticket| (ticket.icon, ticket.title.as_str(), ticket.needs_input))
+            .collect();
         assert_eq!(
             tickets,
-            [("cc", "Add Chinese to the box", false), ("cx", "Review changes", true), ("ci", "App tests", false)]
+            [
+                ("cc", "Add Chinese to the box", false),
+                ("cx", "Review changes", true),
+                ("ci", "App tests", false)
+            ]
         );
         assert!(picture.needs_you());
     }

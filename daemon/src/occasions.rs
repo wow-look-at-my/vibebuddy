@@ -28,7 +28,12 @@ pub fn night_of(now: NaiveDateTime) -> Option<NaiveDate> {
 /// The special occasion of a done, if any: the rarest that fits wins. `done_today` already counts
 /// this one; `late_night_used` is the night whose late-night line has been spent; `long_session_due`
 /// says a new busy hour has passed since the last long-session line.
-pub fn done_occasion(now: NaiveDateTime, done_today: u32, late_night_used: Option<NaiveDate>, long_session_due: bool) -> Option<&'static str> {
+pub fn done_occasion(
+    now: NaiveDateTime,
+    done_today: u32,
+    late_night_used: Option<NaiveDate>,
+    long_session_due: bool,
+) -> Option<&'static str> {
     if night_of(now).is_some_and(|night| Some(night) != late_night_used) {
         Some("late_night_done")
     } else if done_today == 1 {
@@ -43,8 +48,13 @@ pub fn done_occasion(now: NaiveDateTime, done_today: u32, late_night_used: Optio
 }
 
 /// The special occasion of a needs input: only late night has one.
-pub fn input_occasion(now: NaiveDateTime, late_night_used: Option<NaiveDate>) -> Option<&'static str> {
-    night_of(now).is_some_and(|night| Some(night) != late_night_used).then_some("late_night_input")
+pub fn input_occasion(
+    now: NaiveDateTime,
+    late_night_used: Option<NaiveDate>,
+) -> Option<&'static str> {
+    night_of(now)
+        .is_some_and(|night| Some(night) != late_night_used)
+        .then_some("late_night_input")
 }
 
 /// Which greeting the first link of the day gets, by the time of day.
@@ -61,7 +71,10 @@ mod tests {
     use super::*;
 
     fn at(day: u32, hour: u32) -> NaiveDateTime {
-        NaiveDate::from_ymd_opt(2026, 10, day).unwrap().and_hms_opt(hour, 30, 0).unwrap()
+        NaiveDate::from_ymd_opt(2026, 10, day)
+            .unwrap()
+            .and_hms_opt(hour, 30, 0)
+            .unwrap()
     }
 
     fn date(day: u32) -> NaiveDate {
@@ -85,16 +98,32 @@ mod tests {
         assert_eq!(done_occasion(at(6, 10), 10, None, false), Some("milestone"));
         assert_eq!(done_occasion(at(6, 10), 11, None, false), None);
         // Late night beats first done, once a night.
-        assert_eq!(done_occasion(at(6, 23), 1, None, false), Some("late_night_done"));
-        assert_eq!(done_occasion(at(7, 1), 1, Some(date(6)), false), Some("first_done"));
-        assert_eq!(done_occasion(at(7, 23), 3, Some(date(6)), false), Some("late_night_done"), "a new night");
+        assert_eq!(
+            done_occasion(at(6, 23), 1, None, false),
+            Some("late_night_done")
+        );
+        assert_eq!(
+            done_occasion(at(7, 1), 1, Some(date(6)), false),
+            Some("first_done")
+        );
+        assert_eq!(
+            done_occasion(at(7, 23), 3, Some(date(6)), false),
+            Some("late_night_done"),
+            "a new night"
+        );
     }
 
     #[test]
     fn a_long_session_beats_a_milestone_but_not_the_first_done() {
-        assert_eq!(done_occasion(at(6, 15), 5, None, true), Some("long_session"));
+        assert_eq!(
+            done_occasion(at(6, 15), 5, None, true),
+            Some("long_session")
+        );
         assert_eq!(done_occasion(at(6, 15), 1, None, true), Some("first_done"));
-        assert_eq!(done_occasion(at(6, 23), 7, None, true), Some("late_night_done"));
+        assert_eq!(
+            done_occasion(at(6, 23), 7, None, true),
+            Some("late_night_done")
+        );
         assert_eq!(long_session_hours(3599), 0);
         assert_eq!(long_session_hours(2 * 3600 + 5), 2);
         assert_eq!(long_session_hours(9 * 3600), 3, "no more after three hours");

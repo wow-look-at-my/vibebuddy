@@ -28,7 +28,10 @@ pub struct Asset {
 }
 
 /// The App's package per platform: release-app.yml names it `VibeBuddy-<tag><suffix>`.
-const APP_ASSETS: [(&str, &str); 2] = [("macos-arm64", "-arm64.dmg"), ("linux-x86_64", "-linux-x86_64.tar.gz")];
+const APP_ASSETS: [(&str, &str); 2] = [
+    ("macos-arm64", "-arm64.dmg"),
+    ("linux-x86_64", "-linux-x86_64.tar.gz"),
+];
 
 const FIRMWARE_TAG: &str = "firmware-v";
 
@@ -40,8 +43,16 @@ const FIRMWARE_TAG: &str = "firmware-v";
 /// min_app: 0.4.0
 /// ---
 /// ```
-pub fn manifest(releases: &[Release], notes: impl Fn(&str) -> Option<String>, min_supported_app: &str, generated_at: &str) -> Result<Manifest, String> {
-    let published: Vec<&Release> = releases.iter().filter(|release| !release.draft && !release.prerelease).collect();
+pub fn manifest(
+    releases: &[Release],
+    notes: impl Fn(&str) -> Option<String>,
+    min_supported_app: &str,
+    generated_at: &str,
+) -> Result<Manifest, String> {
+    let published: Vec<&Release> = releases
+        .iter()
+        .filter(|release| !release.draft && !release.prerelease)
+        .collect();
 
     let mut apps: Vec<(Version, &Release)> = published
         .iter()
@@ -51,7 +62,13 @@ pub fn manifest(releases: &[Release], notes: impl Fn(&str) -> Option<String>, mi
     let mut app = BTreeMap::new();
     for (platform, suffix) in APP_ASSETS {
         // The newest release that has this platform's package, so a release without one doesn't hide the last that had it.
-        let found = apps.iter().find_map(|(version, release)| Some((version, release, asset(release, &format!("VibeBuddy-{}{suffix}", release.tag_name))?)));
+        let found = apps.iter().find_map(|(version, release)| {
+            Some((
+                version,
+                release,
+                asset(release, &format!("VibeBuddy-{}{suffix}", release.tag_name))?,
+            ))
+        });
         if let Some((version, release, asset)) = found {
             let (notes, _) = read_notes(&notes, &release.tag_name)?;
             app.insert(platform.to_owned(), download(version, asset, notes)?);
@@ -60,17 +77,32 @@ pub fn manifest(releases: &[Release], notes: impl Fn(&str) -> Option<String>, mi
 
     let mut firmware: Vec<(Version, Firmware)> = Vec::new();
     for release in &published {
-        let Some(version) = release.tag_name.strip_prefix(FIRMWARE_TAG).and_then(version) else { continue };
+        let Some(version) = release
+            .tag_name
+            .strip_prefix(FIRMWARE_TAG)
+            .and_then(version)
+        else {
+            continue;
+        };
         let tag = &release.tag_name;
-        let zip = asset(release, &format!("VibeBuddy-firmware-v{version}.zip")).ok_or_else(|| format!("{tag} has no firmware zip"))?;
+        let zip = asset(release, &format!("VibeBuddy-firmware-v{version}.zip"))
+            .ok_or_else(|| format!("{tag} has no firmware zip"))?;
         let (notes, min_app) = read_notes(&notes, tag)?;
-        let min_app = min_app.ok_or_else(|| format!("docs/releases/{tag}.md doesn't say min_app"))?;
+        let min_app =
+            min_app.ok_or_else(|| format!("docs/releases/{tag}.md doesn't say min_app"))?;
         Version::parse(&min_app).map_err(|error| format!("{tag}: min_app {min_app}: {error}"))?;
-        firmware.push((version.clone(), Firmware { min_app, download: download(&version, zip, notes)? }));
+        firmware.push((
+            version.clone(),
+            Firmware {
+                min_app,
+                download: download(&version, zip, notes)?,
+            },
+        ));
     }
     firmware.sort_by(|a, b| b.0.cmp(&a.0));
 
-    Version::parse(min_supported_app).map_err(|error| format!("min_supported_app {min_supported_app}: {error}"))?;
+    Version::parse(min_supported_app)
+        .map_err(|error| format!("min_supported_app {min_supported_app}: {error}"))?;
     Ok(Manifest {
         schema: SCHEMA,
         generated_at: generated_at.to_owned(),
@@ -82,7 +114,9 @@ pub fn manifest(releases: &[Release], notes: impl Fn(&str) -> Option<String>, mi
 }
 
 fn version(text: &str) -> Option<Version> {
-    Version::parse(text).ok().filter(|version| version.pre.is_empty())
+    Version::parse(text)
+        .ok()
+        .filter(|version| version.pre.is_empty())
 }
 
 fn asset<'a>(release: &'a Release, name: &str) -> Option<&'a Asset> {
@@ -95,17 +129,32 @@ fn download(version: &Version, asset: &Asset, notes: Notes) -> Result<Download, 
         .as_deref()
         .and_then(|digest| digest.strip_prefix("sha256:"))
         .ok_or_else(|| format!("{} has no sha256 digest", asset.name))?;
-    Ok(Download { version: version.to_string(), url: asset.browser_download_url.clone(), sha256: sha256.to_owned(), notes })
+    Ok(Download {
+        version: version.to_string(),
+        url: asset.browser_download_url.clone(),
+        sha256: sha256.to_owned(),
+        notes,
+    })
 }
 
 /// The notes in each language, plus `min_app` from the English file's front matter.
-fn read_notes(notes: &impl Fn(&str) -> Option<String>, tag: &str) -> Result<(Notes, Option<String>), String> {
-    let english = notes(&format!("{tag}.md")).ok_or_else(|| format!("missing docs/releases/{tag}.md"))?;
+fn read_notes(
+    notes: &impl Fn(&str) -> Option<String>,
+    tag: &str,
+) -> Result<(Notes, Option<String>), String> {
+    let english =
+        notes(&format!("{tag}.md")).ok_or_else(|| format!("missing docs/releases/{tag}.md"))?;
     let (front, english) = front_matter(&english);
-    let min_app = front.lines().find_map(|line| line.strip_prefix("min_app:")).map(|value| value.trim().to_owned());
+    let min_app = front
+        .lines()
+        .find_map(|line| line.strip_prefix("min_app:"))
+        .map(|value| value.trim().to_owned());
     let mut result = Notes::from([("en".to_owned(), english.trim().to_owned())]);
     if let Some(chinese) = notes(&format!("{tag}.zh-Hans.md")) {
-        result.insert("zh-Hans".to_owned(), front_matter(&chinese).1.trim().to_owned());
+        result.insert(
+            "zh-Hans".to_owned(),
+            front_matter(&chinese).1.trim().to_owned(),
+        );
     }
     Ok((result, min_app))
 }
@@ -130,7 +179,9 @@ mod tests {
                 .iter()
                 .map(|name| Asset {
                     name: (*name).to_owned(),
-                    browser_download_url: format!("https://github.com/x/y/releases/download/{tag}/{name}"),
+                    browser_download_url: format!(
+                        "https://github.com/x/y/releases/download/{tag}/{name}"
+                    ),
                     digest: Some(format!("sha256:{}", name.len())),
                 })
                 .collect(),
@@ -143,7 +194,9 @@ mod tests {
             "v0.4.0.zh-Hans.md" => Some("## 新功能\n\n- 新\n".to_owned()),
             "v0.3.2.md" => Some("- Old\n".to_owned()),
             "firmware-v0.3.3.md" => Some("---\nmin_app: 0.3.2\n---\n- Firmware fix\n".to_owned()),
-            "firmware-v0.4.0.md" => Some("---\nmin_app: 0.4.0\n---\n- Needs the new App\n".to_owned()),
+            "firmware-v0.4.0.md" => {
+                Some("---\nmin_app: 0.4.0\n---\n- Needs the new App\n".to_owned())
+            }
             _ => None,
         }
     }
@@ -153,7 +206,14 @@ mod tests {
             release("firmware-v0.4.0", &["VibeBuddy-firmware-v0.4.0.zip"]),
             release("v0.4.0", &["VibeBuddy-v0.4.0-arm64.dmg"]),
             release("firmware-v0.3.3", &["VibeBuddy-firmware-v0.3.3.zip"]),
-            release("v0.3.2", &["VibeBuddy-v0.3.2-arm64.dmg", "VibeBuddy-v0.3.2-linux-x86_64.tar.gz", "VibeBuddy-firmware-v0.3.2.zip"]),
+            release(
+                "v0.3.2",
+                &[
+                    "VibeBuddy-v0.3.2-arm64.dmg",
+                    "VibeBuddy-v0.3.2-linux-x86_64.tar.gz",
+                    "VibeBuddy-firmware-v0.3.2.zip",
+                ],
+            ),
         ]
     }
 
@@ -161,10 +221,17 @@ mod tests {
     fn the_latest_app_per_platform_and_every_firmware_are_listed() {
         let manifest = manifest(&releases(), notes, "0.3.2", "2026-10-07T12:00:00Z").unwrap();
         assert_eq!(manifest.app["macos-arm64"].version, "0.4.0");
-        assert_eq!(manifest.app["macos-arm64"].url, "https://github.com/x/y/releases/download/v0.4.0/VibeBuddy-v0.4.0-arm64.dmg");
+        assert_eq!(
+            manifest.app["macos-arm64"].url,
+            "https://github.com/x/y/releases/download/v0.4.0/VibeBuddy-v0.4.0-arm64.dmg"
+        );
         // v0.4.0 shipped no Linux package; the last one that did is still offered.
         assert_eq!(manifest.app["linux-x86_64"].version, "0.3.2");
-        let firmware: Vec<(&str, &str)> = manifest.firmware.iter().map(|f| (f.download.version.as_str(), f.min_app.as_str())).collect();
+        let firmware: Vec<(&str, &str)> = manifest
+            .firmware
+            .iter()
+            .map(|f| (f.download.version.as_str(), f.min_app.as_str()))
+            .collect();
         // The firmware zips bundled in App releases before ADR-0010 aren't firmware releases.
         assert_eq!(firmware, [("0.4.0", "0.4.0"), ("0.3.3", "0.3.2")]);
     }
@@ -198,14 +265,32 @@ mod tests {
 
     #[test]
     fn firmware_without_min_app_stops_the_build() {
-        let missing = |name: &str| if name == "firmware-v0.3.3.md" { Some("- No front matter\n".to_owned()) } else { notes(name) };
+        let missing = |name: &str| {
+            if name == "firmware-v0.3.3.md" {
+                Some("- No front matter\n".to_owned())
+            } else {
+                notes(name)
+            }
+        };
         let error = manifest(&releases(), missing, "0.3.2", "t").unwrap_err();
         assert!(error.contains("min_app"), "{error}");
     }
 
     #[test]
     fn a_release_without_notes_stops_the_build() {
-        let error = manifest(&releases(), |name| if name == "v0.4.0.md" { None } else { notes(name) }, "0.3.2", "t").unwrap_err();
+        let error = manifest(
+            &releases(),
+            |name| {
+                if name == "v0.4.0.md" {
+                    None
+                } else {
+                    notes(name)
+                }
+            },
+            "0.3.2",
+            "t",
+        )
+        .unwrap_err();
         assert!(error.contains("docs/releases/v0.4.0.md"), "{error}");
     }
 
@@ -213,6 +298,10 @@ mod tests {
     fn an_asset_without_a_digest_stops_the_build() {
         let mut releases = releases();
         releases[2].assets[0].digest = None;
-        assert!(manifest(&releases, notes, "0.3.2", "t").unwrap_err().contains("sha256"));
+        assert!(
+            manifest(&releases, notes, "0.3.2", "t")
+                .unwrap_err()
+                .contains("sha256")
+        );
     }
 }

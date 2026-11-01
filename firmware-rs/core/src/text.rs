@@ -9,7 +9,10 @@ pub struct Text<const N: usize> {
 
 impl<const N: usize> Text<N> {
     pub const fn new() -> Self {
-        Self { bytes: [0; N], length: 0 }
+        Self {
+            bytes: [0; N],
+            length: 0,
+        }
     }
 
     pub fn as_bytes(&self) -> &[u8] {
@@ -58,7 +61,11 @@ macro_rules! text {
 /// Copies bytes truncated to at most `limit` bytes, matching C's strncpy into a fixed-size array. A cut never
 /// falls inside a UTF-8 character: the partial character goes too.
 pub fn truncated(bytes: &[u8], limit: usize) -> alloc::vec::Vec<u8> {
-    let mut end = bytes.iter().take(limit).position(|&byte| byte == 0).unwrap_or(bytes.len().min(limit));
+    let mut end = bytes
+        .iter()
+        .take(limit)
+        .position(|&byte| byte == 0)
+        .unwrap_or(bytes.len().min(limit));
     while end > 0 && bytes.get(end).is_some_and(|&byte| byte & 0xc0 == 0x80) {
         end -= 1;
     }

@@ -66,7 +66,10 @@ const RING_ALARM_SHAKE_PX: i32 = 3;
 const PANEL_X: i32 = 208;
 use core::f32::consts::TAU;
 /// The ball's arc keeps the C firmware's 3.14159 rather than π: the screen must match it pixel for pixel.
-#[allow(clippy::approx_constant, reason = "the same approximation as the C firmware")]
+#[allow(
+    clippy::approx_constant,
+    reason = "the same approximation as the C firmware"
+)]
 const BALL_PI: f32 = 3.14159;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -241,12 +244,22 @@ impl Rect {
 
 /// The task card in place `slot` of the page, drawn and tapped alike.
 fn card_rect(slot: usize) -> Rect {
-    Rect { x: 8, y: 50 + slot as i32 * 38, width: 186, height: 32 }
+    Rect {
+        x: 8,
+        y: 50 + slot as i32 * 38,
+        width: 186,
+        height: 32,
+    }
 }
 
 /// The buddy on duty, robot or look, with the tasks' shift to the right: a tap anywhere on it pets it.
 fn buddy_rect(x_offset: i32) -> Rect {
-    Rect { x: 104 + x_offset, y: 28, width: 112, height: 128 }
+    Rect {
+        x: 104 + x_offset,
+        y: 28,
+        width: 112,
+        height: 128,
+    }
 }
 
 /// External state needed to draw a frame: the pomodoro and the leisure director belong to the main program.
@@ -353,7 +366,14 @@ struct Pose {
     mouth: Mouth,
 }
 
-fn draw_pet_face(canvas: &mut Canvas, state: State, frame: u32, x_offset: i32, y_offset: i32, color: u16) {
+fn draw_pet_face(
+    canvas: &mut Canvas,
+    state: State,
+    frame: u32,
+    x_offset: i32,
+    y_offset: i32,
+    color: u16,
+) {
     let face_y = 79 + y_offset;
     match state {
         State::Working => {
@@ -365,25 +385,97 @@ fn draw_pet_face(canvas: &mut Canvas, state: State, frame: u32, x_offset: i32, y
         }
         State::InputRequired => canvas.draw_text(141 + x_offset, face_y + 5, b"!?", 2, color, 2),
         State::Done => {
-            canvas.draw_line(140 + x_offset, face_y + 12, 147 + x_offset, face_y + 6, color);
-            canvas.draw_line(147 + x_offset, face_y + 6, 154 + x_offset, face_y + 12, color);
-            canvas.draw_line(166 + x_offset, face_y + 12, 173 + x_offset, face_y + 6, color);
-            canvas.draw_line(173 + x_offset, face_y + 6, 180 + x_offset, face_y + 12, color);
-            canvas.draw_line(151 + x_offset, face_y + 19, 160 + x_offset, face_y + 23, color);
-            canvas.draw_line(160 + x_offset, face_y + 23, 169 + x_offset, face_y + 19, color);
+            canvas.draw_line(
+                140 + x_offset,
+                face_y + 12,
+                147 + x_offset,
+                face_y + 6,
+                color,
+            );
+            canvas.draw_line(
+                147 + x_offset,
+                face_y + 6,
+                154 + x_offset,
+                face_y + 12,
+                color,
+            );
+            canvas.draw_line(
+                166 + x_offset,
+                face_y + 12,
+                173 + x_offset,
+                face_y + 6,
+                color,
+            );
+            canvas.draw_line(
+                173 + x_offset,
+                face_y + 6,
+                180 + x_offset,
+                face_y + 12,
+                color,
+            );
+            canvas.draw_line(
+                151 + x_offset,
+                face_y + 19,
+                160 + x_offset,
+                face_y + 23,
+                color,
+            );
+            canvas.draw_line(
+                160 + x_offset,
+                face_y + 23,
+                169 + x_offset,
+                face_y + 19,
+                color,
+            );
         }
         State::Failed => {
-            canvas.draw_line(140 + x_offset, face_y + 7, 153 + x_offset, face_y + 18, color);
-            canvas.draw_line(153 + x_offset, face_y + 7, 140 + x_offset, face_y + 18, color);
-            canvas.draw_line(167 + x_offset, face_y + 7, 180 + x_offset, face_y + 18, color);
-            canvas.draw_line(180 + x_offset, face_y + 7, 167 + x_offset, face_y + 18, color);
-            canvas.draw_line(153 + x_offset, face_y + 25, 167 + x_offset, face_y + 25, color);
+            canvas.draw_line(
+                140 + x_offset,
+                face_y + 7,
+                153 + x_offset,
+                face_y + 18,
+                color,
+            );
+            canvas.draw_line(
+                153 + x_offset,
+                face_y + 7,
+                140 + x_offset,
+                face_y + 18,
+                color,
+            );
+            canvas.draw_line(
+                167 + x_offset,
+                face_y + 7,
+                180 + x_offset,
+                face_y + 18,
+                color,
+            );
+            canvas.draw_line(
+                180 + x_offset,
+                face_y + 7,
+                167 + x_offset,
+                face_y + 18,
+                color,
+            );
+            canvas.draw_line(
+                153 + x_offset,
+                face_y + 25,
+                167 + x_offset,
+                face_y + 25,
+                color,
+            );
         }
         State::Offline => {
             // Closed eyes and a flat mouth: asleep, not an error.
             canvas.fill_rect(143 + x_offset, face_y + 14, 8, 3, color);
             canvas.fill_rect(169 + x_offset, face_y + 14, 8, 3, color);
-            canvas.draw_line(154 + x_offset, face_y + 25, 166 + x_offset, face_y + 25, color);
+            canvas.draw_line(
+                154 + x_offset,
+                face_y + 25,
+                166 + x_offset,
+                face_y + 25,
+                color,
+            );
         }
         State::Idle => {
             let mood = idle_mood(frame);
@@ -391,26 +483,69 @@ fn draw_pet_face(canvas: &mut Canvas, state: State, frame: u32, x_offset: i32, y
                 // Dozing: closed eyes plus a floating Z. The color and this Z tell it apart from the link-lost closed eyes.
                 canvas.fill_rect(143 + x_offset, face_y + 14, 8, 3, color);
                 canvas.fill_rect(169 + x_offset, face_y + 14, 8, 3, color);
-                canvas.draw_line(154 + x_offset, face_y + 25, 166 + x_offset, face_y + 25, color);
-                canvas.draw_text(172 + x_offset, 44 + y_offset - idle_mood_phase(frame), b"Z", 2, color, 1);
+                canvas.draw_line(
+                    154 + x_offset,
+                    face_y + 25,
+                    166 + x_offset,
+                    face_y + 25,
+                    color,
+                );
+                canvas.draw_text(
+                    172 + x_offset,
+                    44 + y_offset - idle_mood_phase(frame),
+                    b"Z",
+                    2,
+                    color,
+                    1,
+                );
                 return;
             }
             // Looking around: only the eyes move sideways, as if sizing up the room.
-            let gaze = if mood == IdleMood::Look { if frame % 4 < 2 { -3 } else { 3 } } else { 0 };
+            let gaze = if mood == IdleMood::Look {
+                if frame % 4 < 2 { -3 } else { 3 }
+            } else {
+                0
+            };
             let blinking = frame % 8 == 7;
             let (eye_y, eye_height) = if blinking { (14, 3) } else { (8, 10) };
             canvas.fill_rect(143 + x_offset + gaze, face_y + eye_y, 8, eye_height, color);
             canvas.fill_rect(169 + x_offset + gaze, face_y + eye_y, 8, eye_height, color);
-            canvas.draw_line(154 + x_offset, face_y + 24, 160 + x_offset, face_y + 27, color);
-            canvas.draw_line(160 + x_offset, face_y + 27, 166 + x_offset, face_y + 24, color);
+            canvas.draw_line(
+                154 + x_offset,
+                face_y + 24,
+                160 + x_offset,
+                face_y + 27,
+                color,
+            );
+            canvas.draw_line(
+                160 + x_offset,
+                face_y + 27,
+                166 + x_offset,
+                face_y + 24,
+                color,
+            );
         }
     }
 }
 
 /// Antenna, body, arms and the screen on the face. x and y are offsets from the duty position; raised arms
 /// use positive values. The face and legs are drawn separately, since each has other poses too.
-fn draw_pet_body(canvas: &mut Canvas, x: i32, y: i32, antenna: i32, knob_color: u16, left_arm: i32, right_arm: i32) {
-    canvas.fill_rect(157 + x, 48 + y - antenna, 6, 13 + antenna, COLOR_PET_HIGHLIGHT);
+fn draw_pet_body(
+    canvas: &mut Canvas,
+    x: i32,
+    y: i32,
+    antenna: i32,
+    knob_color: u16,
+    left_arm: i32,
+    right_arm: i32,
+) {
+    canvas.fill_rect(
+        157 + x,
+        48 + y - antenna,
+        6,
+        13 + antenna,
+        COLOR_PET_HIGHLIGHT,
+    );
     canvas.fill_rect(153 + x, 44 + y - antenna, 14, 10, knob_color);
 
     canvas.fill_rect(113 + x, 65 + y, 94, 52, COLOR_PET);
@@ -432,14 +567,30 @@ fn draw_pet_legs(canvas: &mut Canvas, x: i32, y: i32, left_foot: i32, right_foot
 
 fn draw_buddy(canvas: &mut Canvas, state: State, frame: u32, x_offset: i32, color: u16) {
     let y_offset = match state {
-        State::Working => if frame.is_multiple_of(2) { 0 } else { 2 },
-        State::Done => if frame.is_multiple_of(2) { -5 } else { 0 },
+        State::Working => {
+            if frame.is_multiple_of(2) {
+                0
+            } else {
+                2
+            }
+        }
+        State::Done => {
+            if frame.is_multiple_of(2) {
+                -5
+            } else {
+                0
+            }
+        }
         State::Failed => 3,
         State::Idle if frame.is_multiple_of(8) => 1,
         _ => 0,
     };
     // When stretching, only lengthen the antenna and keep the body still, so it reads as a stretch rather than a hop.
-    let antenna = if state == State::Idle && idle_mood(frame) == IdleMood::Stretch { 5 } else { 0 };
+    let antenna = if state == State::Idle && idle_mood(frame) == IdleMood::Stretch {
+        5
+    } else {
+        0
+    };
     draw_pet_body(canvas, x_offset, y_offset, antenna, color, 0, 0);
     draw_pet_face(canvas, state, frame, x_offset, y_offset, color);
     draw_pet_legs(canvas, x_offset, y_offset, 0, 0);
@@ -475,11 +626,24 @@ struct LookPose {
 
 impl Default for LookPose {
     fn default() -> Self {
-        LookPose { frame: look::Frame::Normal, dx: 0, dy: 0, mirror: false, mark: Mark::None }
+        LookPose {
+            frame: look::Frame::Normal,
+            dx: 0,
+            dy: 0,
+            mirror: false,
+            mark: Mark::None,
+        }
     }
 }
 
-fn draw_look_pose(canvas: &mut Canvas, look: &Look, pose: &LookPose, center_x: i32, gray: bool, color: u16) {
+fn draw_look_pose(
+    canvas: &mut Canvas,
+    look: &Look,
+    pose: &LookPose,
+    center_x: i32,
+    gray: bool,
+    color: u16,
+) {
     let left = center_x + pose.dx - look::WIDTH * look::SCALE / 2;
     let top = LOOK_BOTTOM + pose.dy - look::HEIGHT * look::SCALE;
     look.draw(canvas, pose.frame, left, top, pose.mirror, gray);
@@ -494,28 +658,81 @@ fn draw_look_pose(canvas: &mut Canvas, look: &Look, pose: &LookPose, center_x: i
             }
         }
         Mark::Ask => canvas.draw_text(x, y + 4, b"!?", 2, color, 2),
-        Mark::Z(frame) => canvas.draw_text(x, (y + 8 - (frame % 16) as i32).max(30), b"Z", 2, color, 1),
+        Mark::Z(frame) => {
+            canvas.draw_text(x, (y + 8 - (frame % 16) as i32).max(30), b"Z", 2, color, 1)
+        }
         Mark::Bang => canvas.draw_text(x, y, b"!", 3, COLOR_INPUT, 1),
     }
 }
 
 /// A look on duty: the four frames, moved and marked for the state the buddy is showing.
-fn draw_look_on_duty(canvas: &mut Canvas, look: &Look, state: State, frame: u32, center_x: i32, color: u16) {
-    let blink = if frame % 8 == 7 { look::Frame::EyesClosed } else { look::Frame::Normal };
+fn draw_look_on_duty(
+    canvas: &mut Canvas,
+    look: &Look,
+    state: State,
+    frame: u32,
+    center_x: i32,
+    color: u16,
+) {
+    let blink = if frame % 8 == 7 {
+        look::Frame::EyesClosed
+    } else {
+        look::Frame::Normal
+    };
     let pose = match state {
         State::Idle => match idle_mood(frame) {
-            IdleMood::Nap => LookPose { frame: look::Frame::EyesClosed, mark: Mark::Z(idle_mood_phase(frame) as u32), ..LookPose::default() },
-            IdleMood::Look => LookPose { mirror: frame % 4 < 2, ..LookPose::default() },
-            IdleMood::Stretch => LookPose { dy: -3, ..LookPose::default() },
-            IdleMood::None => LookPose { frame: blink, dy: if frame.is_multiple_of(8) { 1 } else { 0 }, ..LookPose::default() },
+            IdleMood::Nap => LookPose {
+                frame: look::Frame::EyesClosed,
+                mark: Mark::Z(idle_mood_phase(frame) as u32),
+                ..LookPose::default()
+            },
+            IdleMood::Look => LookPose {
+                mirror: frame % 4 < 2,
+                ..LookPose::default()
+            },
+            IdleMood::Stretch => LookPose {
+                dy: -3,
+                ..LookPose::default()
+            },
+            IdleMood::None => LookPose {
+                frame: blink,
+                dy: if frame.is_multiple_of(8) { 1 } else { 0 },
+                ..LookPose::default()
+            },
         },
-        State::Working => LookPose { dx: if frame.is_multiple_of(2) { -1 } else { 1 }, mark: Mark::Dots(frame % 3 + 1), ..LookPose::default() },
-        State::InputRequired => LookPose { dy: if frame.is_multiple_of(2) { -2 } else { 0 }, mark: Mark::Ask, ..LookPose::default() },
-        State::Done => LookPose { frame: look::Frame::Happy, dy: if frame.is_multiple_of(2) { -10 } else { 0 }, ..LookPose::default() },
-        State::Failed => LookPose { frame: look::Frame::Sad, dy: 4, ..LookPose::default() },
-        State::Offline => LookPose { frame: look::Frame::EyesClosed, ..LookPose::default() },
+        State::Working => LookPose {
+            dx: if frame.is_multiple_of(2) { -1 } else { 1 },
+            mark: Mark::Dots(frame % 3 + 1),
+            ..LookPose::default()
+        },
+        State::InputRequired => LookPose {
+            dy: if frame.is_multiple_of(2) { -2 } else { 0 },
+            mark: Mark::Ask,
+            ..LookPose::default()
+        },
+        State::Done => LookPose {
+            frame: look::Frame::Happy,
+            dy: if frame.is_multiple_of(2) { -10 } else { 0 },
+            ..LookPose::default()
+        },
+        State::Failed => LookPose {
+            frame: look::Frame::Sad,
+            dy: 4,
+            ..LookPose::default()
+        },
+        State::Offline => LookPose {
+            frame: look::Frame::EyesClosed,
+            ..LookPose::default()
+        },
     };
-    draw_look_pose(canvas, look, &pose, center_x, state == State::Offline, color);
+    draw_look_pose(
+        canvas,
+        look,
+        &pose,
+        center_x,
+        state == State::Offline,
+        color,
+    );
 }
 
 /// The patrol's horizontal path, shared by the robot and the looks: how far from home, whether
@@ -580,7 +797,13 @@ fn format_tally(completed: u32, focus_s: u32) -> Text<23> {
     if minutes < 60 {
         text!(23, "{} FOCUS {}M", completed % 10000, minutes % 60)
     } else {
-        text!(23, "{} FOCUS {}H{:02}", completed % 10000, (minutes / 60) % 1000, minutes % 60)
+        text!(
+            23,
+            "{} FOCUS {}H{:02}",
+            completed % 10000,
+            (minutes / 60) % 1000,
+            minutes % 60
+        )
     }
 }
 
@@ -602,26 +825,61 @@ fn phase_color(view: &pomodoro::View) -> u16 {
 
 /// Draws a radial segment outward from the center. Angles run clockwise from 12 o'clock; shift is the whole
 /// ring's horizontal offset, nonzero only while the alarm shakes.
-fn draw_radial(canvas: &mut Canvas, angle: f32, inner: i32, outer: i32, thickness: i32, color: u16, shift: i32) {
+fn draw_radial(
+    canvas: &mut Canvas,
+    angle: f32,
+    inner: i32,
+    outer: i32,
+    thickness: i32,
+    color: u16,
+    shift: i32,
+) {
     let dx = libm::sinf(angle);
     let dy = -libm::cosf(angle);
     for radius in inner..=outer {
         let x = RING_CENTER_X + shift + libm::roundf(dx * radius as f32) as i32;
         let y = RING_CENTER_Y + libm::roundf(dy * radius as f32) as i32;
-        canvas.fill_rect(x - thickness / 2, y - thickness / 2, thickness, thickness, color);
+        canvas.fill_rect(
+            x - thickness / 2,
+            y - thickness / 2,
+            thickness,
+            thickness,
+            color,
+        );
     }
 }
 
 /// Eyes open and smiling, blinking every three seconds.
 fn resting_pose(frame: u32) -> Pose {
-    Pose { eyes: if frame % 24 == 23 { Eyes::Closed } else { Eyes::Open }, mouth: Mouth::Smile, ..Pose::default() }
+    Pose {
+        eyes: if frame % 24 == 23 {
+            Eyes::Closed
+        } else {
+            Eyes::Open
+        },
+        mouth: Mouth::Smile,
+        ..Pose::default()
+    }
 }
 
 fn sleeping_pose(frame: u32) -> Pose {
-    Pose { eyes: Eyes::Closed, mouth: Mouth::Flat, y: ((frame / 8) % 2) as i32, ..Pose::default() }
+    Pose {
+        eyes: Eyes::Closed,
+        mouth: Mouth::Flat,
+        y: ((frame / 8) % 2) as i32,
+        ..Pose::default()
+    }
 }
 
-fn draw_pet_eyes(canvas: &mut Canvas, x: i32, y: i32, eyes: Eyes, gaze_x: i32, gaze_y: i32, color: u16) {
+fn draw_pet_eyes(
+    canvas: &mut Canvas,
+    x: i32,
+    y: i32,
+    eyes: Eyes,
+    gaze_x: i32,
+    gaze_y: i32,
+    color: u16,
+) {
     let face_y = 79 + y;
     let left = 143 + x + gaze_x;
     let right = 169 + x + gaze_x;
@@ -658,14 +916,37 @@ fn draw_pet_mouth(canvas: &mut Canvas, x: i32, y: i32, mouth: Mouth, color: u16)
 }
 
 fn draw_pet_pose(canvas: &mut Canvas, pose: &Pose) {
-    draw_pet_body(canvas, pose.x, pose.y, pose.antenna, COLOR_READY, pose.left_arm, pose.right_arm);
-    draw_pet_eyes(canvas, pose.x, pose.y, pose.eyes, pose.gaze_x, pose.gaze_y, COLOR_READY);
+    draw_pet_body(
+        canvas,
+        pose.x,
+        pose.y,
+        pose.antenna,
+        COLOR_READY,
+        pose.left_arm,
+        pose.right_arm,
+    );
+    draw_pet_eyes(
+        canvas,
+        pose.x,
+        pose.y,
+        pose.eyes,
+        pose.gaze_x,
+        pose.gaze_y,
+        COLOR_READY,
+    );
     draw_pet_mouth(canvas, pose.x, pose.y, pose.mouth, COLOR_READY);
     draw_pet_legs(canvas, pose.x, pose.y, pose.left_foot, pose.right_foot);
 }
 
 fn draw_sleeping_z(canvas: &mut Canvas, x: i32, y: i32, frame: u32) {
-    canvas.draw_text(172 + x, 44 + y - (frame % 16) as i32, b"Z", 2, COLOR_READY, 1);
+    canvas.draw_text(
+        172 + x,
+        44 + y - (frame % 16) as i32,
+        b"Z",
+        2,
+        COLOR_READY,
+        1,
+    );
 }
 
 /// Plain idle between skits: standing, breathing, blinking.
@@ -796,12 +1077,32 @@ fn skit_read(canvas: &mut Canvas, frame: u32) {
 /// Counting stars: looks up and counts to seven, slower and slower, and falls asleep counting.
 fn draw_stars(canvas: &mut Canvas, frame: u32) {
     const STARS: [[i32; 2]; 12] = [
-        [20, 36], [48, 52], [75, 40], [100, 60], [130, 34], [200, 44],
-        [230, 62], [262, 38], [290, 54], [306, 70], [170, 66], [60, 72],
+        [20, 36],
+        [48, 52],
+        [75, 40],
+        [100, 60],
+        [130, 34],
+        [200, 44],
+        [230, 62],
+        [262, 38],
+        [290, 54],
+        [306, 70],
+        [170, 66],
+        [60, 72],
     ];
     for (index, star) in STARS.iter().enumerate() {
         if !(frame / 3 + index as u32).is_multiple_of(4) {
-            canvas.fill_rect(star[0], star[1], 2, 2, if index % 3 == 0 { COLOR_TEXT } else { COLOR_MUTED });
+            canvas.fill_rect(
+                star[0],
+                star[1],
+                2,
+                2,
+                if index % 3 == 0 {
+                    COLOR_TEXT
+                } else {
+                    COLOR_MUTED
+                },
+            );
         }
     }
 }
@@ -842,7 +1143,11 @@ fn skit_hide(canvas: &mut Canvas, frame: u32) {
         pose.eyes = Eyes::Wide;
     } else if frame < 52 {
         pose.x = 120;
-        pose.eyes = if frame == 44 { Eyes::Closed } else { Eyes::Wide };
+        pose.eyes = if frame == 44 {
+            Eyes::Closed
+        } else {
+            Eyes::Wide
+        };
         pose.mouth = Mouth::Open;
     } else if frame < 64 {
         pose.x = 120 + 6 * (frame_i - 52);
@@ -856,7 +1161,11 @@ fn skit_hide(canvas: &mut Canvas, frame: u32) {
 /// to sleep.
 fn skit_startle(canvas: &mut Canvas, frame: u32) {
     let sleeping = !(24..56).contains(&frame);
-    let mut pose = if sleeping { sleeping_pose(frame) } else { resting_pose(frame) };
+    let mut pose = if sleeping {
+        sleeping_pose(frame)
+    } else {
+        resting_pose(frame)
+    };
     if !sleeping {
         if frame < 28 {
             pose.eyes = Eyes::Wide;
@@ -974,7 +1283,11 @@ impl Display {
     fn draw_task_cards(&self, canvas: &mut Canvas, now_ms: u32) {
         for (slot, task) in self.tasks_on_page().iter().enumerate() {
             let Rect { x, y, width, .. } = card_rect(slot);
-            let card_color = if self.page == 0 && slot == 0 { 0x18c6 } else { 0x1083 };
+            let card_color = if self.page == 0 && slot == 0 {
+                0x18c6
+            } else {
+                0x1083
+            };
             let color = self.state_color(task.state);
             canvas.fill_rect(x, y, width, 32, COLOR_MUTED);
             canvas.fill_rect(x + 2, y + 2, width - 4, 28, card_color);
@@ -983,22 +1296,53 @@ impl Display {
             let (text_x, title, project_chars) = match task.icon {
                 Some(icon) => {
                     icon.draw(canvas, x + 10, y + 8);
-                    (x + 30, task.title.strip_prefix(icon.prefix()).unwrap_or(&task.title), 12)
+                    (
+                        x + 30,
+                        task.title
+                            .strip_prefix(icon.prefix())
+                            .unwrap_or(&task.title),
+                        12,
+                    )
                 }
                 None => (x + 12, &task.title[..], 16),
             };
-            canvas.draw_str(text_x, y + 5, title, 1, COLOR_TEXT, (x + width - 8 - text_x).min(26 * 6 - 1));
+            canvas.draw_str(
+                text_x,
+                y + 5,
+                title,
+                1,
+                COLOR_TEXT,
+                (x + width - 8 - text_x).min(26 * 6 - 1),
+            );
             canvas.draw_text(text_x, y + 17, short_state_label(task.state), 1, color, 4);
             // When the first line is a session name, the project name moves to the second line; if the title is the
             // project name, don't repeat it.
             if !task.project.is_empty() && !contains(&task.title, &task.project) {
-                canvas.draw_str(text_x + 30, y + 17, &task.project, 1, COLOR_MUTED, project_chars * 6 - 1);
+                canvas.draw_str(
+                    text_x + 30,
+                    y + 17,
+                    &task.project,
+                    1,
+                    COLOR_MUTED,
+                    project_chars * 6 - 1,
+                );
             }
             let elapsed = format_elapsed(self.task_elapsed_seconds(task, now_ms));
             let elapsed_width = elapsed.len() as i32 * 6 - 1;
             // While waiting for input, light up the duration too: this column answers exactly "how long has it waited".
-            let elapsed_color = if task.state == State::InputRequired { color } else { COLOR_MUTED };
-            canvas.draw_text(x + width - 8 - elapsed_width, y + 17, elapsed.as_bytes(), 1, elapsed_color, 8);
+            let elapsed_color = if task.state == State::InputRequired {
+                color
+            } else {
+                COLOR_MUTED
+            };
+            canvas.draw_text(
+                x + width - 8 - elapsed_width,
+                y + 17,
+                elapsed.as_bytes(),
+                1,
+                elapsed_color,
+                8,
+            );
         }
     }
 
@@ -1027,7 +1371,11 @@ impl Display {
             return;
         }
         let slot = (self.animation_frame / IDLE_ROTATE_FRAMES) as usize % count;
-        let color = if has_title && slot == 0 { COLOR_TEXT } else { COLOR_MUTED };
+        let color = if has_title && slot == 0 {
+            COLOR_TEXT
+        } else {
+            COLOR_MUTED
+        };
         canvas.draw_str_centered(195, lines[slot], 2, color);
     }
 
@@ -1050,7 +1398,11 @@ impl Display {
         if !self.ring_alarm_shaking() {
             return 0;
         }
-        if self.animation_frame.is_multiple_of(2) { RING_ALARM_SHAKE_PX } else { -RING_ALARM_SHAKE_PX }
+        if self.animation_frame.is_multiple_of(2) {
+            RING_ALARM_SHAKE_PX
+        } else {
+            -RING_ALARM_SHAKE_PX
+        }
     }
 
     fn draw_pomodoro_ring(&self, canvas: &mut Canvas, view: &pomodoro::View, alarm: bool) {
@@ -1066,9 +1418,25 @@ impl Display {
         for index in 0..RING_TICKS {
             let angle = TAU * index as f32 / RING_TICKS as f32;
             let passed = alarm || (view.run != Run::Pending && angle <= sweep);
-            draw_radial(canvas, angle, RING_TICK_INNER, RING_TICK_OUTER, 2, if passed { color } else { COLOR_MUTED }, shift);
+            draw_radial(
+                canvas,
+                angle,
+                RING_TICK_INNER,
+                RING_TICK_OUTER,
+                2,
+                if passed { color } else { COLOR_MUTED },
+                shift,
+            );
         }
-        draw_radial(canvas, sweep, RING_HAND_INNER, RING_HAND_OUTER, 3, color, shift);
+        draw_radial(
+            canvas,
+            sweep,
+            RING_HAND_INNER,
+            RING_HAND_OUTER,
+            3,
+            color,
+            shift,
+        );
     }
 
     /// In the pomodoro scene the agents keep only a few lines at the bottom right: they still answer "what needs
@@ -1077,11 +1445,28 @@ impl Display {
         canvas.draw_text(PANEL_X, 176, b"AGENT", 1, COLOR_MUTED, 18);
         canvas.draw_text(PANEL_X, 188, label, 1, status_color, 18);
         if let Some(task) = self.tasks.first() {
-            canvas.draw_str(PANEL_X, 200, &task.title, 1, if self.link_lost { COLOR_MUTED } else { COLOR_TEXT }, 18 * 6 - 1);
+            canvas.draw_str(
+                PANEL_X,
+                200,
+                &task.title,
+                1,
+                if self.link_lost {
+                    COLOR_MUTED
+                } else {
+                    COLOR_TEXT
+                },
+                18 * 6 - 1,
+            );
         }
     }
 
-    fn draw_pomodoro_scene(&mut self, canvas: &mut Canvas, scene: &Scene, label: &[u8], status_color: u16) {
+    fn draw_pomodoro_scene(
+        &mut self,
+        canvas: &mut Canvas,
+        scene: &Scene,
+        label: &[u8],
+        status_color: u16,
+    ) {
         let view = scene.pomodoro.view(scene.now_ms);
         let color = phase_color(&view);
         let paused = view.run == Run::Paused;
@@ -1091,7 +1476,14 @@ impl Display {
         // While paused the digits blink, the old stopwatch rule. While the alarm shakes, the digits shake with the ring.
         if !paused || self.animation_frame.is_multiple_of(2) {
             let countdown = format_countdown(view.remaining_ms);
-            canvas.draw_text(RING_CENTER_X - 58 + self.ring_alarm_shift(), RING_CENTER_Y - 14, countdown.as_bytes(), 4, COLOR_TEXT, 5);
+            canvas.draw_text(
+                RING_CENTER_X - 58 + self.ring_alarm_shift(),
+                RING_CENTER_Y - 14,
+                countdown.as_bytes(),
+                4,
+                COLOR_TEXT,
+                5,
+            );
         }
 
         // Idle shows READY; right after focus ends and before the break starts, show BREAK with 05:00
@@ -1110,7 +1502,14 @@ impl Display {
                 canvas.draw_text(PANEL_X, 78, b"HOLD K0 SKIP", 1, COLOR_MUTED, 18);
             }
         } else {
-            canvas.draw_text(PANEL_X, 66, if paused { b"K0 RESUME" } else { b"K0 PAUSE" }, 1, COLOR_MUTED, 18);
+            canvas.draw_text(
+                PANEL_X,
+                66,
+                if paused { b"K0 RESUME" } else { b"K0 PAUSE" },
+                1,
+                COLOR_MUTED,
+                18,
+            );
             canvas.draw_text(PANEL_X, 78, b"HOLD K0 STOP", 1, COLOR_MUTED, 18);
         }
         if paused {
@@ -1129,7 +1528,18 @@ impl Display {
             canvas.draw_text(PANEL_X + 96, 130, more.as_bytes(), 1, COLOR_FOCUS, 8);
         }
         let tally_line = format_tally(view.completed, view.focus_s);
-        canvas.draw_text(PANEL_X, 144, tally_line.as_bytes(), 1, if view.completed > 0 { COLOR_FOCUS } else { COLOR_MUTED }, 18);
+        canvas.draw_text(
+            PANEL_X,
+            144,
+            tally_line.as_bytes(),
+            1,
+            if view.completed > 0 {
+                COLOR_FOCUS
+            } else {
+                COLOR_MUTED
+            },
+            18,
+        );
 
         self.draw_agent_summary(canvas, label, status_color);
     }
@@ -1143,9 +1553,20 @@ impl Display {
         }
         let countdown = format_countdown(view.remaining_ms);
         let mut badge = Text::<11>::new();
-        badge.push_bytes(if view.phase == Phase::Focus { b"F " } else { b"B " });
+        badge.push_bytes(if view.phase == Phase::Focus {
+            b"F "
+        } else {
+            b"B "
+        });
         badge.push_bytes(countdown.as_bytes());
-        canvas.draw_text(WIDTH - 8 - (7 * 6 - 1), 15, badge.as_bytes(), 1, phase_color(&view), 12);
+        canvas.draw_text(
+            WIDTH - 8 - (7 * 6 - 1),
+            15,
+            badge.as_bytes(),
+            1,
+            phase_color(&view),
+            12,
+        );
     }
 
     /// Sleep talking: asleep, with a string of small bubbles overhead showing today's stats.
@@ -1176,27 +1597,68 @@ impl Display {
     /// Leisure with a Character's look: walking, resting and sleeping, the moves four still frames
     /// can make. The skits with props are the robot's; here they become plain rest.
     fn draw_look_skit(&self, canvas: &mut Canvas, look: &Look, skit: Skit, frame: u32) {
-        let resting = LookPose { frame: if frame % 24 == 23 { look::Frame::EyesClosed } else { look::Frame::Normal }, dy: ((frame / 8) % 2) as i32, ..LookPose::default() };
-        let sleeping = LookPose { frame: look::Frame::EyesClosed, dy: ((frame / 8) % 2) as i32, mark: Mark::Z(frame), ..LookPose::default() };
+        let resting = LookPose {
+            frame: if frame % 24 == 23 {
+                look::Frame::EyesClosed
+            } else {
+                look::Frame::Normal
+            },
+            dy: ((frame / 8) % 2) as i32,
+            ..LookPose::default()
+        };
+        let sleeping = LookPose {
+            frame: look::Frame::EyesClosed,
+            dy: ((frame / 8) % 2) as i32,
+            mark: Mark::Z(frame),
+            ..LookPose::default()
+        };
         let pose = match skit {
             Skit::Sleep => sleeping,
-            Skit::Dream => LookPose { mark: Mark::None, ..sleeping },
+            Skit::Dream => LookPose {
+                mark: Mark::None,
+                ..sleeping
+            },
             Skit::Patrol => {
                 let (dx, walking, left) = patrol_path(frame);
-                LookPose { dx, dy: if walking && frame % 4 >= 2 { 2 } else { 0 }, mirror: left, ..resting }
+                LookPose {
+                    dx,
+                    dy: if walking && frame % 4 >= 2 { 2 } else { 0 },
+                    mirror: left,
+                    ..resting
+                }
             }
             Skit::Hide => {
                 let dx = hide_path(frame);
-                LookPose { dx, mirror: hide_path(frame + 1) < dx, ..resting }
+                LookPose {
+                    dx,
+                    mirror: hide_path(frame + 1) < dx,
+                    ..resting
+                }
             }
             Skit::Startle => match frame {
-                24..28 => LookPose { frame: look::Frame::Normal, dy: -6, mark: Mark::Bang, ..LookPose::default() },
-                28..56 => LookPose { frame: look::Frame::Normal, mirror: (36..44).contains(&frame), ..LookPose::default() },
+                24..28 => LookPose {
+                    frame: look::Frame::Normal,
+                    dy: -6,
+                    mark: Mark::Bang,
+                    ..LookPose::default()
+                },
+                28..56 => LookPose {
+                    frame: look::Frame::Normal,
+                    mirror: (36..44).contains(&frame),
+                    ..LookPose::default()
+                },
                 _ => sleeping,
             },
             Skit::Stars => {
                 draw_stars(canvas, frame);
-                if frame >= 88 { sleeping } else { LookPose { frame: look::Frame::Normal, ..LookPose::default() } }
+                if frame >= 88 {
+                    sleeping
+                } else {
+                    LookPose {
+                        frame: look::Frame::Normal,
+                        ..LookPose::default()
+                    }
+                }
             }
             Skit::Ball | Skit::Read | Skit::None => resting,
         };
@@ -1233,21 +1695,56 @@ impl Display {
         }
         let petted = self.petted(scene.now_ms);
         // Petted, it hops for joy the way it does when work is done.
-        let state = if self.link_lost { State::Offline } else if petted { State::Done } else { self.state };
+        let state = if self.link_lost {
+            State::Offline
+        } else if petted {
+            State::Done
+        } else {
+            self.state
+        };
         let x_offset = self.buddy_offset();
         match &self.look {
-            Some(look) => draw_look_on_duty(canvas, look, state, self.animation_frame, LOOK_CENTER_X + x_offset, status_color),
+            Some(look) => draw_look_on_duty(
+                canvas,
+                look,
+                state,
+                self.animation_frame,
+                LOOK_CENTER_X + x_offset,
+                status_color,
+            ),
             None => draw_buddy(canvas, state, self.animation_frame, x_offset, status_color),
         }
         if petted {
-            draw_heart(canvas, buddy_rect(x_offset).x + 96, 34 + if self.animation_frame.is_multiple_of(2) { 0 } else { 4 });
+            draw_heart(
+                canvas,
+                buddy_rect(x_offset).x + 96,
+                34 + if self.animation_frame.is_multiple_of(2) {
+                    0
+                } else {
+                    4
+                },
+            );
         }
         // The third task card ends at y = 158: the label and the line under it move down, into the free space at the bottom, to keep clear of it.
         let crowded = self.tasks.len() >= 3;
         let label_y = if crowded { 178 } else { 162 };
-        canvas.draw_text_centered(label_y, label, if self.state == State::InputRequired { 2 } else { 3 }, status_color);
+        canvas.draw_text_centered(
+            label_y,
+            label,
+            if self.state == State::InputRequired {
+                2
+            } else {
+                3
+            },
+            status_color,
+        );
         if !self.tasks.is_empty() {
-            canvas.draw_text_centered(self.page_line_y(), self.page_line().as_bytes(), 1, COLOR_MUTED);
+            canvas.draw_text_centered(
+                self.page_line_y(),
+                self.page_line().as_bytes(),
+                1,
+                COLOR_MUTED,
+            );
             self.draw_page_bar(canvas);
         } else if self.state == State::Idle && !self.link_lost {
             // No rotation while the link is lost: a moving screen looks alive, the exact opposite of NO LINK.
@@ -1323,7 +1820,13 @@ impl Display {
             Mode::Leisure => leisure::FRAME_MS,
             // The countdown changes every second; blinking while paused needs a frame every half second; the alarm
             // shake is faster still.
-            Mode::Pomodoro => if self.ring_alarm_shaking() { RING_ALARM_SHAKE_FRAME_MS } else { 500 },
+            Mode::Pomodoro => {
+                if self.ring_alarm_shaking() {
+                    RING_ALARM_SHAKE_FRAME_MS
+                } else {
+                    500
+                }
+            }
             Mode::Duty if self.petted_until.is_some() => 200,
             Mode::Duty => match self.state {
                 State::Working => 250,
@@ -1349,7 +1852,9 @@ impl Display {
         }
         self.state = state;
         self.animation_frame = 0;
-        self.title = title.map(|title| truncated(title, TITLE_BYTES)).unwrap_or_default();
+        self.title = title
+            .map(|title| truncated(title, TITLE_BYTES))
+            .unwrap_or_default();
         self.tasks = tasks
             .iter()
             .take(MAX_TASKS)
@@ -1375,7 +1880,11 @@ impl Display {
     /// none are. The Mac sends nothing while the visible state is unchanged, and a task can run for minutes
     /// without an event, so dropping the cards here would show READY over work still in progress.
     /// Returns the state shown.
-    pub fn settle_after_done(&mut self, screen: &mut dyn Screen, scene: &Scene) -> Result<State, ()> {
+    pub fn settle_after_done(
+        &mut self,
+        screen: &mut dyn Screen,
+        scene: &Scene,
+    ) -> Result<State, ()> {
         if !self.ready {
             return Err(());
         }
@@ -1383,14 +1892,22 @@ impl Display {
             .retain(|task| matches!(task.state, State::Working | State::InputRequired));
         self.tasks_total = self.tasks.len();
         self.page = 0;
-        self.state = if self.tasks.iter().any(|task| task.state == State::InputRequired) {
+        self.state = if self
+            .tasks
+            .iter()
+            .any(|task| task.state == State::InputRequired)
+        {
             State::InputRequired
         } else if self.tasks.is_empty() {
             State::Idle
         } else {
             State::Working
         };
-        self.title = self.tasks.first().map(|task| task.title.clone()).unwrap_or_default();
+        self.title = self
+            .tasks
+            .first()
+            .map(|task| task.title.clone())
+            .unwrap_or_default();
         self.animation_frame = 0;
         self.next_animation_at = scene.now_ms.wrapping_add(self.animation_period());
         self.render(screen, scene)?;
@@ -1417,16 +1934,31 @@ impl Display {
     /// A screenshot for a computer linked over the network, taken now and sent a line at a time: the network
     /// can't take a whole frame at once the way the cable can, and the screen keeps changing meanwhile.
     pub fn snapshot(&self, frame: &[u8]) -> Snapshot {
-        Snapshot { frame: frame.to_vec(), begin: Some(self.shot_begin()), index: 0, done: false }
+        Snapshot {
+            frame: frame.to_vec(),
+            begin: Some(self.shot_begin()),
+            index: 0,
+            done: false,
+        }
     }
 
     fn shot_begin(&self) -> Text<64> {
-        text!(64, "SHOT BEGIN {}x{} BACKLIGHT {}", WIDTH, HEIGHT, if self.backlight_on { "ON" } else { "OFF" })
+        text!(
+            64,
+            "SHOT BEGIN {}x{} BACKLIGHT {}",
+            WIDTH,
+            HEIGHT,
+            if self.backlight_on { "ON" } else { "OFF" }
+        )
     }
 
     /// Records today's stats, which the idle screen rotates through. Takes effect on the next draw.
     pub fn set_stats(&mut self, lines: &[&[u8]]) {
-        self.stats = lines.iter().take(MAX_STATS).map(|line| truncated(line, TITLE_BYTES)).collect();
+        self.stats = lines
+            .iter()
+            .take(MAX_STATS)
+            .map(|line| truncated(line, TITLE_BYTES))
+            .collect();
     }
 
     /// Blink to identify: the backlight flashes for about a second, visible in any mode. Onboarding uses it to
@@ -1503,7 +2035,8 @@ impl Display {
         if self.panel == panel {
             return;
         }
-        if self.panel.as_ref().map(|panel| &panel.title) != panel.as_ref().map(|panel| &panel.title) {
+        if self.panel.as_ref().map(|panel| &panel.title) != panel.as_ref().map(|panel| &panel.title)
+        {
             self.highlight = None;
         }
         self.panel = panel;
@@ -1524,7 +2057,13 @@ impl Display {
     }
 
     /// The link icon and staging mark in the top left; redraws only on a change.
-    pub fn set_link(&mut self, screen: &mut dyn Screen, scene: &Scene, path: Option<LinkPath>, staging: bool) {
+    pub fn set_link(
+        &mut self,
+        screen: &mut dyn Screen,
+        scene: &Scene,
+        path: Option<LinkPath>,
+        staging: bool,
+    ) {
         if self.link == (path, staging) {
             return;
         }
@@ -1572,7 +2111,10 @@ impl Display {
             ended = true;
         }
         // More than one page turns by itself, except while a card waits for an answer: the box stays on it then.
-        let waiting = self.tasks.iter().any(|task| task.state == State::InputRequired);
+        let waiting = self
+            .tasks
+            .iter()
+            .any(|task| task.state == State::InputRequired);
         if self.mode == Mode::Duty
             && self.panel.is_none()
             && self.pages() > 1
@@ -1605,7 +2147,8 @@ impl Display {
     }
 
     fn petted(&self, now_ms: u32) -> bool {
-        self.petted_until.is_some_and(|until| (now_ms.wrapping_sub(until) as i32) < 0)
+        self.petted_until
+            .is_some_and(|until| (now_ms.wrapping_sub(until) as i32) < 0)
     }
 
     /// The id of the activity behind the card at `index`; None when the daemon sent none.
@@ -1627,13 +2170,24 @@ impl Display {
             // The font has no `/` or `+`.
             (1, unsent) => text!(24, "{} MORE", unsent % 100),
             (pages, 0) => text!(24, "PAGE {} OF {}", self.page + 1, pages),
-            (pages, unsent) => text!(24, "PAGE {} OF {}   {} MORE", self.page + 1, pages, unsent % 100),
+            (pages, unsent) => text!(
+                24,
+                "PAGE {} OF {}   {} MORE",
+                self.page + 1,
+                pages,
+                unsent % 100
+            ),
         }
     }
 
     /// The page line and a finger's width around it.
     fn page_line_rect(&self) -> Rect {
-        Rect { x: 40, y: self.page_line_y() - 8, width: 240, height: 23 }
+        Rect {
+            x: 40,
+            y: self.page_line_y() - 8,
+            width: 240,
+            height: 23,
+        }
     }
 
     fn page_line_y(&self) -> i32 {
@@ -1650,26 +2204,42 @@ impl Display {
         let height = card_rect(CARDS_PER_PAGE - 1).y + 32 - top;
         let segment = (height - (pages - 1) * 3) / pages;
         for page in 0..pages {
-            let color = if page == self.page as i32 { COLOR_TEXT } else { COLOR_MUTED };
+            let color = if page == self.page as i32 {
+                COLOR_TEXT
+            } else {
+                COLOR_MUTED
+            };
             canvas.fill_rect(198, top + page * (segment + 3), 3, segment, color);
         }
     }
 
     /// Turns the cards' page forward or back, as a swipe or a tap on the page line asks; the box then leaves the
     /// pages alone for a while. Returns the page now up and the number of pages, or None with only one.
-    pub fn turn_page(&mut self, screen: &mut dyn Screen, scene: &Scene, forward: bool) -> Option<(usize, usize)> {
+    pub fn turn_page(
+        &mut self,
+        screen: &mut dyn Screen,
+        scene: &Scene,
+        forward: bool,
+    ) -> Option<(usize, usize)> {
         let pages = self.pages();
         if self.mode != Mode::Duty || self.panel.is_some() || pages < 2 {
             return None;
         }
-        self.page = if forward { (self.page + 1) % pages } else { (self.page + pages - 1) % pages };
+        self.page = if forward {
+            (self.page + 1) % pages
+        } else {
+            (self.page + pages - 1) % pages
+        };
         self.page_turn_at = scene.now_ms.wrapping_add(PAGE_PAUSE_MS);
         self.refresh(screen, scene);
         Some((self.page, pages))
     }
 
     pub fn card_id(&self, index: usize) -> Option<&[u8]> {
-        self.tasks.get(index).map(|task| task.id.as_slice()).filter(|id| !id.is_empty())
+        self.tasks
+            .get(index)
+            .map(|task| task.id.as_slice())
+            .filter(|id| !id.is_empty())
     }
 
     /// Where a target is drawn now, if it's on the screen at all.
@@ -1678,13 +2248,24 @@ impl Display {
             return self.kk_target_rect(target);
         }
         match (target, &self.panel) {
-            (Target::Row(index), Some(panel)) if panel.kind == PanelKind::List && index < panel.lines.len() => Some(panel_row_rect(index)),
+            (Target::Row(index), Some(panel))
+                if panel.kind == PanelKind::List && index < panel.lines.len() =>
+            {
+                Some(panel_row_rect(index))
+            }
             (Target::Hint(index), Some(panel)) => hint_rects(panel).get(index).copied(),
             (Target::Card(index), None) if self.mode == Mode::Duty && index < self.tasks.len() => {
-                index.checked_sub(self.page * CARDS_PER_PAGE).filter(|&slot| slot < CARDS_PER_PAGE).map(card_rect)
+                index
+                    .checked_sub(self.page * CARDS_PER_PAGE)
+                    .filter(|&slot| slot < CARDS_PER_PAGE)
+                    .map(card_rect)
             }
-            (Target::PageLine, None) if self.mode == Mode::Duty && self.pages() > 1 => Some(self.page_line_rect()),
-            (Target::Buddy, None) if self.mode == Mode::Duty => Some(buddy_rect(self.buddy_offset())),
+            (Target::PageLine, None) if self.mode == Mode::Duty && self.pages() > 1 => {
+                Some(self.page_line_rect())
+            }
+            (Target::Buddy, None) if self.mode == Mode::Duty => {
+                Some(buddy_rect(self.buddy_offset()))
+            }
             _ => None,
         }
     }
@@ -1701,25 +2282,34 @@ impl Display {
             if !PANEL_FRAME.contains(x, y) {
                 return Some(Target::OutsidePanel);
             }
-            if let Some(index) = hint_rects(panel).iter().position(|rect| rect.contains(x, y)) {
+            if let Some(index) = hint_rects(panel)
+                .iter()
+                .position(|rect| rect.contains(x, y))
+            {
                 return Some(Target::Hint(index));
             }
             if panel.kind == PanelKind::List {
                 let rows = panel.lines.len();
-                return (0..rows).find(|&index| panel_row_hit_rect(index, rows).contains(x, y)).map(Target::Row);
+                return (0..rows)
+                    .find(|&index| panel_row_hit_rect(index, rows).contains(x, y))
+                    .map(Target::Row);
             }
             return None;
         }
         if self.mode != Mode::Duty {
             return None;
         }
-        if let Some(slot) = (0..self.tasks_on_page().len()).find(|&slot| card_rect(slot).contains(x, y)) {
+        if let Some(slot) =
+            (0..self.tasks_on_page().len()).find(|&slot| card_rect(slot).contains(x, y))
+        {
             return Some(Target::Card(self.page * CARDS_PER_PAGE + slot));
         }
         if self.pages() > 1 && self.page_line_rect().contains(x, y) {
             return Some(Target::PageLine);
         }
-        buddy_rect(self.buddy_offset()).contains(x, y).then_some(Target::Buddy)
+        buddy_rect(self.buddy_offset())
+            .contains(x, y)
+            .then_some(Target::Buddy)
     }
 
     /// Outlines a tapped target for a moment, so the user sees the tap landed.
@@ -1742,7 +2332,12 @@ impl Display {
     /// For previews: sets the animation frame, alarm shake and alarm switch directly, to compare against the C
     /// firmware's screens frame by frame.
     #[doc(hidden)]
-    pub fn preview_pose(&mut self, frame: Option<u32>, shake_frames: Option<u32>, alarm: Option<bool>) {
+    pub fn preview_pose(
+        &mut self,
+        frame: Option<u32>,
+        shake_frames: Option<u32>,
+        alarm: Option<bool>,
+    ) {
         if let Some(frame) = frame {
             self.animation_frame = frame;
         }
@@ -1759,11 +2354,20 @@ const PANEL_BORDER: u16 = COLOR_PET;
 const PANEL_SELECTED: u16 = 0x2148;
 const PANEL_LEFT: i32 = 44;
 /// The menu panel's border, everything it covers.
-const PANEL_FRAME: Rect = Rect { x: 30, y: 14, width: 260, height: 212 };
+const PANEL_FRAME: Rect = Rect {
+    x: 30,
+    y: 14,
+    width: 260,
+    height: 212,
+};
 const PANEL_RIGHT: i32 = 276;
 
 fn text_width(text: &[u8], scale: i32) -> i32 {
-    if text.is_empty() { 0 } else { (text.len() as i32 * 6 - 1) * scale }
+    if text.is_empty() {
+        0
+    } else {
+        (text.len() as i32 * 6 - 1) * scale
+    }
 }
 
 fn tone_color(tone: Tone) -> u16 {
@@ -1777,7 +2381,12 @@ fn tone_color(tone: Tone) -> u16 {
 
 /// A row of a menu list, as drawn with the selection bar.
 fn panel_row_rect(index: usize) -> Rect {
-    Rect { x: 38, y: 51 + index as i32 * 23, width: 244, height: 21 }
+    Rect {
+        x: 38,
+        y: 51 + index as i32 * 23,
+        width: 244,
+        height: 21,
+    }
 }
 
 /// Where a tap picks a row: the whole pitch, gaps included, and the last row down to the line above the hints. A
@@ -1785,7 +2394,12 @@ fn panel_row_rect(index: usize) -> Rect {
 fn panel_row_hit_rect(index: usize, rows: usize) -> Rect {
     let row = panel_row_rect(index);
     let bottom = if index + 1 == rows { 196 } else { row.y + 23 };
-    Rect { x: row.x, y: row.y - 1, width: row.width, height: bottom - row.y + 1 }
+    Rect {
+        x: row.x,
+        y: row.y - 1,
+        width: row.width,
+        height: bottom - row.y + 1,
+    }
 }
 
 /// Where a Facts panel's lines go: closer together when there are more than five, to stay above the hints.
@@ -1804,7 +2418,12 @@ fn hint_rects(panel: &Panel) -> Vec<Rect> {
         .iter()
         .map(|(key, action)| {
             let width = text_width(key, 1) + 10 + text_width(action, 1) + 14;
-            let rect = Rect { x: x - 4, y: 199, width, height: 25 };
+            let rect = Rect {
+                x: x - 4,
+                y: 199,
+                width,
+                height: 25,
+            };
             x += width;
             rect
         })
@@ -1817,7 +2436,14 @@ fn hint_rects(panel: &Panel) -> Vec<Rect> {
 
 /// A small heart over the petted buddy, 16 pixels wide.
 fn draw_heart(canvas: &mut Canvas, x: i32, y: i32) {
-    const ROWS: [u8; 6] = [0b0110_0110, 0b1111_1111, 0b1111_1111, 0b0111_1110, 0b0011_1100, 0b0001_1000];
+    const ROWS: [u8; 6] = [
+        0b0110_0110,
+        0b1111_1111,
+        0b1111_1111,
+        0b0111_1110,
+        0b0011_1100,
+        0b0001_1000,
+    ];
     for (row, bits) in ROWS.iter().enumerate() {
         for column in 0..8 {
             if bits & (0x80 >> column) != 0 {
@@ -1832,7 +2458,13 @@ fn draw_heart(canvas: &mut Canvas, x: i32, y: i32) {
 fn draw_panel(canvas: &mut Canvas, panel: &Panel) {
     canvas.dim();
     canvas.dim();
-    canvas.fill_rect(PANEL_FRAME.x, PANEL_FRAME.y, PANEL_FRAME.width, PANEL_FRAME.height, PANEL_BORDER);
+    canvas.fill_rect(
+        PANEL_FRAME.x,
+        PANEL_FRAME.y,
+        PANEL_FRAME.width,
+        PANEL_FRAME.height,
+        PANEL_BORDER,
+    );
     canvas.fill_rect(32, 16, 256, 208, COLOR_SCREEN);
     canvas.draw_text(PANEL_LEFT, 26, &panel.title, 2, COLOR_PET_HIGHLIGHT, 19);
     canvas.fill_rect(PANEL_LEFT, 46, PANEL_RIGHT - PANEL_LEFT, 1, COLOR_MUTED);
@@ -1848,23 +2480,52 @@ fn draw_panel(canvas: &mut Canvas, panel: &Panel) {
                 }
                 canvas.draw_text(58, y, label, 2, COLOR_TEXT, 12);
                 let value = &value[..value.len().min(8)];
-                canvas.draw_text(PANEL_RIGHT - text_width(value, 2), y, value, 2, tone_color(*tone), 8);
+                canvas.draw_text(
+                    PANEL_RIGHT - text_width(value, 2),
+                    y,
+                    value,
+                    2,
+                    tone_color(*tone),
+                    8,
+                );
             }
             PanelKind::Facts => {
                 let y = facts_line_y(panel, index as usize);
                 let mut label = label.splitn(2, |&byte| byte == b'\n');
-                canvas.draw_text(PANEL_LEFT, y, label.next().unwrap_or_default(), 1, COLOR_MUTED, 12);
+                canvas.draw_text(
+                    PANEL_LEFT,
+                    y,
+                    label.next().unwrap_or_default(),
+                    1,
+                    COLOR_MUTED,
+                    12,
+                );
                 if let Some(note) = label.next() {
                     canvas.draw_text(PANEL_LEFT, y + 9, note, 1, COLOR_MUTED, 12);
                 }
                 canvas.draw_text(120, y - 3, value, 2, tone_color(*tone), 13);
             }
-            PanelKind::Meter(_) | PanelKind::Progress(_) => canvas.draw_text_centered(150 + index * 18, label, 2, tone_color(*tone)),
+            PanelKind::Meter(_) | PanelKind::Progress(_) => {
+                canvas.draw_text_centered(150 + index * 18, label, 2, tone_color(*tone))
+            }
             PanelKind::Text(scale) => {
-                let pitch = voice_text_pitch(scale, panel.lines.iter().any(|(label, _, _)| font::has_wide(label)));
+                let pitch = voice_text_pitch(
+                    scale,
+                    panel
+                        .lines
+                        .iter()
+                        .any(|(label, _, _)| font::has_wide(label)),
+                );
                 // Room for one hanging closing mark past the row's width (font::wrap).
                 let max_width = VOICE_TEXT_WIDTH + font::CELL;
-                canvas.draw_str(PANEL_LEFT, 56 + index * pitch, label, if scale >= 2 { 2 } else { 1 }, tone_color(*tone), max_width);
+                canvas.draw_str(
+                    PANEL_LEFT,
+                    56 + index * pitch,
+                    label,
+                    if scale >= 2 { 2 } else { 1 },
+                    tone_color(*tone),
+                    max_width,
+                );
             }
         }
     }
@@ -1906,7 +2567,13 @@ fn draw_progress(canvas: &mut Canvas, percent: u8) {
     let width = crate::voice_command::METER_STEPS as i32 * 14 - 2;
     let x = PANEL_LEFT + 5;
     canvas.fill_rect(x, 92, width, 40, half_bright(COLOR_MUTED));
-    canvas.fill_rect(x, 92, width * i32::from(percent.min(100)) / 100, 40, COLOR_DONE);
+    canvas.fill_rect(
+        x,
+        92,
+        width * i32::from(percent.min(100)) / 100,
+        40,
+        COLOR_DONE,
+    );
 }
 
 /// How the box is linked to its computer (USB wins, then the local network, then the Relay).
@@ -1972,14 +2639,23 @@ fn draw_icon(canvas: &mut Canvas, x: i32, y: i32, rows: &[u16; ICON_HEIGHT], col
     for (row, bits) in rows.iter().enumerate() {
         for column in 0..ICON_WIDTH {
             if bits >> (ICON_WIDTH - 1 - column) & 1 == 1 {
-                canvas.fill_rect(x + column * ICON_SCALE, y + row as i32 * ICON_SCALE, ICON_SCALE, ICON_SCALE, color);
+                canvas.fill_rect(
+                    x + column * ICON_SCALE,
+                    y + row as i32 * ICON_SCALE,
+                    ICON_SCALE,
+                    ICON_SCALE,
+                    color,
+                );
             }
         }
     }
 }
 
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {
-    needle.is_empty() || haystack.windows(needle.len()).any(|window| window == needle)
+    needle.is_empty()
+        || haystack
+            .windows(needle.len())
+            .any(|window| window == needle)
 }
 
 /// Runs per `SHOT` line in a [`Snapshot`]: at most 11 bytes each, so a line stays under 2 KB, which fits the

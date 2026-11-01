@@ -12,7 +12,11 @@ pub struct Command {
 }
 
 const fn command(command: u8, parameters: &'static [u8], delay_ms: u32) -> Command {
-    Command { command, parameters, delay_ms }
+    Command {
+        command,
+        parameters,
+        delay_ms,
+    }
 }
 
 pub const INIT_SEQUENCE: &[Command] = &[

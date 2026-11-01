@@ -76,7 +76,13 @@ impl RelayConfig {
         let default = if release { PRODUCTION_URL } else { STAGING_URL };
         let movable = release && fixed.is_none();
         let url = fixed.unwrap_or_else(|| default.to_owned());
-        Self { identity, url: Arc::new(std::sync::RwLock::new(url)), movable, account: None, refusal: Arc::new(watch::channel(None).0) }
+        Self {
+            identity,
+            url: Arc::new(std::sync::RwLock::new(url)),
+            movable,
+            account: None,
+            refusal: Arc::new(watch::channel(None).0),
+        }
     }
 
     pub fn with_account(mut self, account: Arc<Account>) -> Self {
@@ -89,7 +95,8 @@ impl RelayConfig {
     pub fn refused(&self) -> Option<String> {
         let refusal = self.refusal.borrow();
         let refusal = refusal.as_ref()?;
-        (refusal.code == "unavailable" || refusal.chance == self.chance()).then(|| refusal.code.clone())
+        (refusal.code == "unavailable" || refusal.chance == self.chance())
+            .then(|| refusal.code.clone())
     }
 
     /// Turned away for the account, which hasn't changed since: trying again would only be refused the same way.
@@ -103,12 +110,18 @@ impl RelayConfig {
     }
 
     fn note_refusal(&self, code: Option<&str>) {
-        let refusal = code.map(|code| Refusal { code: code.to_owned(), chance: self.chance() });
-        self.refusal.send_if_modified(|was| std::mem::replace(was, refusal.clone()) != refusal);
+        let refusal = code.map(|code| Refusal {
+            code: code.to_owned(),
+            chance: self.chance(),
+        });
+        self.refusal
+            .send_if_modified(|was| std::mem::replace(was, refusal.clone()) != refusal);
     }
 
     fn chance(&self) -> u64 {
-        self.account.as_ref().map_or(0, |account| account.relay_chance())
+        self.account
+            .as_ref()
+            .map_or(0, |account| account.relay_chance())
     }
 
     pub fn url(&self) -> String {
@@ -120,7 +133,10 @@ impl RelayConfig {
     pub fn for_box(&self) -> Option<String> {
         let url = self.url();
         let host = url.strip_prefix("wss://")?.trim_end_matches('/');
-        let valid = !host.is_empty() && host.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'.' || byte == b'-');
+        let valid = !host.is_empty()
+            && host
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'.' || byte == b'-');
         valid.then(|| format!("wss://{host}"))
     }
 
@@ -178,11 +194,18 @@ pub fn after_link(lasted: Duration, attempts: u32) -> (Duration, u32) {
     if lasted >= LINK_WAS_FINE {
         return (RelayError::Unreachable(String::new()).backoff(0), 0);
     }
-    (RelayError::Unreachable(String::new()).backoff(attempts), attempts.saturating_add(1))
+    (
+        RelayError::Unreachable(String::new()).backoff(attempts),
+        attempts.saturating_add(1),
+    )
 }
 
 pub fn box_url(base: &str, box_key: &[u8; 32]) -> String {
-    format!("{}/v1/boxes/{}", base.trim_end_matches('/'), URL_SAFE_NO_PAD.encode(box_key))
+    format!(
+        "{}/v1/boxes/{}",
+        base.trim_end_matches('/'),
+        URL_SAFE_NO_PAD.encode(box_key)
+    )
 }
 
 pub fn signed_message(role: &str, box_id: &str, nonce: &str) -> Vec<u8> {
@@ -219,12 +242,19 @@ pub struct Wait<'a> {
 
 /// Connects, proves this computer's key, and asks for the box, waiting on the socket while someone else has
 /// it. On success the returned stream carries the VibeBuddy Protocol as bytes, as the cable does.
-pub async fn link(config: &RelayConfig, box_key: &[u8; 32], wait: Wait<'_>) -> Result<DuplexStream, RelayError> {
+pub async fn link(
+    config: &RelayConfig,
+    box_key: &[u8; 32],
+    wait: Wait<'_>,
+) -> Result<DuplexStream, RelayError> {
     let url = box_url(&config.url(), box_key);
-    let connected = tokio_tungstenite::connect_async_tls_with_config(&url, None, false, Some(connector()?));
+    let connected =
+        tokio_tungstenite::connect_async_tls_with_config(&url, None, false, Some(connector()?));
     let (mut socket, _) = match tokio::time::timeout(HANDSHAKE_TIMEOUT, connected).await {
         Err(_) => return Err(RelayError::Unreachable("timed out".to_owned())),
-        Ok(Err(tokio_tungstenite::tungstenite::Error::Http(response))) if response.status().as_u16() == 429 => {
+        Ok(Err(tokio_tungstenite::tungstenite::Error::Http(response)))
+            if response.status().as_u16() == 429 =>
+        {
             return Err(RelayError::RateLimited);
         }
         Ok(Err(error)) => return Err(RelayError::Unreachable(error.to_string())),
@@ -233,7 +263,12 @@ pub async fn link(config: &RelayConfig, box_key: &[u8; 32], wait: Wait<'_>) -> R
     let presence = wait.presence.clone();
     let memory = wait.memory.clone();
     let session = config.account.as_ref().and_then(|account| account.token());
-    let result = match tokio::time::timeout(HANDSHAKE_TIMEOUT, handshake(&mut socket, &config.identity, box_key, session)).await {
+    let result = match tokio::time::timeout(
+        HANDSHAKE_TIMEOUT,
+        handshake(&mut socket, &config.identity, box_key, session),
+    )
+    .await
+    {
         Err(_) => Err(RelayError::Unreachable("handshake timed out".to_owned())),
         Ok(Err(error)) => Err(error),
         Ok(Ok(())) => wait_for_box(&mut socket, wait).await,
@@ -245,7 +280,16 @@ pub async fn link(config: &RelayConfig, box_key: &[u8; 32], wait: Wait<'_>) -> R
         Err(_) => {}
     }
     match result {
-        Ok(()) => Ok(bridge(socket, presence, Noise { identity: config.identity.clone(), box_key: *box_key, memory }, config.clone())),
+        Ok(()) => Ok(bridge(
+            socket,
+            presence,
+            Noise {
+                identity: config.identity.clone(),
+                box_key: *box_key,
+                memory,
+            },
+            config.clone(),
+        )),
         Err(error) => {
             close_normally(&mut socket).await;
             Err(error)
@@ -260,7 +304,11 @@ where
         + futures_util::Sink<Message, Error = tokio_tungstenite::tungstenite::Error>
         + Unpin,
 {
-    let first = if wait.takeover.swap(false, Ordering::Relaxed) { "takeover" } else { "link" };
+    let first = if wait.takeover.swap(false, Ordering::Relaxed) {
+        "takeover"
+    } else {
+        "link"
+    };
     send(socket, json!({"t": first})).await?;
     let mut tick = tokio::time::interval(Duration::from_secs(1));
     let mut pinged = tokio::time::Instant::now();
@@ -311,14 +359,22 @@ async fn close_normally<S>(socket: &mut S)
 where
     S: futures_util::Sink<Message, Error = tokio_tungstenite::tungstenite::Error> + Unpin,
 {
-    let frame = CloseFrame { code: tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::Normal, reason: "".into() };
+    let frame = CloseFrame {
+        code: tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::Normal,
+        reason: "".into(),
+    };
     let _ = socket.send(Message::Close(Some(frame))).await;
     let _ = socket.close().await;
 }
 
 /// `session` is the account's, outside the signature: the Relay asks the service whether its account is on the Paid
 /// plan.
-async fn handshake<S>(socket: &mut S, identity: &Identity, box_key: &[u8; 32], session: Option<String>) -> Result<(), RelayError>
+async fn handshake<S>(
+    socket: &mut S,
+    identity: &Identity,
+    box_key: &[u8; 32],
+    session: Option<String>,
+) -> Result<(), RelayError>
 where
     S: futures_util::Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>>
         + futures_util::Sink<Message, Error = tokio_tungstenite::tungstenite::Error>
@@ -345,7 +401,9 @@ where
     loop {
         match socket.next().await {
             Some(Ok(Message::Text(text))) => {
-                let Ok(value) = serde_json::from_str::<Value>(&text) else { continue };
+                let Ok(value) = serde_json::from_str::<Value>(&text) else {
+                    continue;
+                };
                 let kind = value["t"].as_str().unwrap_or_default();
                 if wanted.contains(&kind) {
                     return Ok(value);
@@ -390,7 +448,10 @@ async fn send<S>(socket: &mut S, value: Value) -> Result<(), RelayError>
 where
     S: futures_util::Sink<Message, Error = tokio_tungstenite::tungstenite::Error> + Unpin,
 {
-    socket.send(Message::text(value.to_string())).await.map_err(|error| RelayError::Unreachable(error.to_string()))
+    socket
+        .send(Message::text(value.to_string()))
+        .await
+        .map_err(|error| RelayError::Unreachable(error.to_string()))
 }
 
 /// What the bridge needs for a session with the box.
@@ -422,14 +483,24 @@ const HANDSHAKE_AGAIN_AFTER: Duration = Duration::from_secs(10);
 /// Runs the linked socket behind a byte stream: lines written to the stream go out as `data`, `data`
 /// from the box comes back as lines, sealed once the box opens a session. The stream ends when the box
 /// is taken away, the Relay closes, a sealed line doesn't open, or the Relay goes quiet for [`DEAD_AFTER`].
-fn bridge(socket: Socket, presence: Arc<dyn Fn(bool) + Send + Sync>, noise: Noise, config: RelayConfig) -> DuplexStream {
+fn bridge(
+    socket: Socket,
+    presence: Arc<dyn Fn(bool) + Send + Sync>,
+    noise: Noise,
+    config: RelayConfig,
+) -> DuplexStream {
     let (ours, theirs) = tokio::io::duplex(64 * 1024);
     tokio::spawn(run_bridge(socket, theirs, presence, noise, config));
     ours
 }
 
-async fn run_bridge<S>(socket: S, stream: DuplexStream, presence: Arc<dyn Fn(bool) + Send + Sync>, noise: Noise, config: RelayConfig)
-where
+async fn run_bridge<S>(
+    socket: S,
+    stream: DuplexStream,
+    presence: Arc<dyn Fn(bool) + Send + Sync>,
+    noise: Noise,
+    config: RelayConfig,
+) where
     S: futures_util::Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>>
         + futures_util::Sink<Message, Error = tokio_tungstenite::tungstenite::Error>
         + Unpin,
@@ -442,10 +513,20 @@ where
     let mut heard = tokio::time::Instant::now();
     // The Relay links a computer even while the box is away; its first status says whether it is there.
     let mut box_here = true;
-    let knows_noise = || noise.memory.as_ref().is_some_and(|memory| memory.knows(&noise.box_key));
-    let mut mode = if knows_noise() { Mode::Waiting } else { Mode::Clear };
+    let knows_noise = || {
+        noise
+            .memory
+            .as_ref()
+            .is_some_and(|memory| memory.knows(&noise.box_key))
+    };
+    let mut mode = if knows_noise() {
+        Mode::Waiting
+    } else {
+        Mode::Clear
+    };
     let mut held: std::collections::VecDeque<String> = std::collections::VecDeque::new();
-    let hello = serde_json::to_string(&vibebuddy_protocol::Event::named("device.hello")).unwrap_or_default();
+    let hello = serde_json::to_string(&vibebuddy_protocol::Event::named("device.hello"))
+        .unwrap_or_default();
     let data = |line: &str| Message::text(json!({"t": "data", "line": line}).to_string());
     // When this side last started a handshake, or the link (re)started; and whether it has started one since.
     let mut attempt = (tokio::time::Instant::now(), false);
@@ -660,7 +741,11 @@ mod tests {
     fn identity() -> Identity {
         let mut suffix = [0u8; 4];
         getrandom::fill(&mut suffix).unwrap();
-        let dir = std::env::temp_dir().join(format!("vibebuddy-relay-test-{}-{}", std::process::id(), u32::from_le_bytes(suffix)));
+        let dir = std::env::temp_dir().join(format!(
+            "vibebuddy-relay-test-{}-{}",
+            std::process::id(),
+            u32::from_le_bytes(suffix)
+        ));
         Identity::load_or_create(&dir.join("identity"), "test".to_owned()).unwrap()
     }
 
@@ -672,40 +757,77 @@ mod tests {
             let (stream, _) = listener.accept().await.unwrap();
             let mut socket = accept_async(stream).await.unwrap();
             let say = |value: Value| Message::text(value.to_string());
-            socket.send(say(json!({"t": "challenge", "nonce": "abc"}))).await.unwrap();
-            let Some(Ok(Message::Text(hello))) = socket.next().await else { return };
+            socket
+                .send(say(json!({"t": "challenge", "nonce": "abc"})))
+                .await
+                .unwrap();
+            let Some(Ok(Message::Text(hello))) = socket.next().await else {
+                return;
+            };
             let hello: Value = serde_json::from_str(&hello).unwrap();
-            let key = URL_SAFE_NO_PAD.decode(hello["key"].as_str().unwrap()).unwrap();
-            let sig = URL_SAFE_NO_PAD.decode(hello["sig"].as_str().unwrap()).unwrap();
-            let verifying = ed25519_dalek::VerifyingKey::from_bytes(&key.try_into().unwrap()).unwrap();
+            let key = URL_SAFE_NO_PAD
+                .decode(hello["key"].as_str().unwrap())
+                .unwrap();
+            let sig = URL_SAFE_NO_PAD
+                .decode(hello["sig"].as_str().unwrap())
+                .unwrap();
+            let verifying =
+                ed25519_dalek::VerifyingKey::from_bytes(&key.try_into().unwrap()).unwrap();
             let box_id = URL_SAFE_NO_PAD.encode([5u8; 32]);
             let valid = verifying
-                .verify_strict(&signed_message("computer", &box_id, "abc"), &ed25519_dalek::Signature::from_bytes(&sig.try_into().unwrap()))
+                .verify_strict(
+                    &signed_message("computer", &box_id, "abc"),
+                    &ed25519_dalek::Signature::from_bytes(&sig.try_into().unwrap()),
+                )
                 .is_ok();
             if !valid {
-                socket.send(say(json!({"t": "error", "code": "auth"}))).await.unwrap();
+                socket
+                    .send(say(json!({"t": "error", "code": "auth"})))
+                    .await
+                    .unwrap();
                 return;
             }
             socket.send(say(json!({"t": "welcome"}))).await.unwrap();
-            socket.send(say(json!({"t": "status", "box": true, "owner": null}))).await.unwrap();
-            let Some(Ok(Message::Text(_link))) = socket.next().await else { return };
+            socket
+                .send(say(json!({"t": "status", "box": true, "owner": null})))
+                .await
+                .unwrap();
+            let Some(Ok(Message::Text(_link))) = socket.next().await else {
+                return;
+            };
             match answer {
                 // Linked; then the box loses power and comes back.
                 "away" => {
                     socket.send(say(json!({"t": "linked"}))).await.unwrap();
                     socket.send(say(json!({"t": "status", "box": false, "owner": {"key": "k", "name": "n", "via": "relay", "linked": true}}))).await.unwrap();
                     socket.send(say(json!({"t": "linked"}))).await.unwrap();
-                    socket.send(say(json!({"t": "unlinked", "reason": "takeover"}))).await.unwrap();
+                    socket
+                        .send(say(json!({"t": "unlinked", "reason": "takeover"})))
+                        .await
+                        .unwrap();
                     while socket.next().await.is_some() {}
                 }
                 "busy-forever" => {
-                    socket.send(say(json!({"t": "busy", "reason": "linked", "owner": "omarchy"}))).await.unwrap();
+                    socket
+                        .send(say(
+                            json!({"t": "busy", "reason": "linked", "owner": "omarchy"}),
+                        ))
+                        .await
+                        .unwrap();
                     while socket.next().await.is_some() {}
                 }
                 // Busy first; then the owner leaves, and the daemon asks again on the same socket.
                 "busy" => {
-                    socket.send(say(json!({"t": "busy", "reason": "linked", "owner": "omarchy"}))).await.unwrap();
-                    socket.send(say(json!({"t": "status", "box": true, "owner": null}))).await.unwrap();
+                    socket
+                        .send(say(
+                            json!({"t": "busy", "reason": "linked", "owner": "omarchy"}),
+                        ))
+                        .await
+                        .unwrap();
+                    socket
+                        .send(say(json!({"t": "status", "box": true, "owner": null})))
+                        .await
+                        .unwrap();
                     while let Some(Ok(Message::Text(text))) = socket.next().await {
                         if serde_json::from_str::<Value>(&text).unwrap()["t"] == "link" {
                             break;
@@ -717,21 +839,39 @@ mod tests {
                 _ => {
                     socket.send(say(json!({"t": "linked"}))).await.unwrap();
                     while let Some(Ok(message)) = socket.next().await {
-                        let Message::Text(text) = message else { continue };
+                        let Message::Text(text) = message else {
+                            continue;
+                        };
                         let value: Value = serde_json::from_str(&text).unwrap();
                         if value["t"] == "data" {
                             let line = value["line"].as_str().unwrap();
-                            if line.contains("device.hello") && line.contains("\"version\"") && !line.contains("VERSION") && answer == "restart" {
+                            if line.contains("device.hello")
+                                && line.contains("\"version\"")
+                                && !line.contains("VERSION")
+                                && answer == "restart"
+                            {
                                 // The bridge said hello again after the box came back: end the test there.
-                                socket.send(say(json!({"t": "data", "line": "REHELLO"}))).await.unwrap();
-                                socket.send(say(json!({"t": "unlinked", "reason": "takeover"}))).await.unwrap();
+                                socket
+                                    .send(say(json!({"t": "data", "line": "REHELLO"})))
+                                    .await
+                                    .unwrap();
+                                socket
+                                    .send(say(json!({"t": "unlinked", "reason": "takeover"})))
+                                    .await
+                                    .unwrap();
                                 continue;
                             }
-                            socket.send(say(json!({"t": "data", "line": line.to_uppercase()}))).await.unwrap();
+                            socket
+                                .send(say(json!({"t": "data", "line": line.to_uppercase()})))
+                                .await
+                                .unwrap();
                             if answer == "restart" {
                                 socket.send(say(json!({"t": "linked"}))).await.unwrap();
                             } else {
-                                socket.send(say(json!({"t": "unlinked", "reason": "takeover"}))).await.unwrap();
+                                socket
+                                    .send(say(json!({"t": "unlinked", "reason": "takeover"})))
+                                    .await
+                                    .unwrap();
                             }
                         }
                     }
@@ -745,27 +885,58 @@ mod tests {
     async fn link_now(config: &RelayConfig) -> Result<DuplexStream, RelayError> {
         let takeover = AtomicBool::new(false);
         let mut busy = |_: String, _: String| {};
-        link(config, &[5; 32], Wait { takeover: &takeover, busy: &mut busy, give_up: &|| false, presence: Arc::new(|_| {}), memory: None }).await
+        link(
+            config,
+            &[5; 32],
+            Wait {
+                takeover: &takeover,
+                busy: &mut busy,
+                give_up: &|| false,
+                presence: Arc::new(|_| {}),
+                memory: None,
+            },
+        )
+        .await
     }
 
     #[tokio::test]
     async fn lines_go_through_the_relay_both_ways_until_the_box_is_taken() {
-        let config = RelayConfig::new(Arc::new(identity()), Some(fake_relay("linked").await), false);
+        let config = RelayConfig::new(
+            Arc::new(identity()),
+            Some(fake_relay("linked").await),
+            false,
+        );
         let mut stream = link_now(&config).await.unwrap();
-        stream.write_all(b"{\"version\":1,\"event\":\"device.hello\"}\n").await.unwrap();
+        stream
+            .write_all(b"{\"version\":1,\"event\":\"device.hello\"}\n")
+            .await
+            .unwrap();
         let mut received = String::new();
         stream.read_to_string(&mut received).await.unwrap();
-        assert_eq!(received, "{\"VERSION\":1,\"EVENT\":\"DEVICE.HELLO\"}\n", "and then the stream ends on unlinked");
+        assert_eq!(
+            received, "{\"VERSION\":1,\"EVENT\":\"DEVICE.HELLO\"}\n",
+            "and then the stream ends on unlinked"
+        );
     }
 
     #[tokio::test]
     async fn the_box_coming_back_starts_the_session_over() {
-        let config = RelayConfig::new(Arc::new(identity()), Some(fake_relay("restart").await), false);
+        let config = RelayConfig::new(
+            Arc::new(identity()),
+            Some(fake_relay("restart").await),
+            false,
+        );
         let mut stream = link_now(&config).await.unwrap();
-        stream.write_all(b"{\"version\":1,\"event\":\"x\"}\n").await.unwrap();
+        stream
+            .write_all(b"{\"version\":1,\"event\":\"x\"}\n")
+            .await
+            .unwrap();
         let mut received = String::new();
         stream.read_to_string(&mut received).await.unwrap();
-        assert!(received.ends_with("REHELLO\n"), "hello went out again after linked: {received}");
+        assert!(
+            received.ends_with("REHELLO\n"),
+            "hello went out again after linked: {received}"
+        );
     }
 
     #[tokio::test]
@@ -774,9 +945,23 @@ mod tests {
         let takeover = AtomicBool::new(false);
         let owners = std::sync::Mutex::new(Vec::new());
         let mut busy = |owner: String, reason: String| owners.lock().unwrap().push((owner, reason));
-        let linked = link(&config, &[5; 32], Wait { takeover: &takeover, busy: &mut busy, give_up: &|| false, presence: Arc::new(|_| {}), memory: None }).await;
+        let linked = link(
+            &config,
+            &[5; 32],
+            Wait {
+                takeover: &takeover,
+                busy: &mut busy,
+                give_up: &|| false,
+                presence: Arc::new(|_| {}),
+                memory: None,
+            },
+        )
+        .await;
         assert!(linked.is_ok());
-        assert_eq!(owners.lock().unwrap().as_slice(), [("omarchy".to_owned(), "linked".to_owned())]);
+        assert_eq!(
+            owners.lock().unwrap().as_slice(),
+            [("omarchy".to_owned(), "linked".to_owned())]
+        );
     }
 
     #[tokio::test]
@@ -786,8 +971,21 @@ mod tests {
         let mut busy = |_: String, _: String| {};
         let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
         let record = seen.clone();
-        let presence: Arc<dyn Fn(bool) + Send + Sync> = Arc::new(move |here| record.lock().unwrap().push(here));
-        let mut stream = link(&config, &[5; 32], Wait { takeover: &takeover, busy: &mut busy, give_up: &|| false, presence, memory: None }).await.unwrap();
+        let presence: Arc<dyn Fn(bool) + Send + Sync> =
+            Arc::new(move |here| record.lock().unwrap().push(here));
+        let mut stream = link(
+            &config,
+            &[5; 32],
+            Wait {
+                takeover: &takeover,
+                busy: &mut busy,
+                give_up: &|| false,
+                presence,
+                memory: None,
+            },
+        )
+        .await
+        .unwrap();
         let mut rest = String::new();
         stream.read_to_string(&mut rest).await.unwrap();
         assert_eq!(seen.lock().unwrap().as_slice(), [false, true]);
@@ -795,10 +993,25 @@ mod tests {
 
     #[tokio::test]
     async fn waiting_stops_when_no_longer_needed() {
-        let config = RelayConfig::new(Arc::new(identity()), Some(fake_relay("busy-forever").await), false);
+        let config = RelayConfig::new(
+            Arc::new(identity()),
+            Some(fake_relay("busy-forever").await),
+            false,
+        );
         let takeover = AtomicBool::new(false);
         let mut busy = |_: String, _: String| {};
-        let result = link(&config, &[5; 32], Wait { takeover: &takeover, busy: &mut busy, give_up: &|| true, presence: Arc::new(|_| {}), memory: None }).await;
+        let result = link(
+            &config,
+            &[5; 32],
+            Wait {
+                takeover: &takeover,
+                busy: &mut busy,
+                give_up: &|| true,
+                presence: Arc::new(|_| {}),
+                memory: None,
+            },
+        )
+        .await;
         assert!(matches!(result, Err(RelayError::Unreachable(_))));
     }
 
@@ -816,16 +1029,30 @@ mod tests {
                 let (stream, _) = listener.accept().await.unwrap();
                 let mut socket = accept_async(stream).await.unwrap();
                 let say = |value: Value| Message::text(value.to_string());
-                socket.send(say(json!({"t": "challenge", "nonce": "abc"}))).await.unwrap();
-                let Some(Ok(Message::Text(hello))) = socket.next().await else { continue };
-                record.lock().unwrap().push(serde_json::from_str::<Value>(&hello).unwrap());
+                socket
+                    .send(say(json!({"t": "challenge", "nonce": "abc"})))
+                    .await
+                    .unwrap();
+                let Some(Ok(Message::Text(hello))) = socket.next().await else {
+                    continue;
+                };
+                record
+                    .lock()
+                    .unwrap()
+                    .push(serde_json::from_str::<Value>(&hello).unwrap());
                 let refuse = |code: &'static str| {
                     let close = match code {
                         "signed_out" => 4006,
                         "plan" => 4007,
                         _ => 1013,
                     };
-                    (say(json!({"t": "error", "code": code})), Message::Close(Some(CloseFrame { code: close.into(), reason: code.into() })))
+                    (
+                        say(json!({"t": "error", "code": code})),
+                        Message::Close(Some(CloseFrame {
+                            code: close.into(),
+                            reason: code.into(),
+                        })),
+                    )
                 };
                 let answer = answers.pop_front();
                 if let Some(code @ ("signed_out" | "plan" | "unavailable")) = answer {
@@ -852,25 +1079,44 @@ mod tests {
     fn scratch(name: &str) -> std::path::PathBuf {
         let mut suffix = [0u8; 4];
         getrandom::fill(&mut suffix).unwrap();
-        std::env::temp_dir().join(format!("vibebuddy-relay-{name}-{}-{}", std::process::id(), u32::from_le_bytes(suffix)))
+        std::env::temp_dir().join(format!(
+            "vibebuddy-relay-{name}-{}-{}",
+            std::process::id(),
+            u32::from_le_bytes(suffix)
+        ))
     }
 
     #[tokio::test]
     async fn hello_carries_the_session_outside_the_signature() {
         let (url, hellos) = plan_relay(Vec::new()).await;
-        let account = Arc::new(crate::account::signed_in_for_tests(&scratch("session"), "tok_relay"));
-        let config = RelayConfig::new(Arc::new(identity()), Some(url.clone()), false).with_account(account);
+        let account = Arc::new(crate::account::signed_in_for_tests(
+            &scratch("session"),
+            "tok_relay",
+        ));
+        let config =
+            RelayConfig::new(Arc::new(identity()), Some(url.clone()), false).with_account(account);
         let _stream = link_now(&config).await.unwrap();
         let hello = hellos.lock().unwrap()[0].clone();
         assert_eq!(hello["session"], "tok_relay");
         assert!(hello["sig"].is_string() && hello["key"].is_string());
         // The signature is over the same message as before: fake_relay checks it and doesn't know the session.
-        let config = RelayConfig::new(Arc::new(identity()), Some(fake_relay("linked").await), false).with_account(Arc::new(crate::account::signed_in_for_tests(&scratch("sig"), "t")));
+        let config = RelayConfig::new(
+            Arc::new(identity()),
+            Some(fake_relay("linked").await),
+            false,
+        )
+        .with_account(Arc::new(crate::account::signed_in_for_tests(
+            &scratch("sig"),
+            "t",
+        )));
         assert!(link_now(&config).await.is_ok());
         // Signed out, there is none.
         let (url, hellos) = plan_relay(vec!["signed_out"]).await;
         let config = RelayConfig::new(Arc::new(identity()), Some(url), false);
-        assert_eq!(link_now(&config).await.err(), Some(RelayError::Account("signed_out".to_owned())));
+        assert_eq!(
+            link_now(&config).await.err(),
+            Some(RelayError::Account("signed_out".to_owned()))
+        );
         assert!(hellos.lock().unwrap()[0].get("session").is_none());
     }
 
@@ -878,9 +1124,13 @@ mod tests {
     async fn turned_away_for_the_plan_it_waits_until_a_read_finds_the_paid_plan() {
         let (url, hellos) = plan_relay(vec!["plan"]).await;
         let account = Arc::new(crate::account::signed_in_for_tests(&scratch("plan"), "tok"));
-        let config = RelayConfig::new(Arc::new(identity()), Some(url), false).with_account(account.clone());
+        let config =
+            RelayConfig::new(Arc::new(identity()), Some(url), false).with_account(account.clone());
         let mut refusals = config.watch_refusal();
-        assert_eq!(link_now(&config).await.err(), Some(RelayError::Account("plan".to_owned())));
+        assert_eq!(
+            link_now(&config).await.err(),
+            Some(RelayError::Account("plan".to_owned()))
+        );
         assert_eq!(config.refused().as_deref(), Some("plan"));
         assert!(config.waits_for_account() && refusals.has_changed().unwrap());
         refusals.mark_unchanged();
@@ -890,16 +1140,27 @@ mod tests {
         account.read_plan_for_tests("paid");
         assert!(!config.waits_for_account() && config.refused().is_none());
         assert!(link_now(&config).await.is_ok());
-        assert_eq!(hellos.lock().unwrap().len(), 2, "one try for the refusal, one after the plan changed");
+        assert_eq!(
+            hellos.lock().unwrap().len(),
+            2,
+            "one try for the refusal, one after the plan changed"
+        );
         assert!(refusals.has_changed().unwrap() && config.refused().is_none());
     }
 
     #[tokio::test]
     async fn turned_away_signed_out_it_waits_for_the_account_and_unavailable_only_backs_off() {
         let (url, _) = plan_relay(vec!["signed_out", "unavailable"]).await;
-        let account = Arc::new(crate::account::signed_in_for_tests(&scratch("signed-out"), "unknown"));
-        let config = RelayConfig::new(Arc::new(identity()), Some(url), false).with_account(account.clone());
-        assert_eq!(link_now(&config).await.err(), Some(RelayError::Account("signed_out".to_owned())));
+        let account = Arc::new(crate::account::signed_in_for_tests(
+            &scratch("signed-out"),
+            "unknown",
+        ));
+        let config =
+            RelayConfig::new(Arc::new(identity()), Some(url), false).with_account(account.clone());
+        assert_eq!(
+            link_now(&config).await.err(),
+            Some(RelayError::Account("signed_out".to_owned()))
+        );
         assert!(config.waits_for_account());
         account.forget();
         assert!(!config.waits_for_account());
@@ -913,7 +1174,10 @@ mod tests {
     #[tokio::test]
     async fn a_plan_that_ends_while_linked_ends_the_link_and_the_next_try_waits() {
         let (url, _) = plan_relay(vec!["ended-plan"]).await;
-        let account = Arc::new(crate::account::signed_in_for_tests(&scratch("ended"), "tok"));
+        let account = Arc::new(crate::account::signed_in_for_tests(
+            &scratch("ended"),
+            "tok",
+        ));
         let config = RelayConfig::new(Arc::new(identity()), Some(url), false).with_account(account);
         let mut stream = link_now(&config).await.unwrap();
         let mut rest = String::new();
@@ -923,10 +1187,22 @@ mod tests {
 
     #[test]
     fn the_refusal_close_codes_are_known() {
-        let frame = |code: u16| CloseFrame { code: code.into(), reason: "".into() };
-        assert_eq!(closed(Some(&frame(4006))), RelayError::Account("signed_out".to_owned()));
-        assert_eq!(closed(Some(&frame(4007))), RelayError::Account("plan".to_owned()));
-        assert_eq!(closed(Some(&frame(1013))), RelayError::Refused("unavailable".to_owned()));
+        let frame = |code: u16| CloseFrame {
+            code: code.into(),
+            reason: "".into(),
+        };
+        assert_eq!(
+            closed(Some(&frame(4006))),
+            RelayError::Account("signed_out".to_owned())
+        );
+        assert_eq!(
+            closed(Some(&frame(4007))),
+            RelayError::Account("plan".to_owned())
+        );
+        assert_eq!(
+            closed(Some(&frame(1013))),
+            RelayError::Refused("unavailable".to_owned())
+        );
     }
 
     #[test]
@@ -939,7 +1215,11 @@ mod tests {
             attempts = next;
         }
         assert!(total > Duration::from_secs(60 * 30 / 30), "{total:?}");
-        assert_eq!(after_link(Duration::from_secs(600), 7), (Duration::from_secs(2), 0), "a long link starts over");
+        assert_eq!(
+            after_link(Duration::from_secs(600), 7),
+            (Duration::from_secs(2), 0),
+            "a long link starts over"
+        );
     }
 
     #[test]
@@ -958,7 +1238,11 @@ mod tests {
         assert_eq!(config.url(), PRODUCTION_URL, "never off TLS");
         config.offer("wss://relay2.korekore.ai");
         assert_eq!(config.url(), "wss://relay2.korekore.ai");
-        let fixed = RelayConfig::new(Arc::new(identity()), Some("ws://127.0.0.1:8787".to_owned()), true);
+        let fixed = RelayConfig::new(
+            Arc::new(identity()),
+            Some("ws://127.0.0.1:8787".to_owned()),
+            true,
+        );
         fixed.offer("wss://relay2.korekore.ai");
         assert_eq!(fixed.url(), "ws://127.0.0.1:8787");
     }
@@ -973,8 +1257,14 @@ mod tests {
 
     #[test]
     fn the_box_is_given_only_a_wss_host() {
-        let config = |url: &str| RelayConfig::new(Arc::new(identity()), Some(url.to_owned()), false);
-        assert_eq!(config("wss://relay-staging.korekore.ai/").for_box().as_deref(), Some(STAGING_URL));
+        let config =
+            |url: &str| RelayConfig::new(Arc::new(identity()), Some(url.to_owned()), false);
+        assert_eq!(
+            config("wss://relay-staging.korekore.ai/")
+                .for_box()
+                .as_deref(),
+            Some(STAGING_URL)
+        );
         assert_eq!(config("ws://127.0.0.1:8787").for_box(), None);
         assert_eq!(config("wss://127.0.0.1:8787").for_box(), None);
     }
@@ -982,23 +1272,39 @@ mod tests {
     #[test]
     fn an_old_protocol_is_not_retried() {
         assert!(RelayError::Upgrade.backoff(0) > Duration::from_secs(300 * 24 * 3600));
-        assert_eq!(closed(Some(&CloseFrame { code: 4005.into(), reason: "".into() })), RelayError::Upgrade);
+        assert_eq!(
+            closed(Some(&CloseFrame {
+                code: 4005.into(),
+                reason: "".into()
+            })),
+            RelayError::Upgrade
+        );
     }
 
     #[test]
     fn the_url_names_the_box() {
-        assert_eq!(box_url("wss://relay.korekore.ai/", &[0; 32]), "wss://relay.korekore.ai/v1/boxes/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+        assert_eq!(
+            box_url("wss://relay.korekore.ai/", &[0; 32]),
+            "wss://relay.korekore.ai/v1/boxes/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        );
     }
 
     /// A Relay with a box behind it that speaks Noise, played by the firmware's own code: it opens a session
     /// when linked, then answers every sealed line with the line in upper case, sealed. What it saw in the clear
     /// goes to `clear`.
-    async fn noise_relay(computer: [u8; 32], clear: Arc<std::sync::Mutex<Vec<String>>>) -> (String, [u8; 32]) {
+    async fn noise_relay(
+        computer: [u8; 32],
+        clear: Arc<std::sync::Mutex<Vec<String>>>,
+    ) -> (String, [u8; 32]) {
         noise_relay_opening(computer, clear, true).await
     }
 
     /// [`noise_relay`], with `opens` false for a box that never says link.noise, as one that missed `linked`.
-    async fn noise_relay_opening(computer: [u8; 32], clear: Arc<std::sync::Mutex<Vec<String>>>, opens: bool) -> (String, [u8; 32]) {
+    async fn noise_relay_opening(
+        computer: [u8; 32],
+        clear: Arc<std::sync::Mutex<Vec<String>>>,
+        opens: bool,
+    ) -> (String, [u8; 32]) {
         use vibebuddy_firmware_core::link::Link;
         use vibebuddy_firmware_core::noise;
         let mut link = Link::new([1; 32]);
@@ -1010,24 +1316,39 @@ mod tests {
             let (stream, _) = listener.accept().await.unwrap();
             let mut socket = accept_async(stream).await.unwrap();
             let say = |value: Value| Message::text(value.to_string());
-            socket.send(say(json!({"t": "challenge", "nonce": "abc"}))).await.unwrap();
+            socket
+                .send(say(json!({"t": "challenge", "nonce": "abc"})))
+                .await
+                .unwrap();
             let _hello = socket.next().await;
             socket.send(say(json!({"t": "welcome"}))).await.unwrap();
             let _link = socket.next().await;
             socket.send(say(json!({"t": "linked"}))).await.unwrap();
             if opens {
-                socket.send(say(json!({"t": "data", "line": noise::opener(&link.public_key())}))).await.unwrap();
+                socket
+                    .send(say(
+                        json!({"t": "data", "line": noise::opener(&link.public_key())}),
+                    ))
+                    .await
+                    .unwrap();
             }
             let mut session = None;
             while let Some(Ok(message)) = socket.next().await {
-                let Message::Text(text) = message else { continue };
+                let Message::Text(text) = message else {
+                    continue;
+                };
                 let value: Value = serde_json::from_str(&text).unwrap();
-                let Some(line) = value["line"].as_str() else { continue };
+                let Some(line) = value["line"].as_str() else {
+                    continue;
+                };
                 match &mut session {
                     // As the firmware does, anything before the handshake is never acted on.
                     None => match noise::accept(&link, [4; 32], line.as_bytes()) {
                         Ok(accepted) => {
-                            socket.send(say(json!({"t": "data", "line": accepted.reply}))).await.unwrap();
+                            socket
+                                .send(say(json!({"t": "data", "line": accepted.reply})))
+                                .await
+                                .unwrap();
                             session = Some((accepted.sealer, accepted.opener));
                         }
                         Err(_) => clear.lock().unwrap().push(line.to_owned()),
@@ -1040,7 +1361,10 @@ mod tests {
                         let upper = String::from_utf8(plain).unwrap().to_uppercase();
                         socket.send(say(json!({"t": "data", "line": sealer.seal(upper.as_bytes()).unwrap()}))).await.unwrap();
                         if upper.contains("BYE") {
-                            socket.send(say(json!({"t": "unlinked", "reason": "takeover"}))).await.unwrap();
+                            socket
+                                .send(say(json!({"t": "unlinked", "reason": "takeover"})))
+                                .await
+                                .unwrap();
                         }
                     }
                 }
@@ -1050,7 +1374,11 @@ mod tests {
     }
 
     fn computer_key(identity: &Identity) -> [u8; 32] {
-        URL_SAFE_NO_PAD.decode(identity.public_key()).unwrap().try_into().unwrap()
+        URL_SAFE_NO_PAD
+            .decode(identity.public_key())
+            .unwrap()
+            .try_into()
+            .unwrap()
     }
 
     #[tokio::test]
@@ -1059,55 +1387,106 @@ mod tests {
         let clear = Arc::new(std::sync::Mutex::new(Vec::new()));
         let (url, box_key) = noise_relay(computer_key(&identity), clear.clone()).await;
         let config = RelayConfig::new(identity, Some(url), false);
-        let dir = std::env::temp_dir().join(format!("vibebuddy-relay-noise-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("vibebuddy-relay-noise-{}", std::process::id()));
         let memory = Memory::new(&dir);
         memory.learned(&box_key);
         let takeover = AtomicBool::new(false);
         let mut busy = |_: String, _: String| {};
-        let wait = Wait { takeover: &takeover, busy: &mut busy, give_up: &|| false, presence: Arc::new(|_| {}), memory: Some(memory.clone()) };
+        let wait = Wait {
+            takeover: &takeover,
+            busy: &mut busy,
+            give_up: &|| false,
+            presence: Arc::new(|_| {}),
+            memory: Some(memory.clone()),
+        };
         let mut stream = link(&config, &box_key, wait).await.unwrap();
         // Written before the session is up: held, then sealed after the hello the bridge sends first.
-        stream.write_all(b"{\"version\":1,\"event\":\"bye\"}\n").await.unwrap();
+        stream
+            .write_all(b"{\"version\":1,\"event\":\"bye\"}\n")
+            .await
+            .unwrap();
         let mut received = String::new();
         stream.read_to_string(&mut received).await.unwrap();
-        assert_eq!(received, "{\"VERSION\":1,\"EVENT\":\"DEVICE.HELLO\"}\n{\"VERSION\":1,\"EVENT\":\"BYE\"}\n");
-        assert!(clear.lock().unwrap().is_empty(), "nothing went in the clear: {:?}", clear.lock().unwrap());
+        assert_eq!(
+            received,
+            "{\"VERSION\":1,\"EVENT\":\"DEVICE.HELLO\"}\n{\"VERSION\":1,\"EVENT\":\"BYE\"}\n"
+        );
+        assert!(
+            clear.lock().unwrap().is_empty(),
+            "nothing went in the clear: {:?}",
+            clear.lock().unwrap()
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
     #[tokio::test]
     async fn a_box_that_never_opens_gets_a_handshake_from_this_side() {
         let identity = Arc::new(identity());
-        let (url, box_key) = noise_relay_opening(computer_key(&identity), Arc::new(std::sync::Mutex::new(Vec::new())), false).await;
+        let (url, box_key) = noise_relay_opening(
+            computer_key(&identity),
+            Arc::new(std::sync::Mutex::new(Vec::new())),
+            false,
+        )
+        .await;
         let config = RelayConfig::new(identity, Some(url), false);
-        let dir = std::env::temp_dir().join(format!("vibebuddy-relay-nudge-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("vibebuddy-relay-nudge-{}", std::process::id()));
         let memory = Memory::new(&dir);
         memory.learned(&box_key);
         let takeover = AtomicBool::new(false);
         let mut busy = |_: String, _: String| {};
-        let wait = Wait { takeover: &takeover, busy: &mut busy, give_up: &|| false, presence: Arc::new(|_| {}), memory: Some(memory) };
+        let wait = Wait {
+            takeover: &takeover,
+            busy: &mut busy,
+            give_up: &|| false,
+            presence: Arc::new(|_| {}),
+            memory: Some(memory),
+        };
         let stream = link(&config, &box_key, wait).await.unwrap();
         let mut lines = tokio::io::BufReader::new(stream).lines();
         let started = tokio::time::Instant::now();
-        let first = tokio::time::timeout(Duration::from_secs(10), lines.next_line()).await.expect("a session within seconds");
-        assert_eq!(first.unwrap().unwrap(), "{\"VERSION\":1,\"EVENT\":\"DEVICE.HELLO\"}");
-        assert!(started.elapsed() >= FIRST_HANDSHAKE_AFTER - Duration::from_millis(500), "it gives the box a moment first");
+        let first = tokio::time::timeout(Duration::from_secs(10), lines.next_line())
+            .await
+            .expect("a session within seconds");
+        assert_eq!(
+            first.unwrap().unwrap(),
+            "{\"VERSION\":1,\"EVENT\":\"DEVICE.HELLO\"}"
+        );
+        assert!(
+            started.elapsed() >= FIRST_HANDSHAKE_AFTER - Duration::from_millis(500),
+            "it gives the box a moment first"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
     #[tokio::test]
     async fn a_box_not_yet_known_to_speak_noise_still_gets_a_session_and_is_remembered() {
         let identity = Arc::new(identity());
-        let (url, box_key) = noise_relay(computer_key(&identity), Arc::new(std::sync::Mutex::new(Vec::new()))).await;
+        let (url, box_key) = noise_relay(
+            computer_key(&identity),
+            Arc::new(std::sync::Mutex::new(Vec::new())),
+        )
+        .await;
         let config = RelayConfig::new(identity, Some(url), false);
-        let dir = std::env::temp_dir().join(format!("vibebuddy-relay-learn-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("vibebuddy-relay-learn-{}", std::process::id()));
         let memory = Memory::new(&dir);
         let takeover = AtomicBool::new(false);
         let mut busy = |_: String, _: String| {};
-        let wait = Wait { takeover: &takeover, busy: &mut busy, give_up: &|| false, presence: Arc::new(|_| {}), memory: Some(memory.clone()) };
+        let wait = Wait {
+            takeover: &takeover,
+            busy: &mut busy,
+            give_up: &|| false,
+            presence: Arc::new(|_| {}),
+            memory: Some(memory.clone()),
+        };
         let stream = link(&config, &box_key, wait).await.unwrap();
         let mut lines = tokio::io::BufReader::new(stream).lines();
-        assert_eq!(lines.next_line().await.unwrap().unwrap(), "{\"VERSION\":1,\"EVENT\":\"DEVICE.HELLO\"}");
+        assert_eq!(
+            lines.next_line().await.unwrap().unwrap(),
+            "{\"VERSION\":1,\"EVENT\":\"DEVICE.HELLO\"}"
+        );
         assert!(memory.knows(&box_key), "never in the clear again");
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -1115,18 +1494,39 @@ mod tests {
     #[tokio::test]
     async fn a_box_that_spoke_noise_before_is_never_believed_in_the_clear() {
         // An old-style Relay echoing in the clear, as one that hid the box's link.noise would.
-        let config = RelayConfig::new(Arc::new(identity()), Some(fake_relay("linked").await), false);
-        let dir = std::env::temp_dir().join(format!("vibebuddy-relay-downgrade-{}", std::process::id()));
+        let config = RelayConfig::new(
+            Arc::new(identity()),
+            Some(fake_relay("linked").await),
+            false,
+        );
+        let dir =
+            std::env::temp_dir().join(format!("vibebuddy-relay-downgrade-{}", std::process::id()));
         let memory = Memory::new(&dir);
         memory.learned(&[5; 32]);
         let takeover = AtomicBool::new(false);
         let mut busy = |_: String, _: String| {};
-        let wait = Wait { takeover: &takeover, busy: &mut busy, give_up: &|| false, presence: Arc::new(|_| {}), memory: Some(memory) };
+        let wait = Wait {
+            takeover: &takeover,
+            busy: &mut busy,
+            give_up: &|| false,
+            presence: Arc::new(|_| {}),
+            memory: Some(memory),
+        };
         let mut stream = link(&config, &[5; 32], wait).await.unwrap();
-        stream.write_all(b"{\"version\":1,\"event\":\"device.hello\"}\n").await.unwrap();
+        stream
+            .write_all(b"{\"version\":1,\"event\":\"device.hello\"}\n")
+            .await
+            .unwrap();
         let mut received = String::new();
-        let read = tokio::time::timeout(Duration::from_millis(500), stream.read_to_string(&mut received)).await;
-        assert!(read.is_err() || received.is_empty(), "nothing in the clear came through: {received}");
+        let read = tokio::time::timeout(
+            Duration::from_millis(500),
+            stream.read_to_string(&mut received),
+        )
+        .await;
+        assert!(
+            read.is_err() || received.is_empty(),
+            "nothing in the clear came through: {received}"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 }

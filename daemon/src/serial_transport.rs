@@ -5,12 +5,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use vibebuddy_protocol::Event;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{mpsc, watch};
 use tokio::time::Instant;
 use tokio_serial::{ClearBuffer, SerialPort, SerialPortBuilderExt, SerialPortType, SerialStream};
 use tracing::{debug, info, warn};
+use vibebuddy_protocol::Event;
 
 use crate::lan::{self, LanConfig, LinkError};
 use crate::relay::{self, RelayConfig, RelayError};
@@ -69,15 +69,26 @@ pub enum DeviceMessage {
     Line(String),
     /// `bridge` means we're on the BOX's CH343 UART bridge: writes must be chunked and flashing uses small blocks.
     /// `usb_serial` is the port's USB serial number, when the system knows it.
-    Connected { port: String, bridge: bool, usb_serial: Option<String> },
+    Connected {
+        port: String,
+        bridge: bool,
+        usb_serial: Option<String>,
+    },
     /// Linked over the local network, to the box at this address (ADR-0012). Moving between this and the cable
     /// is not a drop: no Disconnected comes in between.
-    ConnectedNetwork { address: String },
+    ConnectedNetwork {
+        address: String,
+    },
     /// Linked through the Relay at this address (ADR-0012); like ConnectedNetwork, moving to or from it is no drop.
-    ConnectedRelay { url: String },
+    ConnectedRelay {
+        url: String,
+    },
     /// The box is linked to another computer, by name when known; `reason` is `usb` or `linked`. Sent when it
     /// changes, while this computer isn't linked.
-    Busy { owner: String, reason: String },
+    Busy {
+        owner: String,
+        reason: String,
+    },
     /// The box runs other firmware (see [`Firmware::Foreign`]): it's there, but gets nothing written.
     ForeignFirmware,
     /// Several devices could be the box and none is the one remembered, so none is connected until the user picks
@@ -85,7 +96,10 @@ pub enum DeviceMessage {
     Candidates(Vec<Candidate>),
     /// The UART bridge's rate is settled for now: [`FAST_BAUD_RATE`] carries voice commands' audio, 115200 doesn't.
     /// `switches` says whether the firmware answered the request to move (firmware before the switch doesn't).
-    BridgeRate { baud: u32, switches: bool },
+    BridgeRate {
+        baud: u32,
+        switches: bool,
+    },
     Disconnected,
 }
 
@@ -153,8 +167,14 @@ impl SerialConfig {
 
     pub fn pin(&self) -> Option<Pin> {
         match (&self.explicit_port, &self.usb_serial) {
-            (Some(port), _) => Some(Pin { variable: "VIBEBUDDY_SERIAL_PORT", value: port.clone() }),
-            (None, Some(serial)) => Some(Pin { variable: "VIBEBUDDY_USB_SERIAL", value: serial.clone() }),
+            (Some(port), _) => Some(Pin {
+                variable: "VIBEBUDDY_SERIAL_PORT",
+                value: port.clone(),
+            }),
+            (None, Some(serial)) => Some(Pin {
+                variable: "VIBEBUDDY_USB_SERIAL",
+                value: serial.clone(),
+            }),
             (None, None) => None,
         }
     }
@@ -196,8 +216,21 @@ impl SerialTransport {
         let (suspend, suspend_receiver) = watch::channel(false);
         let takeover = config.takeover.clone();
         let relay_enabled = config.relay_enabled.clone();
-        tokio::spawn(serial_worker(config, receiver, device_sender, suspend_receiver));
-        (Self { sender, suspend, takeover, relay_enabled }, device_receiver)
+        tokio::spawn(serial_worker(
+            config,
+            receiver,
+            device_sender,
+            suspend_receiver,
+        ));
+        (
+            Self {
+                sender,
+                suspend,
+                takeover,
+                relay_enabled,
+            },
+            device_receiver,
+        )
     }
 
     /// The user's Relay switch; turned off, a link through the Relay ends within a couple of seconds.
@@ -266,16 +299,25 @@ async fn serial_worker(
         let candidates = match &found {
             Ok(Found::Several(choices)) => choices
                 .iter()
-                .map(|choice| Candidate { port: choice.name.clone(), usb_serial: choice.usb_serial.clone() })
+                .map(|choice| Candidate {
+                    port: choice.name.clone(),
+                    usb_serial: choice.usb_serial.clone(),
+                })
                 .collect(),
             _ => Vec::new(),
         };
         if candidates != offered {
             if !candidates.is_empty() {
-                let ports = candidates.iter().map(|candidate| candidate.port.as_str()).collect::<Vec<_>>().join(", ");
+                let ports = candidates
+                    .iter()
+                    .map(|candidate| candidate.port.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 warn!(%ports, "several devices could be the box and none is the known one; waiting for a choice");
             }
-            let _ = device_event_sender.send(DeviceMessage::Candidates(candidates.clone())).await;
+            let _ = device_event_sender
+                .send(DeviceMessage::Candidates(candidates.clone()))
+                .await;
             offered = candidates;
         }
         let choice = match found {
@@ -286,7 +328,12 @@ async fn serial_worker(
                 None
             }
         };
-        let Some(PortChoice { name: port_name, paced, usb_serial }) = choice else {
+        let Some(PortChoice {
+            name: port_name,
+            paced,
+            usb_serial,
+        }) = choice
+        else {
             // No box on the cable: try the local network, then the Relay, if this computer is paired with a box.
             // Taken here only for the local network; the Relay takes it on its socket, even mid-wait.
             let takeover = config.takeover.load(Ordering::Relaxed);
@@ -302,7 +349,11 @@ async fn serial_worker(
                         info!(address = %target.address, "linked over the local network");
                         busy_logged = None;
                         busy_retry = None;
-                        let _ = device_event_sender.send(DeviceMessage::ConnectedNetwork { address: target.address.clone() }).await;
+                        let _ = device_event_sender
+                            .send(DeviceMessage::ConnectedNetwork {
+                                address: target.address.clone(),
+                            })
+                            .await;
                         linked = true;
                         let end = run_session(
                             &mut stream,
@@ -321,7 +372,9 @@ async fn serial_worker(
                         .await;
                         match end {
                             SessionEnd::Shutdown => return,
-                            SessionEnd::Usb => info!("the box is on the cable, leaving the local network link"),
+                            SessionEnd::Usb => {
+                                info!("the box is on the cable, leaving the local network link")
+                            }
                             _ => {}
                         }
                         continue;
@@ -330,7 +383,9 @@ async fn serial_worker(
                         busy = Some((owner, reason));
                         busy_retry = Some(Instant::now() + BUSY_RETRY);
                     }
-                    Err(error) => debug!(?error, address = %target.address, "no local network link"),
+                    Err(error) => {
+                        debug!(?error, address = %target.address, "no local network link")
+                    }
                 }
             }
             // A box that answered busy on the local network is busy on the Relay too.
@@ -344,7 +399,9 @@ async fn serial_worker(
             {
                 let reported_busy = std::sync::Mutex::new(busy_logged.clone());
                 let mut on_busy = |owner: String, reason: String| {
-                    let mut reported = reported_busy.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let mut reported = reported_busy
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
                     if reported.as_ref() != Some(&format!("{owner}/{reason}")) {
                         info!(%owner, %reason, "the box is linked elsewhere; waiting on the Relay");
                         *reported = Some(format!("{owner}/{reason}"));
@@ -352,18 +409,33 @@ async fn serial_worker(
                     }
                 };
                 // Waiting on the socket ends when the box turns up on the cable or the user turns the Relay off.
-                let give_up = || matches!(find_port(&config), Ok(Found::One(_))) || !config.relay_enabled.load(Ordering::Relaxed);
+                let give_up = || {
+                    matches!(find_port(&config), Ok(Found::One(_)))
+                        || !config.relay_enabled.load(Ordering::Relaxed)
+                };
                 let events = device_event_sender.clone();
                 let url = relay_config.url();
                 let presence: Arc<dyn Fn(bool) + Send + Sync> = Arc::new(move |here| {
-                    let message = if here { DeviceMessage::ConnectedRelay { url: url.clone() } } else { DeviceMessage::Disconnected };
+                    let message = if here {
+                        DeviceMessage::ConnectedRelay { url: url.clone() }
+                    } else {
+                        DeviceMessage::Disconnected
+                    };
                     info!(here, "the box's presence on the Relay changed");
                     let _ = events.try_send(message);
                 });
                 let memory = config.lan.as_ref().map(|lan| lan.memory());
-                let wait = relay::Wait { takeover: &config.takeover, busy: &mut on_busy, give_up: &give_up, presence, memory };
+                let wait = relay::Wait {
+                    takeover: &config.takeover,
+                    busy: &mut on_busy,
+                    give_up: &give_up,
+                    presence,
+                    memory,
+                };
                 let relay_link = relay::link(relay_config, &box_key, wait).await;
-                busy_logged = reported_busy.into_inner().unwrap_or_else(std::sync::PoisonError::into_inner);
+                busy_logged = reported_busy
+                    .into_inner()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 match relay_link {
                     Ok(mut stream) => {
                         let url = relay_config.url();
@@ -372,7 +444,9 @@ async fn serial_worker(
                         busy_retry = None;
                         relay_retry = None;
                         let linked_at = Instant::now();
-                        let _ = device_event_sender.send(DeviceMessage::ConnectedRelay { url: url.clone() }).await;
+                        let _ = device_event_sender
+                            .send(DeviceMessage::ConnectedRelay { url: url.clone() })
+                            .await;
                         linked = true;
                         let end = run_session(
                             &mut stream,
@@ -392,11 +466,14 @@ async fn serial_worker(
                         match end {
                             SessionEnd::Shutdown => return,
                             SessionEnd::Usb => info!("the box is on the cable, leaving the Relay"),
-                            SessionEnd::Lan => info!("the box is on the local network, leaving the Relay"),
+                            SessionEnd::Lan => {
+                                info!("the box is on the local network, leaving the Relay")
+                            }
                             _ => {
                                 // The Relay counts new connections per IP (docs/relay-protocol.md): a link that keeps
                                 // ending right after it starts must not become a tight reconnect loop.
-                                let (wait, attempts) = relay::after_link(linked_at.elapsed(), relay_attempts);
+                                let (wait, attempts) =
+                                    relay::after_link(linked_at.elapsed(), relay_attempts);
                                 relay_retry = Some(Instant::now() + wait);
                                 relay_attempts = attempts;
                             }
@@ -409,7 +486,9 @@ async fn serial_worker(
                         relay_attempts = 0;
                     }
                     Err(RelayError::Upgrade) => {
-                        warn!("the Relay no longer speaks this version of VibeBuddy; update to reach the box through it");
+                        warn!(
+                            "the Relay no longer speaks this version of VibeBuddy; update to reach the box through it"
+                        );
                         relay_retry = Some(Instant::now() + RelayError::Upgrade.backoff(0));
                     }
                     Err(error) => {
@@ -424,7 +503,9 @@ async fn serial_worker(
             {
                 info!(%owner, %reason, "the box is linked elsewhere");
                 busy_logged = Some(format!("{owner}/{reason}"));
-                let _ = device_event_sender.send(DeviceMessage::Busy { owner, reason }).await;
+                let _ = device_event_sender
+                    .send(DeviceMessage::Busy { owner, reason })
+                    .await;
             }
             if linked {
                 let _ = device_event_sender.send(DeviceMessage::Disconnected).await;
@@ -445,7 +526,11 @@ async fn serial_worker(
         info!(port = %port_name, paced, "serial port connected");
         tokio::time::sleep(CONNECT_SETTLE_DELAY).await;
         let _ = device_event_sender
-            .send(DeviceMessage::Connected { port: port_name.clone(), bridge: paced, usb_serial })
+            .send(DeviceMessage::Connected {
+                port: port_name.clone(),
+                bridge: paced,
+                usb_serial,
+            })
             .await;
         linked = true;
 
@@ -454,7 +539,9 @@ async fn serial_worker(
             &port_name,
             paced,
             paced.then_some(set_port_rate as RateSetter<SerialStream>),
-            Firmware::Listening { since: Instant::now() },
+            Firmware::Listening {
+                since: Instant::now(),
+            },
             None,
             None,
             None,
@@ -500,9 +587,13 @@ enum SessionEnd {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Firmware {
     /// Just connected or just reset: nothing is written while the box is listened to.
-    Listening { since: Instant },
+    Listening {
+        since: Instant,
+    },
     /// It said nothing that gives it away: hello alone goes out, and the build should come back.
-    Asked { since: Instant },
+    Asked {
+        since: Instant,
+    },
     Ours,
     /// Other firmware. Its console may read our JSON as key presses (Muse's did: 'a'/'s' menu, 'd'/'u'
     /// push-to-talk, 'z'/'w' sleep), so it is written nothing at all, not even hello, until it resets; and its
@@ -519,7 +610,9 @@ impl Firmware {
         } else if self != Self::Ours && rate_line(line).starts_with(BAUD_PREFIX) {
             // Only our firmware says this: it went back to 115200 because what it heard was at another rate (the
             // port reopened while it ran fast), so hello was lost. Listened to enough: ask it again now.
-            Self::Listening { since: now.checked_sub(LISTEN_FIRST).unwrap_or(now) }
+            Self::Listening {
+                since: now.checked_sub(LISTEN_FIRST).unwrap_or(now),
+            }
         } else if self != Self::Ours && is_esp_idf_app_log(line) {
             Self::Foreign
         } else {
@@ -549,7 +642,10 @@ impl Firmware {
 /// An ESP-IDF application's log line, `I (1234) tag: ...`. Our firmware never prints one; the second-stage
 /// bootloader both firmwares boot through does, under its own tags, so those don't count.
 fn is_esp_idf_app_log(line: &str) -> bool {
-    let Some(rest) = line.strip_prefix(['I', 'W', 'E', 'D', 'V']).and_then(|rest| rest.strip_prefix(" (")) else {
+    let Some(rest) = line
+        .strip_prefix(['I', 'W', 'E', 'D', 'V'])
+        .and_then(|rest| rest.strip_prefix(" ("))
+    else {
         return false;
     };
     let Some((ticks, rest)) = rest.split_once(") ") else {
@@ -574,7 +670,8 @@ const BAUD_UNKNOWN: &str = "EVENT device.baud";
 /// A line as the box said it about the rate: without what came before it at the other rate. The box's last bytes at
 /// 921600, read at 115200, are not ASCII text, and they run into its `BAUD 115200` (seen on a box: `��BAUD 115200`).
 fn rate_line(line: &str) -> &str {
-    line.trim_start_matches(|c: char| !c.is_ascii_graphic()).trim_end()
+    line.trim_start_matches(|c: char| !c.is_ascii_graphic())
+        .trim_end()
 }
 
 /// Moves a link to another rate; only the serial port over the bridge has one.
@@ -604,7 +701,10 @@ enum RateStep {
     /// Move the port; frames written after it wait a moment for the box to move too.
     SetRate(u32),
     /// Tell the daemon: [`DeviceMessage::BridgeRate`].
-    Settled { baud: u32, switches: bool },
+    Settled {
+        baud: u32,
+        switches: bool,
+    },
 }
 
 /// Moves the UART bridge to [`FAST_BAUD_RATE`] once the box is known to run our firmware, and back to 115200 when the
@@ -622,18 +722,28 @@ struct BaudSwitch {
 
 impl BaudSwitch {
     fn new() -> Self {
-        Self { rate: BAUD_RATE, stage: RateStage::Unasked, tries: 0, switches: false }
+        Self {
+            rate: BAUD_RATE,
+            stage: RateStage::Unasked,
+            tries: 0,
+            switches: false,
+        }
     }
 
     /// Frames from the daemon wait while the rate is being changed: one written at the old rate after the box moved
     /// would arrive as noise.
     fn holds_writes(&self) -> bool {
-        matches!(self.stage, RateStage::Asked { .. } | RateStage::Checking { .. })
+        matches!(
+            self.stage,
+            RateStage::Asked { .. } | RateStage::Checking { .. }
+        )
     }
 
     fn deadline(&self) -> Option<Instant> {
         match self.stage {
-            RateStage::Asked { since } | RateStage::Checking { since } => Some(since + BAUD_ANSWER_WITHIN),
+            RateStage::Asked { since } | RateStage::Checking { since } => {
+                Some(since + BAUD_ANSWER_WITHIN)
+            }
             RateStage::Unasked | RateStage::Settled => None,
         }
     }
@@ -646,8 +756,12 @@ impl BaudSwitch {
         self.tries += 1;
         self.stage = RateStage::Asked { since: now };
         let mut request = Event::named("device.baud");
-        request.extra.insert("rate".to_owned(), FAST_BAUD_RATE.into());
-        vec![RateStep::Write(request.to_ndjson().expect("the request always encodes"))]
+        request
+            .extra
+            .insert("rate".to_owned(), FAST_BAUD_RATE.into());
+        vec![RateStep::Write(
+            request.to_ndjson().expect("the request always encodes"),
+        )]
     }
 
     /// The box restarted (its ROM banner, readable only at 115200): it may be asked again.
@@ -664,19 +778,29 @@ impl BaudSwitch {
                 self.switches = true;
                 self.rate = FAST_BAUD_RATE;
                 self.stage = RateStage::Checking { since: now };
-                let check = Event::named("device.baud.check").to_ndjson().expect("the check always encodes");
+                let check = Event::named("device.baud.check")
+                    .to_ndjson()
+                    .expect("the check always encodes");
                 vec![RateStep::SetRate(FAST_BAUD_RATE), RateStep::Write(check)]
             }
             RateStage::Asked { .. } if line == BAUD_UNKNOWN => {
                 self.stage = RateStage::Settled;
-                vec![RateStep::Settled { baud: BAUD_RATE, switches: false }]
+                vec![RateStep::Settled {
+                    baud: BAUD_RATE,
+                    switches: false,
+                }]
             }
             RateStage::Checking { .. } if line == format!("BAUD {FAST_BAUD_RATE}") => {
                 self.stage = RateStage::Settled;
-                vec![RateStep::Settled { baud: FAST_BAUD_RATE, switches: true }]
+                vec![RateStep::Settled {
+                    baud: FAST_BAUD_RATE,
+                    switches: true,
+                }]
             }
             // The box going back on its own, said at the fast rate before a restart.
-            _ if self.rate != BAUD_RATE && line == format!("BAUD {BAUD_RATE}") => self.back_to_slow(),
+            _ if self.rate != BAUD_RATE && line == format!("BAUD {BAUD_RATE}") => {
+                self.back_to_slow()
+            }
             _ => Vec::new(),
         }
     }
@@ -695,7 +819,10 @@ impl BaudSwitch {
             // No answer at all: firmware that can't switch, which said nothing we knew, or the request was lost.
             RateStage::Asked { .. } => {
                 self.stage = RateStage::Settled;
-                vec![RateStep::Settled { baud: BAUD_RATE, switches: self.switches }]
+                vec![RateStep::Settled {
+                    baud: BAUD_RATE,
+                    switches: self.switches,
+                }]
             }
             // Not confirmed: the box goes back by itself too.
             RateStage::Checking { .. } => self.back_to_slow(),
@@ -706,7 +833,13 @@ impl BaudSwitch {
     fn back_to_slow(&mut self) -> Vec<RateStep> {
         self.rate = BAUD_RATE;
         self.stage = RateStage::Unasked;
-        vec![RateStep::SetRate(BAUD_RATE), RateStep::Settled { baud: BAUD_RATE, switches: self.switches }]
+        vec![
+            RateStep::SetRate(BAUD_RATE),
+            RateStep::Settled {
+                baud: BAUD_RATE,
+                switches: self.switches,
+            },
+        ]
     }
 }
 
@@ -736,7 +869,9 @@ async fn take_rate_steps<P: AsyncWrite + Unpin>(
             }
             RateStep::Settled { baud, switches } => {
                 info!(baud, switches, "UART bridge rate settled");
-                let _ = device_event_sender.send(DeviceMessage::BridgeRate { baud, switches }).await;
+                let _ = device_event_sender
+                    .send(DeviceMessage::BridgeRate { baud, switches })
+                    .await;
             }
         }
     }
@@ -744,7 +879,9 @@ async fn take_rate_steps<P: AsyncWrite + Unpin>(
 }
 
 fn hello_frame() -> Vec<u8> {
-    Event::named("device.hello").to_ndjson().expect("hello always encodes")
+    Event::named("device.hello")
+        .to_ndjson()
+        .expect("hello always encodes")
 }
 
 fn is_hello(frame: &[u8]) -> bool {
@@ -752,7 +889,10 @@ fn is_hello(frame: &[u8]) -> bool {
 }
 
 /// Shuttles frames and device output over one open port until it fails or is handed to the flasher.
-#[allow(clippy::too_many_arguments, reason = "one session's whole context; a struct would only rename the list")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one session's whole context; a struct would only rename the list"
+)]
 async fn run_session<P: AsyncRead + AsyncWrite + Unpin>(
     port: &mut P,
     port_name: &str,
@@ -783,7 +923,10 @@ async fn run_session<P: AsyncRead + AsyncWrite + Unpin>(
         let next = if baud.holds_writes() {
             None
         } else {
-            pending.iter().position(|frame| firmware.writes(frame)).and_then(|index| pending.remove(index))
+            pending
+                .iter()
+                .position(|frame| firmware.writes(frame))
+                .and_then(|index| pending.remove(index))
         };
         if let Some(frame) = next {
             // A peer that never reads (e.g. firmware that isn't ours) blocks the write forever; the flasher must still get the port.
@@ -931,12 +1074,18 @@ async fn become_foreign(
 ) {
     *firmware = Firmware::Foreign;
     pending.clear();
-    let _ = device_event_sender.send(DeviceMessage::ForeignFirmware).await;
+    let _ = device_event_sender
+        .send(DeviceMessage::ForeignFirmware)
+        .await;
 }
 
 /// Bridge ports are written in line-rate chunks, `pace` being the rate the port runs at; native USB ports (None) get
 /// the whole frame at once.
-async fn write_frame<P: AsyncWrite + Unpin>(port: &mut P, frame: &[u8], pace: Option<u32>) -> std::io::Result<()> {
+async fn write_frame<P: AsyncWrite + Unpin>(
+    port: &mut P,
+    frame: &[u8],
+    pace: Option<u32>,
+) -> std::io::Result<()> {
     let Some(baud) = pace else {
         // No flush: on a serial port it is tcdrain(), a blocking call that waits until the box has taken the bytes.
         // While the box dumps a screenshot it takes nothing, so a heartbeat's flush held this worker for two seconds;
@@ -965,7 +1114,11 @@ pub const PACE_PIECE_BYTES: usize = 128;
 /// always 115200: paced faster, at 921600 or even at 460800 wire time, writes through `cdc_acm` arrive damaged (on
 /// Omarchy, 2026-10-29: a Character pack had 170 bad lines and took 5:41, against none and 2:09 at 115200).
 fn pace_rate(port_rate: u32) -> u32 {
-    if cfg!(target_os = "macos") { port_rate } else { BAUD_RATE }
+    if cfg!(target_os = "macos") {
+        port_rate
+    } else {
+        BAUD_RATE
+    }
 }
 
 /// Only the BOX's UART bridge needs chunking; Espressif's native USB port has its own flow control.
@@ -1004,7 +1157,11 @@ fn find_port(config: &SerialConfig) -> Result<Found, String> {
                 _ => None,
             })
             .unwrap_or(true);
-        return Ok(Found::One(PortChoice { name: port.clone(), paced, usb_serial: None }));
+        return Ok(Found::One(PortChoice {
+            name: port.clone(),
+            paced,
+            usb_serial: None,
+        }));
     }
 
     let mut matches: Vec<PortChoice> = ports
@@ -1018,7 +1175,11 @@ fn find_port(config: &SerialConfig) -> Result<Found, String> {
                             .is_some_and(|actual| serials_equal(actual, expected))
                     }) =>
             {
-                Some(PortChoice { name: port.port_name, paced: needs_pacing(info.vid, info.pid), usb_serial: info.serial_number })
+                Some(PortChoice {
+                    name: port.port_name,
+                    paced: needs_pacing(info.vid, info.pid),
+                    usb_serial: info.serial_number,
+                })
             }
             _ => None,
         })
@@ -1044,7 +1205,12 @@ fn choose_port(mut matches: Vec<PortChoice>, known_box: Option<&str>) -> Found {
     {
         let ours: Vec<PortChoice> = matches
             .iter()
-            .filter(|choice| choice.usb_serial.as_deref().is_some_and(|serial| serials_equal(serial, known)))
+            .filter(|choice| {
+                choice
+                    .usb_serial
+                    .as_deref()
+                    .is_some_and(|serial| serials_equal(serial, known))
+            })
             .cloned()
             .collect();
         if ours.len() == 1 {
@@ -1116,7 +1282,11 @@ fn process_device_bytes(
     own
 }
 
-fn process_device_line(line: &[u8], firmware: &mut Firmware, event_sender: &mpsc::Sender<DeviceMessage>) {
+fn process_device_line(
+    line: &[u8],
+    firmware: &mut Firmware,
+    event_sender: &mpsc::Sender<DeviceMessage>,
+) {
     if line.is_empty() {
         return;
     }
@@ -1145,7 +1315,8 @@ fn process_device_line(line: &[u8], firmware: &mut Firmware, event_sender: &mpsc
         // Screenshot rows (hundreds of them) stay out of the log; their BEGIN and END lines and every other
         // diagnostic line are still logged, so a screenshot that never finishes shows where it stopped. So do the
         // lines of recorded audio, which carry what the user said.
-        let screenshot_row = line.starts_with("SHOT ") && !line.starts_with("SHOT BEGIN") && line != "SHOT END";
+        let screenshot_row =
+            line.starts_with("SHOT ") && !line.starts_with("SHOT BEGIN") && line != "SHOT END";
         if !screenshot_row && !line.starts_with("ECHO ") && !line.starts_with("VOICE DATA ") {
             info!(message = %line, "device message");
         }
@@ -1169,28 +1340,59 @@ mod tests {
     use super::*;
 
     fn candidate(name: &str, serial: &str) -> PortChoice {
-        PortChoice { name: name.to_owned(), paced: false, usb_serial: Some(serial.to_owned()) }
+        PortChoice {
+            name: name.to_owned(),
+            paced: false,
+            usb_serial: Some(serial.to_owned()),
+        }
     }
 
     #[test]
     fn a_busy_box_is_left_alone_until_the_retry_or_a_takeover() {
         let now = Instant::now();
-        assert!(!leave_busy_box_alone(None, now, false), "a box that never said busy is asked");
+        assert!(
+            !leave_busy_box_alone(None, now, false),
+            "a box that never said busy is asked"
+        );
         let retry = Some(now + BUSY_RETRY);
-        assert!(leave_busy_box_alone(retry, now + RECONNECT_DELAY, false), "not asked again half a second later");
-        assert!(!leave_busy_box_alone(retry, now + RECONNECT_DELAY, true), "a takeover asks at once");
-        assert!(!leave_busy_box_alone(retry, now + BUSY_RETRY, false), "asked again once the wait is over");
+        assert!(
+            leave_busy_box_alone(retry, now + RECONNECT_DELAY, false),
+            "not asked again half a second later"
+        );
+        assert!(
+            !leave_busy_box_alone(retry, now + RECONNECT_DELAY, true),
+            "a takeover asks at once"
+        );
+        assert!(
+            !leave_busy_box_alone(retry, now + BUSY_RETRY, false),
+            "asked again once the wait is over"
+        );
     }
 
     #[test]
     fn with_another_device_plugged_in_the_known_box_wins() {
-        let both = vec![candidate("/dev/cu.usbmodem1101", "30:ED:A0:A4:0D:08"), candidate("/dev/cu.usbmodem8401", "98:88:E0:06:8B:CC")];
-        let Found::One(chosen) = choose_port(both.clone(), Some("98:88:e0:06:8b:cc")) else { panic!("the known box wins") };
+        let both = vec![
+            candidate("/dev/cu.usbmodem1101", "30:ED:A0:A4:0D:08"),
+            candidate("/dev/cu.usbmodem8401", "98:88:E0:06:8B:CC"),
+        ];
+        let Found::One(chosen) = choose_port(both.clone(), Some("98:88:e0:06:8b:cc")) else {
+            panic!("the known box wins")
+        };
         assert_eq!(chosen.name, "/dev/cu.usbmodem8401");
-        assert_eq!(choose_port(both.clone(), None), Found::Several(both.clone()), "no box known yet: don't guess, offer them");
-        assert_eq!(choose_port(both.clone(), Some("11:22:33:44:55:66")), Found::Several(both), "the known box isn't one of them");
+        assert_eq!(
+            choose_port(both.clone(), None),
+            Found::Several(both.clone()),
+            "no box known yet: don't guess, offer them"
+        );
+        assert_eq!(
+            choose_port(both.clone(), Some("11:22:33:44:55:66")),
+            Found::Several(both),
+            "the known box isn't one of them"
+        );
         let alone = vec![candidate("/dev/cu.usbmodem1101", "30:ED:A0:A4:0D:08")];
-        let Found::One(lone) = choose_port(alone, Some("98:88:E0:06:8B:CC")) else { panic!("a lone device is still tried") };
+        let Found::One(lone) = choose_port(alone, Some("98:88:E0:06:8B:CC")) else {
+            panic!("a lone device is still tried")
+        };
         assert_eq!(lone.name, "/dev/cu.usbmodem1101");
     }
 
@@ -1217,10 +1419,20 @@ mod tests {
             &mut Firmware::Ours,
             &sender,
         );
-        assert!(receiver.try_recv().is_err(), "a partial line must not become an event early");
-        process_device_bytes(b"2\",\"action\":\"press\"}\r\n", &mut buffer, &mut Firmware::Ours, &sender);
+        assert!(
+            receiver.try_recv().is_err(),
+            "a partial line must not become an event early"
+        );
+        process_device_bytes(
+            b"2\",\"action\":\"press\"}\r\n",
+            &mut buffer,
+            &mut Firmware::Ours,
+            &sender,
+        );
 
-        let DeviceMessage::Event(event) = receiver.try_recv().expect("a complete line should enter the event queue")
+        let DeviceMessage::Event(event) = receiver
+            .try_recv()
+            .expect("a complete line should enter the event queue")
         else {
             panic!("a JSON line should become an event");
         };
@@ -1239,16 +1451,26 @@ mod tests {
     fn a_piece_waits_for_its_own_wire_time_plus_margin() {
         // 128 bytes × 10 bits / 115200 ≈ 11.1 ms, plus 1 ms headroom.
         let delay = piece_delay(128, BAUD_RATE);
-        assert!(delay >= Duration::from_micros(12_100) && delay <= Duration::from_micros(12_200), "{delay:?}");
+        assert!(
+            delay >= Duration::from_micros(12_100) && delay <= Duration::from_micros(12_200),
+            "{delay:?}"
+        );
         // At 921600 about 1.4 ms, plus the same headroom.
         let delay = piece_delay(128, 921_600);
-        assert!(delay >= Duration::from_micros(2_380) && delay <= Duration::from_micros(2_400), "{delay:?}");
+        assert!(
+            delay >= Duration::from_micros(2_380) && delay <= Duration::from_micros(2_400),
+            "{delay:?}"
+        );
     }
 
     #[test]
     fn only_macos_paces_at_the_fast_rate() {
         assert_eq!(pace_rate(BAUD_RATE), BAUD_RATE);
-        let expected = if cfg!(target_os = "macos") { FAST_BAUD_RATE } else { BAUD_RATE };
+        let expected = if cfg!(target_os = "macos") {
+            FAST_BAUD_RATE
+        } else {
+            BAUD_RATE
+        };
         assert_eq!(pace_rate(FAST_BAUD_RATE), expected);
     }
 
@@ -1257,9 +1479,17 @@ mod tests {
         let (sender, mut receiver) = mpsc::channel(1);
         let mut buffer = Vec::new();
 
-        process_device_bytes(b"DISPLAY READY\n", &mut buffer, &mut Firmware::Ours, &sender);
+        process_device_bytes(
+            b"DISPLAY READY\n",
+            &mut buffer,
+            &mut Firmware::Ours,
+            &sender,
+        );
 
-        match receiver.try_recv().expect("diagnostic lines should reach the Mac too") {
+        match receiver
+            .try_recv()
+            .expect("diagnostic lines should reach the Mac too")
+        {
             DeviceMessage::Line(line) => assert_eq!(line, "DISPLAY READY"),
             other => panic!("a diagnostic line should not be {other:?}"),
         }
@@ -1277,7 +1507,22 @@ mod tests {
         let (device_sender, _device_receiver) = mpsc::channel(1);
         let (suspend_sender, mut suspend) = watch::channel(false);
 
-        let session = run_session(&mut port, "test", false, None, Firmware::Listening { since: Instant::now() }, None, None, None, &mut pending, &mut receiver, &device_sender, &mut suspend);
+        let session = run_session(
+            &mut port,
+            "test",
+            false,
+            None,
+            Firmware::Listening {
+                since: Instant::now(),
+            },
+            None,
+            None,
+            None,
+            &mut pending,
+            &mut receiver,
+            &device_sender,
+            &mut suspend,
+        );
         let release = async {
             tokio::time::sleep(LISTEN_FIRST + Duration::from_millis(50)).await;
             suspend_sender.send(true).unwrap();
@@ -1325,9 +1570,31 @@ mod tests {
         frames.send(heartbeat_frame()).await.unwrap();
         let task = tokio::spawn(async move {
             let mut pending = VecDeque::new();
-            run_session(&mut port, "test", false, None, Firmware::Listening { since: Instant::now() }, None, None, None, &mut pending, &mut receiver, &device_sender, &mut suspend).await
+            run_session(
+                &mut port,
+                "test",
+                false,
+                None,
+                Firmware::Listening {
+                    since: Instant::now(),
+                },
+                None,
+                None,
+                None,
+                &mut pending,
+                &mut receiver,
+                &device_sender,
+                &mut suspend,
+            )
+            .await
         });
-        Session { peer, frames, device, _suspend: suspend_sender, task }
+        Session {
+            peer,
+            frames,
+            device,
+            _suspend: suspend_sender,
+            task,
+        }
     }
 
     fn drain(device: &mut mpsc::Receiver<DeviceMessage>) -> Vec<DeviceMessage> {
@@ -1335,21 +1602,34 @@ mod tests {
     }
 
     // What a box shared with Muse prints from reset until Muse's heartbeat, cut down.
-    const MUSE_BOOT: &[u8] = b"ESP-ROM:esp32s3-20210327\r\nI (27) boot: ESP-IDF v6.0.1 2nd stage bootloader\r\n\
+    const MUSE_BOOT: &[u8] =
+        b"ESP-ROM:esp32s3-20210327\r\nI (27) boot: ESP-IDF v6.0.1 2nd stage bootloader\r\n\
 I (452) esp_image: segment 0: paddr=00020020\r\nI (571) esp_psram: Found 8MB PSRAM device\r\n\
 I (911) muse: board: ALIENTEK ATK-DNESP32S3-BOX\r\n";
 
     #[test]
     fn only_an_esp_idf_application_log_gives_other_firmware_away() {
-        assert!(is_esp_idf_app_log("I (911) muse: board: ALIENTEK ATK-DNESP32S3-BOX"));
-        assert!(is_esp_idf_app_log("W (1450) wifi:Password length matches WPA2 standards"));
+        assert!(is_esp_idf_app_log(
+            "I (911) muse: board: ALIENTEK ATK-DNESP32S3-BOX"
+        ));
+        assert!(is_esp_idf_app_log(
+            "W (1450) wifi:Password length matches WPA2 standards"
+        ));
         // The bootloader both firmwares boot through.
-        assert!(!is_esp_idf_app_log("I (27) boot: ESP-IDF v6.0.1 2nd stage bootloader"));
-        assert!(!is_esp_idf_app_log("I (35) boot.esp32s3: Boot SPI Speed : 80MHz"));
-        assert!(!is_esp_idf_app_log("I (452) esp_image: segment 0: paddr=00020020"));
+        assert!(!is_esp_idf_app_log(
+            "I (27) boot: ESP-IDF v6.0.1 2nd stage bootloader"
+        ));
+        assert!(!is_esp_idf_app_log(
+            "I (35) boot.esp32s3: Boot SPI Speed : 80MHz"
+        ));
+        assert!(!is_esp_idf_app_log(
+            "I (452) esp_image: segment 0: paddr=00020020"
+        ));
         // Ours.
         assert!(!is_esp_idf_app_log("TALLY LOADED 0 0S DAY 20261007"));
-        assert!(!is_esp_idf_app_log("DISPLAY READY BUILD v0.3.2 2026-10-07 09:00"));
+        assert!(!is_esp_idf_app_log(
+            "DISPLAY READY BUILD v0.3.2 2026-10-07 09:00"
+        ));
         assert!(!is_esp_idf_app_log("I (x) muse: not a tick count"));
     }
 
@@ -1358,9 +1638,14 @@ I (911) muse: board: ALIENTEK ATK-DNESP32S3-BOX\r\n";
     #[test]
     fn our_rollback_bootloader_does_not_pass_for_other_firmware() {
         let boot = include_str!("fixtures/box-boot-ota-layout.txt");
-        let mut firmware = Firmware::Listening { since: Instant::now() };
+        let mut firmware = Firmware::Listening {
+            since: Instant::now(),
+        };
         for line in boot.lines() {
-            assert!(!is_esp_idf_app_log(line), "taken for another firmware's log: {line}");
+            assert!(
+                !is_esp_idf_app_log(line),
+                "taken for another firmware's log: {line}"
+            );
             firmware = firmware.after_line(line, Instant::now());
             assert_ne!(firmware, Firmware::Foreign, "after {line}");
         }
@@ -1376,11 +1661,22 @@ I (911) muse: board: ALIENTEK ATK-DNESP32S3-BOX\r\n";
         // Long past listening and asking: still nothing, and no probing.
         tokio::time::sleep(Duration::from_secs(60)).await;
 
-        assert_eq!(written(&mut session.peer).await, "", "Muse's console reads letters as keys");
+        assert_eq!(
+            written(&mut session.peer).await,
+            "",
+            "Muse's console reads letters as keys"
+        );
         let messages = drain(&mut session.device);
-        assert!(messages.iter().any(|message| matches!(message, DeviceMessage::ForeignFirmware)), "{messages:?}");
         assert!(
-            !messages.iter().any(|message| matches!(message, DeviceMessage::Line(line) if line.contains("muse"))),
+            messages
+                .iter()
+                .any(|message| matches!(message, DeviceMessage::ForeignFirmware)),
+            "{messages:?}"
+        );
+        assert!(
+            !messages.iter().any(
+                |message| matches!(message, DeviceMessage::Line(line) if line.contains("muse"))
+            ),
             "Muse's log is not ours to read: {messages:?}"
         );
         session.task.abort();
@@ -1397,10 +1693,18 @@ I (911) muse: board: ALIENTEK ATK-DNESP32S3-BOX\r\n";
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         let output = written(&mut session.peer).await;
-        assert!(output.contains("device.hello") && output.contains("device.heartbeat"), "{output}");
-        assert!(output.find("device.hello") < output.find("device.heartbeat"), "in order: {output}");
+        assert!(
+            output.contains("device.hello") && output.contains("device.heartbeat"),
+            "{output}"
+        );
+        assert!(
+            output.find("device.hello") < output.find("device.heartbeat"),
+            "in order: {output}"
+        );
         let messages = drain(&mut session.device);
-        assert!(messages.iter().any(|message| matches!(message, DeviceMessage::Line(line) if line.starts_with("TALLY"))));
+        assert!(messages.iter().any(
+            |message| matches!(message, DeviceMessage::Line(line) if line.starts_with("TALLY"))
+        ));
         session.task.abort();
     }
 
@@ -1409,18 +1713,34 @@ I (911) muse: board: ALIENTEK ATK-DNESP32S3-BOX\r\n";
         // Our firmware on the UART bridge: opening the port doesn't reset it, and idle it says nothing.
         let mut session = connected().await;
         tokio::time::sleep(LISTEN_FIRST - Duration::from_millis(100)).await;
-        assert_eq!(written(&mut session.peer).await, "", "nothing before listening is over");
+        assert_eq!(
+            written(&mut session.peer).await,
+            "",
+            "nothing before listening is over"
+        );
 
         tokio::time::sleep(Duration::from_millis(200)).await;
         let output = written(&mut session.peer).await;
         assert_eq!(output.matches("device.hello").count(), 1, "{output}");
         assert!(!output.contains("heartbeat"), "{output}");
 
-        session.peer.write_all(b"DISPLAY READY BUILD abc 2026-10-07 09:00\n").await.unwrap();
+        session
+            .peer
+            .write_all(b"DISPLAY READY BUILD abc 2026-10-07 09:00\n")
+            .await
+            .unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
-        assert!(written(&mut session.peer).await.contains("device.heartbeat"));
+        assert!(
+            written(&mut session.peer)
+                .await
+                .contains("device.heartbeat")
+        );
         tokio::time::sleep(Duration::from_secs(30)).await;
-        assert!(!drain(&mut session.device).iter().any(|message| matches!(message, DeviceMessage::ForeignFirmware)));
+        assert!(
+            !drain(&mut session.device)
+                .iter()
+                .any(|message| matches!(message, DeviceMessage::ForeignFirmware))
+        );
         session.task.abort();
     }
 
@@ -1429,15 +1749,25 @@ I (911) muse: board: ALIENTEK ATK-DNESP32S3-BOX\r\n";
         let mut session = connected().await;
         tokio::time::sleep(LISTEN_FIRST + FOREIGN_FIRMWARE_AFTER + Duration::from_secs(60)).await;
         let output = written(&mut session.peer).await;
-        assert_eq!(output.matches("device.hello").count(), 1, "asked once, never probed again: {output}");
+        assert_eq!(
+            output.matches("device.hello").count(),
+            1,
+            "asked once, never probed again: {output}"
+        );
         assert!(!output.contains("heartbeat"), "{output}");
-        assert!(drain(&mut session.device).iter().any(|message| matches!(message, DeviceMessage::ForeignFirmware)));
+        assert!(
+            drain(&mut session.device)
+                .iter()
+                .any(|message| matches!(message, DeviceMessage::ForeignFirmware))
+        );
         session.task.abort();
     }
 
     fn frame_named(step: &RateStep) -> Option<String> {
         match step {
-            RateStep::Write(frame) => serde_json::from_slice::<Event>(frame).ok().map(|event| event.event),
+            RateStep::Write(frame) => serde_json::from_slice::<Event>(frame)
+                .ok()
+                .map(|event| event.event),
             _ => None,
         }
     }
@@ -1448,17 +1778,31 @@ I (911) muse: board: ALIENTEK ATK-DNESP32S3-BOX\r\n";
         let mut baud = BaudSwitch::new();
         let ask = baud.on_ours(now);
         assert_eq!(ask.len(), 1);
-        let RateStep::Write(request) = &ask[0] else { panic!("{ask:?}") };
+        let RateStep::Write(request) = &ask[0] else {
+            panic!("{ask:?}")
+        };
         let request: Event = serde_json::from_slice(request).unwrap();
-        assert_eq!((request.event.as_str(), &request.extra["rate"]), ("device.baud", &serde_json::json!(921_600)));
-        assert!(baud.holds_writes(), "nothing else goes out while the rate changes");
+        assert_eq!(
+            (request.event.as_str(), &request.extra["rate"]),
+            ("device.baud", &serde_json::json!(921_600))
+        );
+        assert!(
+            baud.holds_writes(),
+            "nothing else goes out while the rate changes"
+        );
         assert!(baud.on_ours(now).is_empty(), "asked once");
 
         let moved = baud.on_line("BAUD SWITCH 921600\r", now);
         assert_eq!(moved[0], RateStep::SetRate(FAST_BAUD_RATE));
         assert_eq!(frame_named(&moved[1]).as_deref(), Some("device.baud.check"));
         assert!(baud.holds_writes());
-        assert_eq!(baud.on_line("BAUD 921600", now), [RateStep::Settled { baud: FAST_BAUD_RATE, switches: true }]);
+        assert_eq!(
+            baud.on_line("BAUD 921600", now),
+            [RateStep::Settled {
+                baud: FAST_BAUD_RATE,
+                switches: true
+            }]
+        );
         assert!(!baud.holds_writes() && baud.deadline().is_none());
     }
 
@@ -1468,15 +1812,30 @@ I (911) muse: board: ALIENTEK ATK-DNESP32S3-BOX\r\n";
         let mut baud = BaudSwitch::new();
         baud.on_ours(now);
         // As to any event it doesn't know.
-        assert_eq!(baud.on_line("EVENT device.baud", now), [RateStep::Settled { baud: BAUD_RATE, switches: false }]);
+        assert_eq!(
+            baud.on_line("EVENT device.baud", now),
+            [RateStep::Settled {
+                baud: BAUD_RATE,
+                switches: false
+            }]
+        );
         assert!(!baud.holds_writes());
 
         let mut baud = BaudSwitch::new();
         baud.on_ours(now);
         assert_eq!(baud.deadline(), Some(now + BAUD_ANSWER_WITHIN));
-        assert_eq!(baud.on_deadline(), [RateStep::Settled { baud: BAUD_RATE, switches: false }]);
+        assert_eq!(
+            baud.on_deadline(),
+            [RateStep::Settled {
+                baud: BAUD_RATE,
+                switches: false
+            }]
+        );
         assert_eq!(baud.rate, BAUD_RATE);
-        assert!(baud.on_ours(now).is_empty(), "settled until the box restarts");
+        assert!(
+            baud.on_ours(now).is_empty(),
+            "settled until the box restarts"
+        );
     }
 
     #[test]
@@ -1486,12 +1845,28 @@ I (911) muse: board: ALIENTEK ATK-DNESP32S3-BOX\r\n";
         for _ in 0..BAUD_TRIES {
             baud.on_ours(now);
             baud.on_line("BAUD SWITCH 921600", now);
-            assert_eq!(baud.on_deadline(), [RateStep::SetRate(BAUD_RATE), RateStep::Settled { baud: BAUD_RATE, switches: true }]);
+            assert_eq!(
+                baud.on_deadline(),
+                [
+                    RateStep::SetRate(BAUD_RATE),
+                    RateStep::Settled {
+                        baud: BAUD_RATE,
+                        switches: true
+                    }
+                ]
+            );
             assert_eq!(baud.rate, BAUD_RATE);
         }
-        assert!(baud.on_ours(now).is_empty(), "a bridge that can't hold the rate stays at 115200");
+        assert!(
+            baud.on_ours(now).is_empty(),
+            "a bridge that can't hold the rate stays at 115200"
+        );
         baud.on_restart();
-        assert_eq!(baud.on_ours(now).len(), 1, "asked again once the box restarted");
+        assert_eq!(
+            baud.on_ours(now).len(),
+            1,
+            "asked again once the box restarted"
+        );
     }
 
     #[test]
@@ -1503,12 +1878,34 @@ I (911) muse: board: ALIENTEK ATK-DNESP32S3-BOX\r\n";
         baud.on_ours(now);
         baud.on_line("BAUD SWITCH 921600", now);
         baud.on_line("BAUD 921600", now);
-        assert_eq!(baud.on_line("BAUD 115200", now), [RateStep::SetRate(BAUD_RATE), RateStep::Settled { baud: BAUD_RATE, switches: true }]);
+        assert_eq!(
+            baud.on_line("BAUD 115200", now),
+            [
+                RateStep::SetRate(BAUD_RATE),
+                RateStep::Settled {
+                    baud: BAUD_RATE,
+                    switches: true
+                }
+            ]
+        );
         baud.on_ours(now);
         baud.on_line("BAUD SWITCH 921600", now);
         baud.on_line("BAUD 921600", now);
-        assert_eq!(baud.on_garbled(), [RateStep::SetRate(BAUD_RATE), RateStep::Settled { baud: BAUD_RATE, switches: true }]);
-        assert_eq!(baud.on_ours(now).len(), 1, "and asks again when the box is found again");
+        assert_eq!(
+            baud.on_garbled(),
+            [
+                RateStep::SetRate(BAUD_RATE),
+                RateStep::Settled {
+                    baud: BAUD_RATE,
+                    switches: true
+                }
+            ]
+        );
+        assert_eq!(
+            baud.on_ours(now).len(),
+            1,
+            "and asks again when the box is found again"
+        );
     }
 
     #[test]
@@ -1523,8 +1920,14 @@ I (911) muse: board: ALIENTEK ATK-DNESP32S3-BOX\r\n";
     fn our_firmware_back_at_115200_is_asked_at_once() {
         let now = Instant::now();
         let asked = Firmware::Foreign.after_line("BAUD 115200", now);
-        assert!(asked.deadline().is_some_and(|deadline| deadline <= now), "{asked:?}");
-        assert_eq!(Firmware::Ours.after_line("BAUD 115200", now), Firmware::Ours);
+        assert!(
+            asked.deadline().is_some_and(|deadline| deadline <= now),
+            "{asked:?}"
+        );
+        assert_eq!(
+            Firmware::Ours.after_line("BAUD 115200", now),
+            Firmware::Ours
+        );
     }
 
     #[test]
@@ -1532,11 +1935,27 @@ I (911) muse: board: ALIENTEK ATK-DNESP32S3-BOX\r\n";
         // Seen on a box: its last bytes at 921600, read at 115200, ran into its `BAUD 115200`.
         let (sender, _receiver) = mpsc::channel(16);
         let mut buffer = Vec::new();
-        let mut firmware = Firmware::Asked { since: Instant::now() };
-        let rate_lines = process_device_bytes(b"\xfe\xffBAUD 115200\r\n", &mut buffer, &mut firmware, &sender);
+        let mut firmware = Firmware::Asked {
+            since: Instant::now(),
+        };
+        let rate_lines = process_device_bytes(
+            b"\xfe\xffBAUD 115200\r\n",
+            &mut buffer,
+            &mut firmware,
+            &sender,
+        );
         assert_eq!(rate_lines, ["BAUD 115200"]);
-        assert!(firmware.deadline().is_some_and(|deadline| deadline <= Instant::now()), "asked again at once: {firmware:?}");
-        assert_eq!(rate_line("TITLE CC:UART BAUD 115200"), "TITLE CC:UART BAUD 115200", "only what is not text goes");
+        assert!(
+            firmware
+                .deadline()
+                .is_some_and(|deadline| deadline <= Instant::now()),
+            "asked again at once: {firmware:?}"
+        );
+        assert_eq!(
+            rate_line("TITLE CC:UART BAUD 115200"),
+            "TITLE CC:UART BAUD 115200",
+            "only what is not text goes"
+        );
     }
 
     thread_local! {
@@ -1561,9 +1980,31 @@ I (911) muse: board: ALIENTEK ATK-DNESP32S3-BOX\r\n";
         let task = tokio::spawn(async move {
             let mut pending = VecDeque::new();
             let set_rate: RateSetter<tokio::io::DuplexStream> = record_rate;
-            run_session(&mut port, "test", true, Some(set_rate), Firmware::Listening { since: Instant::now() }, None, None, None, &mut pending, &mut receiver, &device_sender, &mut suspend).await
+            run_session(
+                &mut port,
+                "test",
+                true,
+                Some(set_rate),
+                Firmware::Listening {
+                    since: Instant::now(),
+                },
+                None,
+                None,
+                None,
+                &mut pending,
+                &mut receiver,
+                &device_sender,
+                &mut suspend,
+            )
+            .await
         });
-        Session { peer, frames, device, _suspend: suspend_sender, task }
+        Session {
+            peer,
+            frames,
+            device,
+            _suspend: suspend_sender,
+            task,
+        }
     }
 
     fn rates() -> Vec<u32> {
@@ -1583,62 +2024,130 @@ I (911) muse: board: ALIENTEK ATK-DNESP32S3-BOX\r\n";
     #[tokio::test(start_paused = true)]
     async fn on_the_bridge_our_firmware_is_moved_to_the_fast_rate_before_anything_else() {
         let mut session = on_bridge().await;
-        session.peer.write_all(b"ESP-ROM:esp32s3-20210327\r\nDISPLAY READY BUILD abc 2026-10-07 09:00\r\n").await.unwrap();
+        session
+            .peer
+            .write_all(b"ESP-ROM:esp32s3-20210327\r\nDISPLAY READY BUILD abc 2026-10-07 09:00\r\n")
+            .await
+            .unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
         let output = written(&mut session.peer).await;
-        assert!(output.contains("device.baud") && !output.contains("device.hello"), "the request alone: {output}");
+        assert!(
+            output.contains("device.baud") && !output.contains("device.hello"),
+            "the request alone: {output}"
+        );
 
-        session.peer.write_all(b"BAUD SWITCH 921600\r\n").await.unwrap();
+        session
+            .peer
+            .write_all(b"BAUD SWITCH 921600\r\n")
+            .await
+            .unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
         assert_eq!(rates(), [FAST_BAUD_RATE]);
         let output = written(&mut session.peer).await;
-        assert!(output.contains("device.baud.check") && !output.contains("device.hello"), "{output}");
+        assert!(
+            output.contains("device.baud.check") && !output.contains("device.hello"),
+            "{output}"
+        );
 
         session.peer.write_all(b"BAUD 921600\r\n").await.unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
         let output = written(&mut session.peer).await;
-        assert!(output.find("device.hello") < output.find("device.heartbeat"), "then the rest, in order: {output}");
-        assert_eq!(bridge_rates(&drain(&mut session.device)), [(FAST_BAUD_RATE, true)]);
+        assert!(
+            output.find("device.hello") < output.find("device.heartbeat"),
+            "then the rest, in order: {output}"
+        );
+        assert_eq!(
+            bridge_rates(&drain(&mut session.device)),
+            [(FAST_BAUD_RATE, true)]
+        );
 
         // The box restarts and comes back at 115200: what the port reads at 921600 is noise.
-        session.peer.write_all(&[0x00, 0xf8, 0x80, 0x00]).await.unwrap();
+        session
+            .peer
+            .write_all(&[0x00, 0xf8, 0x80, 0x00])
+            .await
+            .unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
         assert_eq!(rates(), [FAST_BAUD_RATE, BAUD_RATE]);
-        assert_eq!(bridge_rates(&drain(&mut session.device)), [(BAUD_RATE, true)]);
+        assert_eq!(
+            bridge_rates(&drain(&mut session.device)),
+            [(BAUD_RATE, true)]
+        );
         session.frames.send(heartbeat_frame()).await.unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
-        assert_eq!(written(&mut session.peer).await, "", "listening again before writing");
-        session.peer.write_all(b"DISPLAY READY BUILD abc 2026-10-07 09:00\r\n").await.unwrap();
+        assert_eq!(
+            written(&mut session.peer).await,
+            "",
+            "listening again before writing"
+        );
+        session
+            .peer
+            .write_all(b"DISPLAY READY BUILD abc 2026-10-07 09:00\r\n")
+            .await
+            .unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
-        assert!(written(&mut session.peer).await.contains("\"device.baud\""), "asked again");
+        assert!(
+            written(&mut session.peer).await.contains("\"device.baud\""),
+            "asked again"
+        );
         session.task.abort();
     }
 
     #[tokio::test(start_paused = true)]
     async fn on_the_bridge_firmware_without_the_switch_keeps_115200_and_gets_everything() {
         let mut session = on_bridge().await;
-        session.peer.write_all(b"DISPLAY READY BUILD old 2026-09-01 09:00\r\n").await.unwrap();
+        session
+            .peer
+            .write_all(b"DISPLAY READY BUILD old 2026-09-01 09:00\r\n")
+            .await
+            .unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
         assert!(written(&mut session.peer).await.contains("device.baud"));
-        session.peer.write_all(b"EVENT device.baud\r\n").await.unwrap();
+        session
+            .peer
+            .write_all(b"EVENT device.baud\r\n")
+            .await
+            .unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
         let output = written(&mut session.peer).await;
-        assert!(output.contains("device.hello") && output.contains("device.heartbeat"), "{output}");
+        assert!(
+            output.contains("device.hello") && output.contains("device.heartbeat"),
+            "{output}"
+        );
         assert!(rates().is_empty(), "the port never moved");
-        assert_eq!(bridge_rates(&drain(&mut session.device)), [(BAUD_RATE, false)]);
+        assert_eq!(
+            bridge_rates(&drain(&mut session.device)),
+            [(BAUD_RATE, false)]
+        );
         session.task.abort();
     }
 
     #[tokio::test(start_paused = true)]
     async fn on_the_bridge_a_switch_left_unconfirmed_goes_back_to_115200() {
         let mut session = on_bridge().await;
-        session.peer.write_all(b"DISPLAY READY BUILD abc 2026-10-07 09:00\r\n").await.unwrap();
+        session
+            .peer
+            .write_all(b"DISPLAY READY BUILD abc 2026-10-07 09:00\r\n")
+            .await
+            .unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
-        session.peer.write_all(b"BAUD SWITCH 921600\r\n").await.unwrap();
+        session
+            .peer
+            .write_all(b"BAUD SWITCH 921600\r\n")
+            .await
+            .unwrap();
         tokio::time::sleep(BAUD_ANSWER_WITHIN + Duration::from_millis(100)).await;
         assert_eq!(rates(), [FAST_BAUD_RATE, BAUD_RATE]);
-        assert_eq!(bridge_rates(&drain(&mut session.device)), [(BAUD_RATE, true)]);
-        assert!(written(&mut session.peer).await.contains("device.heartbeat"), "held frames go out at 115200");
+        assert_eq!(
+            bridge_rates(&drain(&mut session.device)),
+            [(BAUD_RATE, true)]
+        );
+        assert!(
+            written(&mut session.peer)
+                .await
+                .contains("device.heartbeat"),
+            "held frames go out at 115200"
+        );
         session.task.abort();
     }
 
@@ -1646,7 +2155,11 @@ I (911) muse: board: ALIENTEK ATK-DNESP32S3-BOX\r\n";
     async fn a_reset_puts_the_box_in_doubt_until_it_says_what_it_runs() {
         // K1 + K2 on a box shared with Muse: our firmware resets into Muse while the port stays open.
         let mut session = connected().await;
-        session.peer.write_all(b"DISPLAY READY BUILD abc 2026-10-07 09:00\n").await.unwrap();
+        session
+            .peer
+            .write_all(b"DISPLAY READY BUILD abc 2026-10-07 09:00\n")
+            .await
+            .unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
         written(&mut session.peer).await;
         drain(&mut session.device);
@@ -1656,14 +2169,26 @@ I (911) muse: board: ALIENTEK ATK-DNESP32S3-BOX\r\n";
         session.frames.send(heartbeat_frame()).await.unwrap();
         tokio::time::sleep(Duration::from_secs(30)).await;
         assert_eq!(written(&mut session.peer).await, "");
-        assert!(drain(&mut session.device).iter().any(|message| matches!(message, DeviceMessage::ForeignFirmware)));
+        assert!(
+            drain(&mut session.device)
+                .iter()
+                .any(|message| matches!(message, DeviceMessage::ForeignFirmware))
+        );
 
         // And back: our firmware reports its build after its own reset.
-        session.peer.write_all(b"ESP-ROM:esp32s3-20210327\r\nDISPLAY READY BUILD abc 2026-10-07 09:00\r\n").await.unwrap();
+        session
+            .peer
+            .write_all(b"ESP-ROM:esp32s3-20210327\r\nDISPLAY READY BUILD abc 2026-10-07 09:00\r\n")
+            .await
+            .unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
         session.frames.send(heartbeat_frame()).await.unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
-        assert!(written(&mut session.peer).await.contains("device.heartbeat"));
+        assert!(
+            written(&mut session.peer)
+                .await
+                .contains("device.heartbeat")
+        );
         session.task.abort();
     }
 }

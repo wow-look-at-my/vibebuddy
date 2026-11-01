@@ -111,6 +111,10 @@ The voice catalog `VoiceCatalogEntry.all` tags each voice with the language of i
 
 New events the device protocol needs (a draft, to be written into `protocol.md` at implementation time): `device.identify` (blink), `voice.begin` / `voice.chunk` / `voice.end`, and the device reporting `voice.written` with the verification result.
 
+## Updates in this fork
+
+This fork has no updates. The daemon has no update source, Sparkle never starts, and the update controls, banners and notifications are hidden on both platforms. The sections below describe the code behind the compile-time switches. "Flash from file…" is how firmware reaches the box.
+
 ## Firmware updates
 
 Firmware isn't bundled with the app; it is released on its own (`firmware-vX.Y.Z`) and listed in the update manifest with the oldest App each version runs with (ADR-0010). The daemon picks the newest firmware this App can run, downloads it, checks its sha256 and keeps it unpacked in its state directory, so later updates and recovery work offline. The app only shows what the daemon offers.

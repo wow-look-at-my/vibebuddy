@@ -206,7 +206,13 @@ impl Recording {
 
     fn data_line(&mut self) -> Out {
         let (predictor, index) = self.line_state;
-        let mut line = alloc::format!("VOICE DATA {} {} {} {} ", self.turn, self.seq, predictor, index);
+        let mut line = alloc::format!(
+            "VOICE DATA {} {} {} {} ",
+            self.turn,
+            self.seq,
+            predictor,
+            index
+        );
         line.push_str(&encode_base64(&self.bytes));
         line.push('\n');
         self.seq += 1;
@@ -219,7 +225,11 @@ impl Recording {
         if !self.bytes.is_empty() {
             out.push(self.data_line());
         }
-        out.push(Out::Line(alloc::format!("VOICE END {} {}\n", self.turn, self.samples)));
+        out.push(Out::Line(alloc::format!(
+            "VOICE END {} {}\n",
+            self.turn,
+            self.samples
+        )));
     }
 }
 
@@ -237,10 +247,23 @@ enum Stage {
     Idle,
     Listening(Recording),
     /// The recording went out; waiting for the computer. Quiet since the last thing it said.
-    Thinking { turn: u32, heard: Option<String>, replies: Vec<String>, quiet_since: u32 },
+    Thinking {
+        turn: u32,
+        heard: Option<String>,
+        replies: Vec<String>,
+        quiet_since: u32,
+    },
     /// `voice.done`: the replies stay up to be read.
-    Done { heard: Option<String>, replies: Vec<String>, until: u32 },
-    Failed { reason: Reason, message: Option<String>, until: u32 },
+    Done {
+        heard: Option<String>,
+        replies: Vec<String>,
+        until: u32,
+    },
+    Failed {
+        reason: Reason,
+        message: Option<String>,
+        until: u32,
+    },
 }
 
 pub struct VoiceCommand {
@@ -261,7 +284,12 @@ impl Default for VoiceCommand {
 
 impl VoiceCommand {
     pub const fn new() -> Self {
-        Self { available: false, off: None, turn: 0, stage: Stage::Idle }
+        Self {
+            available: false,
+            off: None,
+            turn: 0,
+            stage: Stage::Idle,
+        }
     }
 
     /// The computer offers voice: K0 long is push-to-talk.
@@ -278,9 +306,22 @@ impl VoiceCommand {
     /// `voice.available`, with why voice is off when it is (docs/protocol.md). Withdrawn with a reason while a
     /// turn is on the overlay, the overlay says why instead of closing: the computer may say it just before its
     /// `voice.error` for that turn, which would then be ignored. An error already on the overlay stays.
-    pub fn offer(&mut self, on: bool, reason: Option<&str>, message: Option<&str>, now: u32) -> Option<Out> {
+    pub fn offer(
+        &mut self,
+        on: bool,
+        reason: Option<&str>,
+        message: Option<&str>,
+        now: u32,
+    ) -> Option<Out> {
         self.available = on;
-        self.off = reason.filter(|_| !on).map(|reason| (Reason::from_name(reason), message.filter(|message| !message.is_empty()).map(String::from)));
+        self.off = reason.filter(|_| !on).map(|reason| {
+            (
+                Reason::from_name(reason),
+                message
+                    .filter(|message| !message.is_empty())
+                    .map(String::from),
+            )
+        });
         if on {
             return None;
         }
@@ -300,7 +341,9 @@ impl VoiceCommand {
     /// K0 long while voice is off and Pomodoro is idle: if the computer said why, the overlay says it, and
     /// nothing is recorded. False when there is no reason to show.
     pub fn show_why_off(&mut self, now: u32) -> bool {
-        let Some((reason, message)) = self.off.clone().filter(|_| !self.available) else { return false };
+        let Some((reason, message)) = self.off.clone().filter(|_| !self.available) else {
+            return false;
+        };
         self.cancel();
         self.fail(reason, message, now);
         true
@@ -351,7 +394,9 @@ impl VoiceCommand {
     /// The recording has run its 30 s (or the samples stopped coming): end it as if K0 were let go.
     pub fn due(&self, now: u32) -> bool {
         match &self.stage {
-            Stage::Listening(recording) => recording.full() || now.wrapping_sub(recording.started) >= MAX_RECORDING_MS,
+            Stage::Listening(recording) => {
+                recording.full() || now.wrapping_sub(recording.started) >= MAX_RECORDING_MS
+            }
             _ => false,
         }
     }
@@ -359,7 +404,9 @@ impl VoiceCommand {
     /// K0 let go (or the 30 s are up): `VOICE END`, or `VOICE CANCEL` for a press under half a second, which
     /// closes the overlay too. The caller has already handed over the last samples.
     pub fn release(&mut self, now: u32) -> Vec<Out> {
-        let Stage::Listening(recording) = &mut self.stage else { return Vec::new() };
+        let Stage::Listening(recording) = &mut self.stage else {
+            return Vec::new();
+        };
         let turn = recording.turn;
         if now.wrapping_sub(recording.started) < MIN_RECORDING_MS {
             self.stage = Stage::Idle;
@@ -367,7 +414,12 @@ impl VoiceCommand {
         }
         let mut out = Vec::new();
         recording.finish(&mut out);
-        self.stage = Stage::Thinking { turn, heard: None, replies: Vec::new(), quiet_since: now };
+        self.stage = Stage::Thinking {
+            turn,
+            heard: None,
+            replies: Vec::new(),
+            quiet_since: now,
+        };
         out
     }
 
@@ -376,7 +428,10 @@ impl VoiceCommand {
     pub fn cancel(&mut self) -> Option<Out> {
         let stage = core::mem::replace(&mut self.stage, Stage::Idle);
         match stage {
-            Stage::Listening(recording) => Some(Out::Line(alloc::format!("VOICE CANCEL {}\n", recording.turn))),
+            Stage::Listening(recording) => Some(Out::Line(alloc::format!(
+                "VOICE CANCEL {}\n",
+                recording.turn
+            ))),
             _ => None,
         }
     }
@@ -392,7 +447,14 @@ impl VoiceCommand {
 
     /// `voice.heard`, `voice.reply`, `voice.done` or `voice.error` from the computer. Events for any turn but
     /// the one on the overlay are ignored. True when the overlay changed.
-    pub fn event(&mut self, event: &str, turn: u32, text: Option<&str>, reason: Option<&str>, now: u32) -> bool {
+    pub fn event(
+        &mut self,
+        event: &str,
+        turn: u32,
+        text: Option<&str>,
+        reason: Option<&str>,
+        now: u32,
+    ) -> bool {
         if !self.current(turn) {
             return false;
         }
@@ -405,17 +467,35 @@ impl VoiceCommand {
             // Only a recording that has ended can be heard or answered; the computer is ahead of itself.
             _ if self.listening() => false,
             "voice.done" => {
-                let Stage::Thinking { heard, replies, .. } = core::mem::replace(&mut self.stage, Stage::Idle) else { return false };
+                let Stage::Thinking { heard, replies, .. } =
+                    core::mem::replace(&mut self.stage, Stage::Idle)
+                else {
+                    return false;
+                };
                 // With nothing to read, there's nothing to wait for.
                 if heard.is_some() || !replies.is_empty() {
-                    self.stage = Stage::Done { heard, replies, until: now.wrapping_add(READ_MS) };
+                    self.stage = Stage::Done {
+                        heard,
+                        replies,
+                        until: now.wrapping_add(READ_MS),
+                    };
                 }
                 true
             }
             "voice.heard" | "voice.reply" => {
-                let Stage::Thinking { heard, replies, quiet_since, .. } = &mut self.stage else { return false };
+                let Stage::Thinking {
+                    heard,
+                    replies,
+                    quiet_since,
+                    ..
+                } = &mut self.stage
+                else {
+                    return false;
+                };
                 *quiet_since = now;
-                let Some(text) = text.filter(|text| !text.trim().is_empty()) else { return false };
+                let Some(text) = text.filter(|text| !text.trim().is_empty()) else {
+                    return false;
+                };
                 if event == "voice.heard" {
                     *heard = Some(String::from(text.trim()));
                 } else {
@@ -431,7 +511,11 @@ impl VoiceCommand {
     }
 
     fn fail(&mut self, reason: Reason, message: Option<String>, now: u32) {
-        self.stage = Stage::Failed { reason, message, until: now.wrapping_add(ERROR_MS) };
+        self.stage = Stage::Failed {
+            reason,
+            message,
+            until: now.wrapping_add(ERROR_MS),
+        };
     }
 
     /// Closes the overlay once its time is up: an error or the replies read, or the computer quiet for
@@ -440,12 +524,16 @@ impl VoiceCommand {
     pub fn expire(&mut self, now: u32) -> bool {
         let over = match &self.stage {
             Stage::Thinking { quiet_since, .. } => now.wrapping_sub(*quiet_since) >= QUIET_CLOSE_MS,
-            Stage::Done { until, .. } | Stage::Failed { until, .. } => now.wrapping_sub(*until) as i32 >= 0,
+            Stage::Done { until, .. } | Stage::Failed { until, .. } => {
+                now.wrapping_sub(*until) as i32 >= 0
+            }
             Stage::Idle | Stage::Listening(_) => false,
         };
         if over {
             match &self.stage {
-                Stage::Thinking { replies, .. } if replies.is_empty() => self.fail(Reason::NoAnswer, None, now),
+                Stage::Thinking { replies, .. } if replies.is_empty() => {
+                    self.fail(Reason::NoAnswer, None, now)
+                }
                 _ => self.stage = Stage::Idle,
             }
         }
@@ -453,9 +541,9 @@ impl VoiceCommand {
     }
 
     /// How often THINKING gains a dot while it waits.
-const THINKING_DOT_MS: u32 = 400;
+    const THINKING_DOT_MS: u32 = 400;
 
-/// What the overlay shows now; None when it is closed.
+    /// What the overlay shows now; None when it is closed.
     pub fn panel(&self, now: u32) -> Option<Panel> {
         let close = alloc::vec![(&b"K2"[..], &b"CLOSE"[..])];
         match &self.stage {
@@ -471,7 +559,12 @@ const THINKING_DOT_MS: u32 = 400;
                     hints: alloc::vec![(b"K0", b"LET GO"), (b"K2", b"CANCEL")],
                 })
             }
-            Stage::Thinking { turn: _, heard, replies, quiet_since } => {
+            Stage::Thinking {
+                turn: _,
+                heard,
+                replies,
+                quiet_since,
+            } => {
                 if !replies.is_empty() {
                     return Some(text_panel(b"REPLY", heard.as_deref(), replies, close));
                 }
@@ -479,13 +572,24 @@ const THINKING_DOT_MS: u32 = 400;
                 // alive.
                 let waited = now.wrapping_sub(*quiet_since);
                 let mut title = b"THINKING".to_vec();
-                title.extend(core::iter::repeat_n(b'.', (waited / Self::THINKING_DOT_MS % 4) as usize));
+                title.extend(core::iter::repeat_n(
+                    b'.',
+                    (waited / Self::THINKING_DOT_MS % 4) as usize,
+                ));
                 let mut panel = text_panel(&title, heard.as_deref(), replies, close);
-                panel.lines.push((crate::text!(8, "{} S", waited / 1000).as_bytes().to_vec(), Vec::new(), Tone::Dim));
+                panel.lines.push((
+                    crate::text!(8, "{} S", waited / 1000).as_bytes().to_vec(),
+                    Vec::new(),
+                    Tone::Dim,
+                ));
                 Some(panel)
             }
-            Stage::Done { heard, replies, .. } => Some(text_panel(b"REPLY", heard.as_deref(), replies, close)),
-            Stage::Failed { reason, message, .. } => {
+            Stage::Done { heard, replies, .. } => {
+                Some(text_panel(b"REPLY", heard.as_deref(), replies, close))
+            }
+            Stage::Failed {
+                reason, message, ..
+            } => {
                 let text = [String::from(message.as_deref().unwrap_or(reason.text()))];
                 Some(text_panel(reason.title(), None, &text, close))
             }
@@ -495,14 +599,27 @@ const THINKING_DOT_MS: u32 = 400;
 
 /// The heard text dimmed, then the replies, wrapped to the panel: large type while it fits, small type
 /// after that, and past what small type holds, the oldest rows give way.
-fn text_panel(title: &[u8], heard: Option<&str>, replies: &[String], hints: Vec<(&'static [u8], &'static [u8])>) -> Panel {
+fn text_panel(
+    title: &[u8],
+    heard: Option<&str>,
+    replies: &[String],
+    hints: Vec<(&'static [u8], &'static [u8])>,
+) -> Panel {
     let layout = |scale: u8| {
         let mut lines: Vec<(Vec<u8>, Vec<u8>, Tone)> = Vec::new();
         if let Some(heard) = heard {
-            lines.extend(font::wrap(heard, VOICE_TEXT_WIDTH, scale as i32).into_iter().map(|row| (row, Vec::new(), Tone::Dim)));
+            lines.extend(
+                font::wrap(heard, VOICE_TEXT_WIDTH, scale as i32)
+                    .into_iter()
+                    .map(|row| (row, Vec::new(), Tone::Dim)),
+            );
         }
         for reply in replies {
-            lines.extend(font::wrap(reply, VOICE_TEXT_WIDTH, scale as i32).into_iter().map(|row| (row, Vec::new(), Tone::Plain)));
+            lines.extend(
+                font::wrap(reply, VOICE_TEXT_WIDTH, scale as i32)
+                    .into_iter()
+                    .map(|row| (row, Vec::new(), Tone::Plain)),
+            );
         }
         let rows = voice_text_rows(scale, lines.iter().any(|(row, _, _)| font::has_wide(row)));
         let fits = lines.len() <= rows;
@@ -515,7 +632,13 @@ fn text_panel(title: &[u8], heard: Option<&str>, replies: &[String], hints: Vec<
         (lines, true) => (lines, 2),
         _ => (layout(1).0, 1),
     };
-    Panel { kind: PanelKind::Text(scale), title: title.to_vec(), lines, selected: None, hints }
+    Panel {
+        kind: PanelKind::Text(scale),
+        title: title.to_vec(),
+        lines,
+        selected: None,
+        hints,
+    }
 }
 
 #[cfg(test)]
@@ -534,7 +657,9 @@ mod tests {
     }
 
     fn tone(level: i16, count: usize) -> Vec<i16> {
-        (0..count).map(|index| if index % 2 == 0 { level } else { -level }).collect()
+        (0..count)
+            .map(|index| if index % 2 == 0 { level } else { -level })
+            .collect()
     }
 
     #[test]
@@ -547,7 +672,10 @@ mod tests {
         assert!(voice.waiting());
         let at = |now| voice.panel(now).unwrap();
         assert_eq!(at(1000).title, b"THINKING");
-        assert_eq!(at(1000 + 2 * VoiceCommand::THINKING_DOT_MS).title, b"THINKING..");
+        assert_eq!(
+            at(1000 + 2 * VoiceCommand::THINKING_DOT_MS).title,
+            b"THINKING.."
+        );
         let panel = at(4500);
         assert_eq!(panel.lines.last().unwrap().0, b"3 S");
     }
@@ -569,7 +697,10 @@ mod tests {
         let lines = lines(&out);
         assert_eq!(lines.len(), 4);
         for (seq, line) in lines[..3].iter().enumerate() {
-            assert!(line.starts_with(&std::format!("VOICE DATA 1 {seq} ")), "{line}");
+            assert!(
+                line.starts_with(&std::format!("VOICE DATA 1 {seq} ")),
+                "{line}"
+            );
             assert!(line.len() < 1024 && line.ends_with('\n'));
         }
         assert_eq!(lines[3], "VOICE END 1 2880\n");
@@ -581,19 +712,32 @@ mod tests {
     fn a_line_holds_768_base64_characters_and_decodes_on_its_own() {
         let mut voice = VoiceCommand::new();
         voice.start(0);
-        let samples: Vec<i16> = (0..SAMPLES_PER_LINE * 3).map(|index| (libm::sinf(index as f32 * 0.04) * 8000.0) as i16).collect();
+        let samples: Vec<i16> = (0..SAMPLES_PER_LINE * 3)
+            .map(|index| (libm::sinf(index as f32 * 0.04) * 8000.0) as i16)
+            .collect();
         let out = lines(&voice.push(&samples));
         assert_eq!(out.len(), 3);
         let mut decoded_lines = Vec::new();
         for line in &out {
             let fields: Vec<&str> = line.trim_end().split(' ').collect();
-            assert_eq!(fields.len(), 7, "VOICE DATA turn seq predictor index base64");
+            assert_eq!(
+                fields.len(),
+                7,
+                "VOICE DATA turn seq predictor index base64"
+            );
             assert_eq!(fields[6].len(), 768);
-            let (predictor, index): (i16, u8) = (fields[4].parse().unwrap(), fields[5].parse().unwrap());
+            let (predictor, index): (i16, u8) =
+                (fields[4].parse().unwrap(), fields[5].parse().unwrap());
             let mut bytes = [0u8; 576];
             assert_eq!(decode_base64(fields[6].as_bytes(), &mut bytes), Some(576));
             let mut decoder = Decoder::with_state(predictor, index);
-            decoded_lines.push(bytes.iter().flat_map(|&byte| [byte & 15, byte >> 4]).map(|nibble| decoder.decode(nibble)).collect::<Vec<i16>>());
+            decoded_lines.push(
+                bytes
+                    .iter()
+                    .flat_map(|&byte| [byte & 15, byte >> 4])
+                    .map(|nibble| decoder.decode(nibble))
+                    .collect::<Vec<i16>>(),
+            );
         }
         // Each line decoded from its own header continues the previous exactly: the third alone matches
         // the third stretch of the stream decoded from the start.
@@ -608,7 +752,10 @@ mod tests {
             .collect();
         assert_eq!(decoded_lines[2], whole[SAMPLES_PER_LINE * 2..]);
         let longest = "VOICE DATA 4294967295 4294967295 -32768 88 ".len() + 768 + 1;
-        assert!(longest < 1024, "the longest possible line is {longest} bytes");
+        assert!(
+            longest < 1024,
+            "the longest possible line is {longest} bytes"
+        );
     }
 
     #[test]
@@ -637,8 +784,14 @@ mod tests {
         }
         assert!(voice.due(30_000));
         let out = lines(&voice.release(30_000));
-        assert_eq!(out.last().unwrap(), &std::format!("VOICE END 1 {MAX_SAMPLES}\n"));
-        assert_eq!(data + out.len() - 1, (MAX_SAMPLES as usize).div_ceil(SAMPLES_PER_LINE));
+        assert_eq!(
+            out.last().unwrap(),
+            &std::format!("VOICE END 1 {MAX_SAMPLES}\n")
+        );
+        assert_eq!(
+            data + out.len() - 1,
+            (MAX_SAMPLES as usize).div_ceil(SAMPLES_PER_LINE)
+        );
     }
 
     #[test]
@@ -655,7 +808,11 @@ mod tests {
         voice.start(0);
         voice.push(&[1]);
         voice.push(&[2, 3]);
-        assert_eq!(lines(&voice.release(1000)).last().unwrap(), "VOICE END 1 2\n", "the third sample has no partner");
+        assert_eq!(
+            lines(&voice.release(1000)).last().unwrap(),
+            "VOICE END 1 2\n",
+            "the third sample has no partner"
+        );
     }
 
     #[test]
@@ -663,15 +820,25 @@ mod tests {
         let mut voice = VoiceCommand::new();
         voice.set_available(true);
         voice.start(0);
-        assert_eq!(voice.set_available(false), Some(Out::Line("VOICE CANCEL 1\n".into())));
+        assert_eq!(
+            voice.set_available(false),
+            Some(Out::Line("VOICE CANCEL 1\n".into()))
+        );
         assert!(!voice.available() && !voice.is_open());
         voice.set_available(true);
         voice.start(0);
         assert_eq!(voice.cancel(), Some(Out::Line("VOICE CANCEL 2\n".into())));
         voice.start(0);
         voice.release(1000);
-        assert_eq!(voice.cancel(), None, "after the recording, closing says nothing");
-        assert!(!voice.event("voice.reply", 3, Some("late"), None, 2000), "a closed turn's events are ignored");
+        assert_eq!(
+            voice.cancel(),
+            None,
+            "after the recording, closing says nothing"
+        );
+        assert!(
+            !voice.event("voice.reply", 3, Some("late"), None, 2000),
+            "a closed turn's events are ignored"
+        );
     }
 
     #[test]
@@ -682,12 +849,22 @@ mod tests {
         assert_eq!(voice.panel(1000).unwrap().title, b"THINKING");
         assert!(!voice.event("voice.heard", 7, Some("other turn"), None, 1100));
         assert!(voice.event("voice.heard", 1, Some("what is codex doing"), None, 1200));
-        assert!(voice.event("voice.reply", 1, Some("It's writing the tests."), None, 1300));
+        assert!(voice.event(
+            "voice.reply",
+            1,
+            Some("It's writing the tests."),
+            None,
+            1300
+        ));
         assert!(voice.event("voice.reply", 1, Some("Almost done."), None, 1400));
         let panel = voice.panel(1400).unwrap();
         assert_eq!(panel.title, b"REPLY");
         assert_eq!(panel.kind, PanelKind::Text(2));
-        let rows: Vec<(String, Tone)> = panel.lines.iter().map(|(row, _, tone)| (String::from_utf8(row.clone()).unwrap(), *tone)).collect();
+        let rows: Vec<(String, Tone)> = panel
+            .lines
+            .iter()
+            .map(|(row, _, tone)| (String::from_utf8(row.clone()).unwrap(), *tone))
+            .collect();
         assert_eq!(
             rows,
             [
@@ -715,17 +892,31 @@ mod tests {
 
     #[test]
     fn a_quiet_computer_is_said_not_to_have_answered_after_the_daemons_timeout() {
-        const { assert!(QUIET_CLOSE_MS > 120_000, "past the daemon's 120 s turn timeout") };
+        const {
+            assert!(
+                QUIET_CLOSE_MS > 120_000,
+                "past the daemon's 120 s turn timeout"
+            )
+        };
         let mut voice = VoiceCommand::new();
         voice.start(0);
         voice.release(1000);
         voice.event("voice.heard", 1, Some("hello"), None, 20_000);
-        assert!(!voice.expire(20_000 + QUIET_CLOSE_MS - 1), "each event restarts the wait");
+        assert!(
+            !voice.expire(20_000 + QUIET_CLOSE_MS - 1),
+            "each event restarts the wait"
+        );
         let at = 20_000 + QUIET_CLOSE_MS;
         assert!(voice.expire(at));
         let panel = voice.panel(at).unwrap();
-        assert_eq!((panel.title.as_slice(), panel_text(&panel).as_str()), (&b"NO ANSWER"[..], "The computer didn't answer."));
-        assert!(!voice.event("voice.reply", 1, Some("late"), None, at + 1), "the turn is over");
+        assert_eq!(
+            (panel.title.as_slice(), panel_text(&panel).as_str()),
+            (&b"NO ANSWER"[..], "The computer didn't answer.")
+        );
+        assert!(
+            !voice.event("voice.reply", 1, Some("late"), None, at + 1),
+            "the turn is over"
+        );
         assert!(voice.expire(at + ERROR_MS));
         assert!(!voice.is_open());
 
@@ -738,16 +929,37 @@ mod tests {
     }
 
     const REASONS: [(&str, &[u8], &str); 5] = [
-        ("signed_out", b"SIGN IN", "Sign in on the computer to talk to me."),
+        (
+            "signed_out",
+            b"SIGN IN",
+            "Sign in on the computer to talk to me.",
+        ),
         ("allowance", b"VOICE USED UP", "Today's voice is used up."),
-        ("global_cap", b"VOICE PAUSED", "Voice is paused for everyone today."),
-        ("not_ready", b"NOT READY", "My session on the computer isn't ready."),
-        ("slow_link", b"SLOW CABLE", "This port is too slow for voice. Use my other USB port."),
+        (
+            "global_cap",
+            b"VOICE PAUSED",
+            "Voice is paused for everyone today.",
+        ),
+        (
+            "not_ready",
+            b"NOT READY",
+            "My session on the computer isn't ready.",
+        ),
+        (
+            "slow_link",
+            b"SLOW CABLE",
+            "This port is too slow for voice. Use my other USB port.",
+        ),
     ];
 
     /// The panel's text, its rows joined again.
     fn panel_text(panel: &Panel) -> String {
-        panel.lines.iter().map(|(row, _, _)| String::from_utf8(row.clone()).unwrap()).collect::<Vec<_>>().join(" ")
+        panel
+            .lines
+            .iter()
+            .map(|(row, _, _)| String::from_utf8(row.clone()).unwrap())
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 
     #[test]
@@ -759,7 +971,11 @@ mod tests {
             voice.release(1000);
             assert!(voice.event("voice.error", 1, None, Some(name), 2000));
             let panel = voice.panel(2000).unwrap();
-            assert_eq!((panel.title.as_slice(), panel_text(&panel).as_str()), (title, text), "{name}");
+            assert_eq!(
+                (panel.title.as_slice(), panel_text(&panel).as_str()),
+                (title, text),
+                "{name}"
+            );
 
             // Before speaking, from `voice.available`, with the computer's message.
             let mut voice = VoiceCommand::new();
@@ -767,8 +983,15 @@ mod tests {
             assert!(!voice.is_open(), "nothing shows until K0");
             assert!(voice.show_why_off(5000));
             let panel = voice.panel(5000).unwrap();
-            assert_eq!((panel.title.as_slice(), panel_text(&panel).as_str()), (title, "It comes back at 08:00."), "{name}");
-            assert!(!voice.listening() && voice.turn() == 0, "nothing is recorded");
+            assert_eq!(
+                (panel.title.as_slice(), panel_text(&panel).as_str()),
+                (title, "It comes back at 08:00."),
+                "{name}"
+            );
+            assert!(
+                !voice.listening() && voice.turn() == 0,
+                "nothing is recorded"
+            );
             assert!(!voice.expire(5000 + ERROR_MS - 1));
             assert!(voice.expire(5000 + ERROR_MS));
         }
@@ -794,14 +1017,20 @@ mod tests {
         let mut voice = VoiceCommand::new();
         voice.set_available(true);
         voice.start(0);
-        assert_eq!(voice.offer(false, Some("signed_out"), None, 300), Some(Out::Line("VOICE CANCEL 1\n".into())));
+        assert_eq!(
+            voice.offer(false, Some("signed_out"), None, 300),
+            Some(Out::Line("VOICE CANCEL 1\n".into()))
+        );
         assert_eq!(voice.panel(300).unwrap().title, b"SIGN IN");
 
         // Waiting for the computer: the refusal may come just before the turn's own `voice.error`.
         voice.offer(true, None, None, 0);
         voice.start(1000);
         voice.release(3000);
-        assert_eq!(voice.offer(false, Some("allowance"), Some("Used up."), 4000), None);
+        assert_eq!(
+            voice.offer(false, Some("allowance"), Some("Used up."), 4000),
+            None
+        );
         assert_eq!(voice.panel(4000).unwrap().title, b"VOICE USED UP");
         assert!(!voice.event("voice.error", 2, Some("Used up."), Some("allowance"), 4100));
 
@@ -812,7 +1041,10 @@ mod tests {
         voice.event("voice.error", 3, None, Some("global_cap"), 13_000);
         voice.offer(false, Some("global_cap"), None, 13_100);
         assert_eq!(voice.panel(13_100).unwrap().title, b"VOICE PAUSED");
-        assert!(!voice.expire(13_000 + ERROR_MS - 1), "its time runs from the error");
+        assert!(
+            !voice.expire(13_000 + ERROR_MS - 1),
+            "its time runs from the error"
+        );
     }
 
     #[test]
@@ -828,11 +1060,23 @@ mod tests {
 
         // The computer's own message wins; and `busy` can come while still recording, which ends it.
         voice.start(10_000);
-        assert!(voice.event("voice.error", 2, Some("Another turn is running"), Some("busy"), 10_100));
+        assert!(voice.event(
+            "voice.error",
+            2,
+            Some("Another turn is running"),
+            Some("busy"),
+            10_100
+        ));
         assert!(!voice.listening());
         let panel = voice.panel(10_100).unwrap();
-        assert_eq!((panel.title.as_slice(), panel.lines[0].0.as_slice()), (&b"BUSY"[..], &b"Another turn is"[..]));
-        assert!(!voice.event("voice.reply", 2, Some("x"), None, 10_200), "the turn is over");
+        assert_eq!(
+            (panel.title.as_slice(), panel.lines[0].0.as_slice()),
+            (&b"BUSY"[..], &b"Another turn is"[..])
+        );
+        assert!(
+            !voice.event("voice.reply", 2, Some("x"), None, 10_200),
+            "the turn is over"
+        );
     }
 
     #[test]
@@ -841,13 +1085,19 @@ mod tests {
         voice.start(1000);
         assert_eq!(voice.panel(1000).unwrap().kind, PanelKind::Meter(0));
         // 100 ms of a loud tone on a DC offset: the offset doesn't count.
-        let loud: Vec<i16> = tone(8000, LEVEL_WINDOW as usize).iter().map(|sample| sample + 2000).collect();
+        let loud: Vec<i16> = tone(8000, LEVEL_WINDOW as usize)
+            .iter()
+            .map(|sample| sample + 2000)
+            .collect();
         voice.push(&loud);
         let panel = voice.panel(4500).unwrap();
         assert_eq!(panel.title, b"LISTENING");
         assert_eq!(panel.kind, PanelKind::Meter(meter_level(8000.0)));
         assert_eq!(panel.lines[0].0, b"27 S LEFT");
-        assert_eq!(panel.hints, [(&b"K0"[..], &b"LET GO"[..]), (&b"K2"[..], &b"CANCEL"[..])]);
+        assert_eq!(
+            panel.hints,
+            [(&b"K0"[..], &b"LET GO"[..]), (&b"K2"[..], &b"CANCEL"[..])]
+        );
     }
 
     #[test]

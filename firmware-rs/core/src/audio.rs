@@ -17,7 +17,13 @@ pub enum Prompt {
 }
 
 impl Prompt {
-    pub const ALL: [Prompt; 5] = [Prompt::InputRequired, Prompt::Done, Prompt::Failed, Prompt::FocusDone, Prompt::BreakDone];
+    pub const ALL: [Prompt; 5] = [
+        Prompt::InputRequired,
+        Prompt::Done,
+        Prompt::Failed,
+        Prompt::FocusDone,
+        Prompt::BreakDone,
+    ];
 }
 
 /// The situation an announcement is made in, which picks the pool its line is drawn from. The
@@ -81,14 +87,19 @@ impl Occasion {
     }
 
     pub fn from_name(name: &str) -> Option<Occasion> {
-        Occasion::ALL.into_iter().find(|occasion| occasion.name() == name)
+        Occasion::ALL
+            .into_iter()
+            .find(|occasion| occasion.name() == name)
     }
 
     /// Where to look when this occasion has no lines: a special occasion falls back to the ordinary
     /// one it is a rarer reading of; ordinary occasions and greetings have nowhere further to go.
     pub fn fallback(self) -> Option<Occasion> {
         match self {
-            Occasion::FirstDone | Occasion::Milestone | Occasion::LateNightDone | Occasion::LongSession => Some(Occasion::Done),
+            Occasion::FirstDone
+            | Occasion::Milestone
+            | Occasion::LateNightDone
+            | Occasion::LongSession => Some(Occasion::Done),
             Occasion::LateNightInput => Some(Occasion::InputRequired),
             _ => None,
         }
@@ -98,11 +109,18 @@ impl Occasion {
     pub fn builtin(self) -> Option<Prompt> {
         match self {
             Occasion::InputRequired | Occasion::LateNightInput => Some(Prompt::InputRequired),
-            Occasion::Done | Occasion::FirstDone | Occasion::Milestone | Occasion::LateNightDone | Occasion::LongSession => Some(Prompt::Done),
+            Occasion::Done
+            | Occasion::FirstDone
+            | Occasion::Milestone
+            | Occasion::LateNightDone
+            | Occasion::LongSession => Some(Prompt::Done),
             Occasion::Failed => Some(Prompt::Failed),
             Occasion::FocusDone => Some(Prompt::FocusDone),
             Occasion::BreakDone => Some(Prompt::BreakDone),
-            Occasion::GreetingMorning | Occasion::GreetingAfternoon | Occasion::GreetingEvening | Occasion::WelcomeBack => None,
+            Occasion::GreetingMorning
+            | Occasion::GreetingAfternoon
+            | Occasion::GreetingEvening
+            | Occasion::WelcomeBack => None,
         }
     }
 
@@ -170,7 +188,11 @@ pub trait Registers {
     fn write(&mut self, register: u8, value: u8) -> Result<(), Self::Error>;
 }
 
-fn update<R: Registers>(codec: &mut R, register: u8, change: impl FnOnce(u8) -> u8) -> Result<(), R::Error> {
+fn update<R: Registers>(
+    codec: &mut R,
+    register: u8,
+    change: impl FnOnce(u8) -> u8,
+) -> Result<(), R::Error> {
     let value = codec.read(register)?;
     codec.write(register, change(value))
 }
@@ -305,7 +327,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn volume_matches_esp_codec_dev() {
         // hw_gain = 20·log10(3.3/5) ≈ -3.609 dB; reg = (db + 3.609 + 95.5) × 2.
@@ -317,10 +338,17 @@ mod tests {
 
     #[test]
     fn the_register_sequence_matches_the_c_driver() {
-        let mut codec = Recorder { values: [0; 256], log: Vec::new() };
+        let mut codec = Recorder {
+            values: [0; 256],
+            log: Vec::new(),
+        };
         start_es8311(&mut codec, 65).unwrap();
-        let writes: Vec<(u8, u8)> =
-            codec.log.iter().filter(|(kind, _, _)| *kind == 'w').map(|&(_, register, value)| (register, value)).collect();
+        let writes: Vec<(u8, u8)> = codec
+            .log
+            .iter()
+            .filter(|(kind, _, _)| *kind == 'w')
+            .map(|&(_, register, value)| (register, value))
+            .collect();
         let expected: &[(u8, u8)] = &[
             (0x0D, 0xFA),
             (0x44, 0x08),

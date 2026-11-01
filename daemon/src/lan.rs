@@ -79,7 +79,9 @@ impl LanConfig {
         if self.fixed_address.is_some() {
             return Vec::new();
         }
-        self.discovery.found().map_or_else(Vec::new, |found| pick(&found, box_key))
+        self.discovery
+            .found()
+            .map_or_else(Vec::new, |found| pick(&found, box_key))
     }
 }
 
@@ -146,7 +148,11 @@ impl Discovery {
                 None
             }
         });
-        let found = browser.as_ref()?.found.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let found = browser
+            .as_ref()?
+            .found
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         Some(found.values().cloned().collect())
     }
 }
@@ -177,7 +183,10 @@ impl Browser {
                 }
             })
             .map_err(|error| mdns_sd::Error::Msg(error.to_string()))?;
-        Ok(Self { _daemon: Some(daemon), found })
+        Ok(Self {
+            _daemon: Some(daemon),
+            found,
+        })
     }
 }
 
@@ -204,7 +213,12 @@ fn read_key(path: &Path) -> Option<[u8; 32]> {
 
 /// What a side signs: bound to its role, the box and the nonce the other side chose.
 pub fn signed_message(role: &str, box_key: &[u8; 32], nonce: &[u8; 32]) -> Vec<u8> {
-    format!("vibebuddy-lan-v1\n{role}\n{}\n{}", URL_SAFE_NO_PAD.encode(box_key), URL_SAFE_NO_PAD.encode(nonce)).into_bytes()
+    format!(
+        "vibebuddy-lan-v1\n{role}\n{}\n{}",
+        URL_SAFE_NO_PAD.encode(box_key),
+        URL_SAFE_NO_PAD.encode(nonce)
+    )
+    .into_bytes()
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -255,16 +269,24 @@ fn drop_when_unacknowledged(stream: &TcpStream, after: Duration) {
 fn drop_when_unacknowledged(_stream: &TcpStream, _after: Duration) {}
 
 /// Connects and runs the handshake; on success the stream carries the VibeBuddy Protocol.
-pub async fn connect(target: &Target, identity: &Identity, takeover: bool, memory: &Memory) -> Result<LinkStream, LinkError> {
+pub async fn connect(
+    target: &Target,
+    identity: &Identity,
+    takeover: bool,
+    memory: &Memory,
+) -> Result<LinkStream, LinkError> {
     let mut stream = tokio::time::timeout(CONNECT_TIMEOUT, TcpStream::connect(&target.address))
         .await
         .map_err(|_| LinkError::Unreachable("timed out".to_owned()))?
         .map_err(|error| LinkError::Unreachable(error.to_string()))?;
     let _ = stream.set_nodelay(true);
     drop_when_unacknowledged(&stream, GIVE_UP_AFTER);
-    let session = tokio::time::timeout(HANDSHAKE_TIMEOUT, handshake(&mut stream, target, identity, takeover, memory))
-        .await
-        .map_err(|_| LinkError::Unreachable("handshake timed out".to_owned()))??;
+    let session = tokio::time::timeout(
+        HANDSHAKE_TIMEOUT,
+        handshake(&mut stream, target, identity, takeover, memory),
+    )
+    .await
+    .map_err(|_| LinkError::Unreachable("handshake timed out".to_owned()))??;
     Ok(match session {
         Some(session) => Box::new(noise_link::bridge(stream, session)),
         None => Box::new(stream),
@@ -274,7 +296,10 @@ pub async fn connect(target: &Target, identity: &Identity, takeover: bool, memor
 /// Links to the paired box over the local network: at the remembered address, or, when nothing answers there,
 /// wherever mDNS says it is now. A new address is remembered once the handshake proves the box's key. None when
 /// this computer isn't paired or knows nowhere to try; otherwise the last place tried and how it went.
-pub async fn link(lan: &LanConfig, takeover: bool) -> Option<(Target, Result<LinkStream, LinkError>)> {
+pub async fn link(
+    lan: &LanConfig,
+    takeover: bool,
+) -> Option<(Target, Result<LinkStream, LinkError>)> {
     let box_key = lan.box_key()?;
     let remembered = lan.target();
     let mut last = None;
@@ -286,7 +311,10 @@ pub async fn link(lan: &LanConfig, takeover: bool) -> Option<(Target, Result<Lin
         last = Some((target.clone(), result));
     }
     for address in lan.find(&box_key).await {
-        if remembered.as_ref().is_some_and(|target| target.address == address) {
+        if remembered
+            .as_ref()
+            .is_some_and(|target| target.address == address)
+        {
             continue;
         }
         let target = Target { address, box_key };
@@ -308,11 +336,18 @@ pub async fn link(lan: &LanConfig, takeover: bool) -> Option<(Target, Result<Lin
 /// Whether the paired box answers on the local network, at the remembered address or one mDNS found: while
 /// linked through the Relay, a reason to move over.
 pub async fn reachable(lan: &LanConfig) -> bool {
-    let Some(box_key) = lan.box_key() else { return false };
+    let Some(box_key) = lan.box_key() else {
+        return false;
+    };
     let remembered = lan.target().map(|target| target.address);
-    let found = lan.advertised(&box_key).into_iter().filter(|address| remembered.as_ref() != Some(address));
+    let found = lan
+        .advertised(&box_key)
+        .into_iter()
+        .filter(|address| remembered.as_ref() != Some(address));
     for address in remembered.clone().into_iter().chain(found) {
-        if let Ok(Ok(_)) = tokio::time::timeout(Duration::from_secs(1), TcpStream::connect(&address)).await {
+        if let Ok(Ok(_)) =
+            tokio::time::timeout(Duration::from_secs(1), TcpStream::connect(&address)).await
+        {
             return true;
         }
     }
@@ -329,23 +364,30 @@ pub async fn handshake<S: AsyncRead + AsyncWrite + Unpin>(
 ) -> Result<Option<Session>, LinkError> {
     let first = read_line(stream).await?;
     if let Some(box_key) = noise_link::opener_key(&first) {
-        return noise_handshake(stream, target, identity, takeover, memory, box_key).await.map(Some);
+        return noise_handshake(stream, target, identity, takeover, memory, box_key)
+            .await
+            .map(Some);
     }
     let challenge = parse(&first)?;
-    let text = |value: &Value, name: &str| value.get(name).and_then(Value::as_str).map(str::to_owned);
+    let text =
+        |value: &Value, name: &str| value.get(name).and_then(Value::as_str).map(str::to_owned);
     if text(&challenge, "event").as_deref() != Some("link.challenge") {
         return Err(LinkError::Refused("no challenge".to_owned()));
     }
     // Whoever answers at the box's address can't talk a box that spoke Noise down to the clear.
     if memory.knows(&target.box_key) {
-        return Err(LinkError::Refused("the box spoke Noise before, and now not".to_owned()));
+        return Err(LinkError::Refused(
+            "the box spoke Noise before, and now not".to_owned(),
+        ));
     }
     // Another box answering at the remembered address is never driven.
     let box_key = text(&challenge, "box").and_then(|key| decode::<32>(&key));
     if box_key != Some(target.box_key) {
         return Err(LinkError::Refused("a different box".to_owned()));
     }
-    let nonce = text(&challenge, "nonce").and_then(|nonce| decode::<32>(&nonce)).ok_or_else(|| LinkError::Refused("bad challenge".to_owned()))?;
+    let nonce = text(&challenge, "nonce")
+        .and_then(|nonce| decode::<32>(&nonce))
+        .ok_or_else(|| LinkError::Refused("bad challenge".to_owned()))?;
     let mut ours = [0u8; 32];
     getrandom::fill(&mut ours).map_err(|error| LinkError::Unreachable(error.to_string()))?;
     let hello = serde_json::json!({
@@ -358,14 +400,29 @@ pub async fn handshake<S: AsyncRead + AsyncWrite + Unpin>(
     });
     let mut line = hello.to_string().into_bytes();
     line.push(b'\n');
-    stream.write_all(&line).await.map_err(|error| LinkError::Unreachable(error.to_string()))?;
+    stream
+        .write_all(&line)
+        .await
+        .map_err(|error| LinkError::Unreachable(error.to_string()))?;
 
     let answer = parse(&read_line(stream).await?)?;
     match text(&answer, "event").as_deref() {
         Some("link.welcome") => {
             let signature = text(&answer, "sig").and_then(|sig| decode::<64>(&sig));
-            let proven = signature.is_some_and(|signature| verify(&target.box_key, &signed_message("box", &target.box_key, &ours), &signature));
-            if proven { Ok(None) } else { Err(LinkError::Refused("the box didn't prove its key".to_owned())) }
+            let proven = signature.is_some_and(|signature| {
+                verify(
+                    &target.box_key,
+                    &signed_message("box", &target.box_key, &ours),
+                    &signature,
+                )
+            });
+            if proven {
+                Ok(None)
+            } else {
+                Err(LinkError::Refused(
+                    "the box didn't prove its key".to_owned(),
+                ))
+            }
         }
         answer_event => Err(refusal(answer_event, &answer)),
     }
@@ -386,19 +443,27 @@ async fn noise_handshake<S: AsyncRead + AsyncWrite + Unpin>(
         return Err(LinkError::Refused("a different box".to_owned()));
     }
     let payload = serde_json::json!({"takeover": takeover}).to_string();
-    let (handshake, first) = noise_link::start(identity, &target.box_key, payload.as_bytes()).map_err(LinkError::Refused)?;
-    stream.write_all(format!("{first}\n").as_bytes()).await.map_err(|error| LinkError::Unreachable(error.to_string()))?;
+    let (handshake, first) = noise_link::start(identity, &target.box_key, payload.as_bytes())
+        .map_err(LinkError::Refused)?;
+    stream
+        .write_all(format!("{first}\n").as_bytes())
+        .await
+        .map_err(|error| LinkError::Unreachable(error.to_string()))?;
     let reply = read_line(stream).await?;
     // Turned away before a session: `link.error` in the clear.
     if reply.starts_with('{') {
         let refused = parse(&reply)?;
-        return Err(refusal(refused.get("event").and_then(Value::as_str), &refused));
+        return Err(refusal(
+            refused.get("event").and_then(Value::as_str),
+            &refused,
+        ));
     }
     let mut session = handshake.finish(&reply).map_err(LinkError::Refused)?;
     memory.learned(&target.box_key);
     let sealed = read_line(stream).await?;
     let answer = session.open(&sealed).map_err(LinkError::Refused)?;
-    let answer: Value = serde_json::from_slice(&answer).map_err(|_| LinkError::Refused("bad handshake line".to_owned()))?;
+    let answer: Value = serde_json::from_slice(&answer)
+        .map_err(|_| LinkError::Refused("bad handshake line".to_owned()))?;
     match answer.get("event").and_then(Value::as_str) {
         Some("link.welcome") => Ok(session),
         answer_event => Err(refusal(answer_event, &answer)),
@@ -409,7 +474,10 @@ async fn noise_handshake<S: AsyncRead + AsyncWrite + Unpin>(
 fn refusal(event: Option<&str>, answer: &Value) -> LinkError {
     let text = |name: &str| answer.get(name).and_then(Value::as_str).map(str::to_owned);
     match event {
-        Some("link.busy") => LinkError::Busy { reason: text("reason").unwrap_or_default(), owner: text("owner").unwrap_or_default() },
+        Some("link.busy") => LinkError::Busy {
+            reason: text("reason").unwrap_or_default(),
+            owner: text("owner").unwrap_or_default(),
+        },
         _ => LinkError::Refused(text("code").unwrap_or_else(|| "unexpected reply".to_owned())),
     }
 }
@@ -424,7 +492,11 @@ async fn read_line<S: AsyncRead + Unpin>(stream: &mut S) -> Result<String, LinkE
     loop {
         let mut byte = [0u8; 1];
         match stream.read(&mut byte).await {
-            Ok(0) => return Err(LinkError::Unreachable("closed during the handshake".to_owned())),
+            Ok(0) => {
+                return Err(LinkError::Unreachable(
+                    "closed during the handshake".to_owned(),
+                ));
+            }
             Ok(_) if byte[0] == b'\n' => break,
             Ok(_) if line.len() < MAX_HANDSHAKE_LINE => line.push(byte[0]),
             Ok(_) => return Err(LinkError::Refused("handshake line too long".to_owned())),
@@ -444,8 +516,10 @@ fn decode<const N: usize>(text: &str) -> Option<[u8; N]> {
 }
 
 fn verify(key: &[u8; 32], message: &[u8], signature: &[u8; 64]) -> bool {
-    ed25519_dalek::VerifyingKey::from_bytes(key)
-        .is_ok_and(|key| key.verify_strict(message, &ed25519_dalek::Signature::from_bytes(signature)).is_ok())
+    ed25519_dalek::VerifyingKey::from_bytes(key).is_ok_and(|key| {
+        key.verify_strict(message, &ed25519_dalek::Signature::from_bytes(signature))
+            .is_ok()
+    })
 }
 
 #[cfg(test)]
@@ -457,19 +531,33 @@ mod tests {
     async fn a_link_gives_up_on_data_the_box_never_acknowledges() {
         use std::os::fd::AsRawFd;
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let stream = TcpStream::connect(listener.local_addr().unwrap()).await.unwrap();
+        let stream = TcpStream::connect(listener.local_addr().unwrap())
+            .await
+            .unwrap();
         drop_when_unacknowledged(&stream, GIVE_UP_AFTER);
         let mut value: libc::c_int = 0;
         let mut length = size_of::<libc::c_int>() as libc::socklen_t;
         // SAFETY: a valid socket and a c_int-sized buffer.
-        let result = unsafe { libc::getsockopt(stream.as_raw_fd(), libc::IPPROTO_TCP, 0x80, (&raw mut value).cast(), &mut length) };
+        let result = unsafe {
+            libc::getsockopt(
+                stream.as_raw_fd(),
+                libc::IPPROTO_TCP,
+                0x80,
+                (&raw mut value).cast(),
+                &mut length,
+            )
+        };
         assert_eq!((result, value), (0, 20));
     }
     use ed25519_dalek::{Signer, SigningKey};
     use tokio::io::AsyncBufReadExt;
 
     fn identity() -> Identity {
-        let dir = std::env::temp_dir().join(format!("vibebuddy-lan-test-{}-{}", std::process::id(), rand_suffix()));
+        let dir = std::env::temp_dir().join(format!(
+            "vibebuddy-lan-test-{}-{}",
+            std::process::id(),
+            rand_suffix()
+        ));
         Identity::load_or_create(&dir.join("identity"), "test".to_owned()).unwrap()
     }
 
@@ -480,70 +568,126 @@ mod tests {
     }
 
     /// Plays the box's side of the handshake on the other end of a duplex pipe.
-    async fn fake_box<S: AsyncRead + AsyncWrite + Send + 'static>(stream: S, box_key: SigningKey, reply: &'static str) {
+    async fn fake_box<S: AsyncRead + AsyncWrite + Send + 'static>(
+        stream: S,
+        box_key: SigningKey,
+        reply: &'static str,
+    ) {
         let (read, mut write) = tokio::io::split(stream);
         let mut lines = tokio::io::BufReader::new(read).lines();
         let public = box_key.verifying_key().to_bytes();
         let challenge = serde_json::json!({"version":1,"event":"link.challenge","box":URL_SAFE_NO_PAD.encode(public),"nonce":URL_SAFE_NO_PAD.encode([4u8; 32])});
-        write.write_all(format!("{challenge}\n").as_bytes()).await.unwrap();
-        let Ok(Some(hello)) = lines.next_line().await else { return };
+        write
+            .write_all(format!("{challenge}\n").as_bytes())
+            .await
+            .unwrap();
+        let Ok(Some(hello)) = lines.next_line().await else {
+            return;
+        };
         let hello: Value = serde_json::from_str(&hello).unwrap();
         let theirs = decode::<32>(hello["nonce"].as_str().unwrap()).unwrap();
         let answer = match reply {
             "welcome" => {
-                let sig = box_key.sign(&signed_message("box", &public, &theirs)).to_bytes();
+                let sig = box_key
+                    .sign(&signed_message("box", &public, &theirs))
+                    .to_bytes();
                 serde_json::json!({"version":1,"event":"link.welcome","sig":URL_SAFE_NO_PAD.encode(sig)})
             }
-            "forged" => serde_json::json!({"version":1,"event":"link.welcome","sig":URL_SAFE_NO_PAD.encode([0u8; 64])}),
+            "forged" => {
+                serde_json::json!({"version":1,"event":"link.welcome","sig":URL_SAFE_NO_PAD.encode([0u8; 64])})
+            }
             _ => serde_json::json!({"version":1,"event":"link.busy","reason":"usb","owner":""}),
         };
-        write.write_all(format!("{answer}\n").as_bytes()).await.unwrap();
+        write
+            .write_all(format!("{answer}\n").as_bytes())
+            .await
+            .unwrap();
     }
 
     fn memory() -> Memory {
-        Memory::new(&std::env::temp_dir().join(format!("vibebuddy-lan-memory-{}-{}", std::process::id(), rand_suffix())))
+        Memory::new(&std::env::temp_dir().join(format!(
+            "vibebuddy-lan-memory-{}-{}",
+            std::process::id(),
+            rand_suffix()
+        )))
     }
 
     async fn run(reply: &'static str, expected_box: Option<[u8; 32]>) -> Result<(), LinkError> {
         let box_key = SigningKey::from_bytes(&[8; 32]);
-        let target = Target { address: String::new(), box_key: expected_box.unwrap_or(box_key.verifying_key().to_bytes()) };
+        let target = Target {
+            address: String::new(),
+            box_key: expected_box.unwrap_or(box_key.verifying_key().to_bytes()),
+        };
         let (mut ours, theirs) = tokio::io::duplex(4096);
         tokio::spawn(fake_box(theirs, box_key, reply));
-        handshake(&mut ours, &target, &identity(), false, &memory()).await.map(|session| assert!(session.is_none(), "in the clear"))
+        handshake(&mut ours, &target, &identity(), false, &memory())
+            .await
+            .map(|session| assert!(session.is_none(), "in the clear"))
     }
 
     /// Plays a box that speaks Noise, with the firmware's own code; `owner` set makes it busy.
-    async fn noise_box<S: AsyncRead + AsyncWrite + Send + 'static>(stream: S, link: vibebuddy_firmware_core::link::Link, owner: Option<&'static str>) {
+    async fn noise_box<S: AsyncRead + AsyncWrite + Send + 'static>(
+        stream: S,
+        link: vibebuddy_firmware_core::link::Link,
+        owner: Option<&'static str>,
+    ) {
         use vibebuddy_firmware_core::noise;
         let (read, mut write) = tokio::io::split(stream);
         let mut lines = tokio::io::BufReader::new(read).lines();
-        write.write_all(format!("{}\n", noise::opener(&link.public_key())).as_bytes()).await.unwrap();
-        let Ok(Some(first)) = lines.next_line().await else { return };
+        write
+            .write_all(format!("{}\n", noise::opener(&link.public_key())).as_bytes())
+            .await
+            .unwrap();
+        let Ok(Some(first)) = lines.next_line().await else {
+            return;
+        };
         let accepted = match noise::accept(&link, [4; 32], first.as_bytes()) {
             Ok(accepted) => accepted,
             Err(_) => {
-                write.write_all(b"{\"version\":1,\"event\":\"link.error\",\"code\":\"auth\"}\n").await.unwrap();
+                write
+                    .write_all(b"{\"version\":1,\"event\":\"link.error\",\"code\":\"auth\"}\n")
+                    .await
+                    .unwrap();
                 return;
             }
         };
         let (mut sealer, mut opener) = (accepted.sealer, accepted.opener);
         let answer = match owner {
-            Some(owner) => serde_json::json!({"version":1,"event":"link.busy","reason":"linked","owner":owner}),
+            Some(owner) => {
+                serde_json::json!({"version":1,"event":"link.busy","reason":"linked","owner":owner})
+            }
             None => serde_json::json!({"version":1,"event":"link.welcome"}),
         };
-        let reply = format!("{}\n{}\n", accepted.reply, sealer.seal(answer.to_string().as_bytes()).unwrap());
+        let reply = format!(
+            "{}\n{}\n",
+            accepted.reply,
+            sealer.seal(answer.to_string().as_bytes()).unwrap()
+        );
         write.write_all(reply.as_bytes()).await.unwrap();
         // Echoes each line back in upper case, sealed.
         while let Ok(Some(line)) = lines.next_line().await {
-            let Some(plain) = opener.open(line.as_bytes()) else { return };
+            let Some(plain) = opener.open(line.as_bytes()) else {
+                return;
+            };
             let upper = String::from_utf8(plain).unwrap().to_uppercase();
-            write.write_all(format!("{}\n", sealer.seal(upper.as_bytes()).unwrap()).as_bytes()).await.unwrap();
+            write
+                .write_all(format!("{}\n", sealer.seal(upper.as_bytes()).unwrap()).as_bytes())
+                .await
+                .unwrap();
         }
     }
 
     fn paired_link(identity: &Identity) -> vibebuddy_firmware_core::link::Link {
         let mut link = vibebuddy_firmware_core::link::Link::new([1; 32]);
-        link.pair(URL_SAFE_NO_PAD.decode(identity.public_key()).unwrap().try_into().unwrap(), "test").unwrap();
+        link.pair(
+            URL_SAFE_NO_PAD
+                .decode(identity.public_key())
+                .unwrap()
+                .try_into()
+                .unwrap(),
+            "test",
+        )
+        .unwrap();
         link
     }
 
@@ -551,47 +695,78 @@ mod tests {
     async fn a_box_that_speaks_noise_links_in_a_sealed_session() {
         let identity = identity();
         let link = paired_link(&identity);
-        let target = Target { address: String::new(), box_key: link.public_key() };
+        let target = Target {
+            address: String::new(),
+            box_key: link.public_key(),
+        };
         let (mut ours, theirs) = tokio::io::duplex(4096);
         tokio::spawn(noise_box(theirs, link, None));
         let memory = memory();
-        let session = handshake(&mut ours, &target, &identity, false, &memory).await.unwrap().expect("a session");
+        let session = handshake(&mut ours, &target, &identity, false, &memory)
+            .await
+            .unwrap()
+            .expect("a session");
         assert!(memory.knows(&target.box_key));
         let mut stream = noise_link::bridge(ours, session);
-        stream.write_all(b"{\"version\":1,\"event\":\"device.hello\"}\n").await.unwrap();
+        stream
+            .write_all(b"{\"version\":1,\"event\":\"device.hello\"}\n")
+            .await
+            .unwrap();
         let mut lines = tokio::io::BufReader::new(stream).lines();
-        assert_eq!(lines.next_line().await.unwrap().unwrap(), "{\"VERSION\":1,\"EVENT\":\"DEVICE.HELLO\"}");
+        assert_eq!(
+            lines.next_line().await.unwrap().unwrap(),
+            "{\"VERSION\":1,\"EVENT\":\"DEVICE.HELLO\"}"
+        );
     }
 
     #[tokio::test]
     async fn a_busy_box_says_so_inside_the_session() {
         let identity = identity();
         let link = paired_link(&identity);
-        let target = Target { address: String::new(), box_key: link.public_key() };
+        let target = Target {
+            address: String::new(),
+            box_key: link.public_key(),
+        };
         let (mut ours, theirs) = tokio::io::duplex(4096);
         tokio::spawn(noise_box(theirs, link, Some("omarchy")));
         let result = handshake(&mut ours, &target, &identity, false, &memory()).await;
-        assert!(matches!(result, Err(LinkError::Busy { ref reason, ref owner }) if reason == "linked" && owner == "omarchy"));
+        assert!(
+            matches!(result, Err(LinkError::Busy { ref reason, ref owner }) if reason == "linked" && owner == "omarchy")
+        );
     }
 
     #[tokio::test]
     async fn an_unpaired_computer_is_turned_away_by_a_noise_box() {
         let link = paired_link(&identity());
-        let target = Target { address: String::new(), box_key: link.public_key() };
+        let target = Target {
+            address: String::new(),
+            box_key: link.public_key(),
+        };
         let (mut ours, theirs) = tokio::io::duplex(4096);
         tokio::spawn(noise_box(theirs, link, None));
-        assert_eq!(handshake(&mut ours, &target, &identity(), false, &memory()).await.err(), Some(LinkError::Refused("auth".to_owned())));
+        assert_eq!(
+            handshake(&mut ours, &target, &identity(), false, &memory())
+                .await
+                .err(),
+            Some(LinkError::Refused("auth".to_owned()))
+        );
     }
 
     #[tokio::test]
     async fn a_box_that_spoke_noise_before_is_never_linked_in_the_clear() {
         let box_key = SigningKey::from_bytes(&[8; 32]);
-        let target = Target { address: String::new(), box_key: box_key.verifying_key().to_bytes() };
+        let target = Target {
+            address: String::new(),
+            box_key: box_key.verifying_key().to_bytes(),
+        };
         let (mut ours, theirs) = tokio::io::duplex(4096);
         tokio::spawn(fake_box(theirs, box_key, "welcome"));
         let memory = memory();
         memory.learned(&target.box_key);
-        assert!(matches!(handshake(&mut ours, &target, &identity(), false, &memory).await, Err(LinkError::Refused(_))));
+        assert!(matches!(
+            handshake(&mut ours, &target, &identity(), false, &memory).await,
+            Err(LinkError::Refused(_))
+        ));
     }
 
     #[tokio::test]
@@ -601,35 +776,74 @@ mod tests {
 
     #[tokio::test]
     async fn a_welcome_without_the_box_key_is_refused() {
-        assert!(matches!(run("forged", None).await, Err(LinkError::Refused(_))));
+        assert!(matches!(
+            run("forged", None).await,
+            Err(LinkError::Refused(_))
+        ));
     }
 
     #[tokio::test]
     async fn another_box_at_the_address_is_never_driven() {
-        assert_eq!(run("welcome", Some([1; 32])).await, Err(LinkError::Refused("a different box".to_owned())));
+        assert_eq!(
+            run("welcome", Some([1; 32])).await,
+            Err(LinkError::Refused("a different box".to_owned()))
+        );
     }
 
     #[tokio::test]
     async fn busy_says_why() {
-        assert_eq!(run("busy", None).await, Err(LinkError::Busy { reason: "usb".to_owned(), owner: String::new() }));
+        assert_eq!(
+            run("busy", None).await,
+            Err(LinkError::Busy {
+                reason: "usb".to_owned(),
+                owner: String::new()
+            })
+        );
     }
 
     #[test]
     fn the_target_needs_a_remembered_key() {
-        let dir = std::env::temp_dir().join(format!("vibebuddy-lan-target-{}-{}", std::process::id(), rand_suffix()));
-        let config = LanConfig { identity: Arc::new(identity()), state_dir: dir.clone(), fixed_address: Some("127.0.0.1:7341".to_owned()), discovery: Discovery::default() };
+        let dir = std::env::temp_dir().join(format!(
+            "vibebuddy-lan-target-{}-{}",
+            std::process::id(),
+            rand_suffix()
+        ));
+        let config = LanConfig {
+            identity: Arc::new(identity()),
+            state_dir: dir.clone(),
+            fixed_address: Some("127.0.0.1:7341".to_owned()),
+            discovery: Discovery::default(),
+        };
         assert_eq!(config.target(), None);
         remember(&box_key_file(&dir), &URL_SAFE_NO_PAD.encode([3u8; 32]));
-        assert_eq!(config.target(), Some(Target { address: "127.0.0.1:7341".to_owned(), box_key: [3; 32] }));
-        let config = LanConfig { fixed_address: None, ..config };
+        assert_eq!(
+            config.target(),
+            Some(Target {
+                address: "127.0.0.1:7341".to_owned(),
+                box_key: [3; 32]
+            })
+        );
+        let config = LanConfig {
+            fixed_address: None,
+            ..config
+        };
         assert_eq!(config.target(), None, "no address learned yet");
         remember(&box_address_file(&dir), "192.168.1.23");
-        assert_eq!(config.target().map(|target| target.address), Some(format!("192.168.1.23:{PORT}")));
+        assert_eq!(
+            config.target().map(|target| target.address),
+            Some(format!("192.168.1.23:{PORT}"))
+        );
         std::fs::remove_dir_all(dir).ok();
     }
 
     fn advertised(addresses: &[&str], key: Option<[u8; 32]>) -> Advertised {
-        Advertised { addresses: addresses.iter().map(|address| address.parse().unwrap()).collect(), key: key.map(|key| URL_SAFE_NO_PAD.encode(key)) }
+        Advertised {
+            addresses: addresses
+                .iter()
+                .map(|address| address.parse().unwrap())
+                .collect(),
+            key: key.map(|key| URL_SAFE_NO_PAD.encode(key)),
+        }
     }
 
     #[test]
@@ -640,7 +854,11 @@ mod tests {
             advertised(&["192.168.1.42:7340"], None),
             advertised(&["192.168.1.43:7340"], Some([3; 32])),
         ];
-        assert_eq!(pick(&found, &[2; 32]), ["192.168.1.41:7340", "[fe80::2]:7340"], "IPv4 first");
+        assert_eq!(
+            pick(&found, &[2; 32]),
+            ["192.168.1.41:7340", "[fe80::2]:7340"],
+            "IPv4 first"
+        );
         assert_eq!(pick(&found, &[1; 32]), ["192.168.1.40:7340"]);
     }
 
@@ -649,7 +867,10 @@ mod tests {
         let found = [
             advertised(&["192.168.1.40:7340"], Some([1; 32])),
             advertised(&["192.168.1.42:7340"], None),
-            Advertised { addresses: vec!["192.168.1.44:7340".parse().unwrap()], key: Some("not a key".to_owned()) },
+            Advertised {
+                addresses: vec!["192.168.1.44:7340".parse().unwrap()],
+                key: Some("not a key".to_owned()),
+            },
         ];
         assert!(pick(&found, &[9; 32]).is_empty());
         assert!(pick(&[], &[9; 32]).is_empty());
@@ -659,17 +880,38 @@ mod tests {
     async fn an_unmatched_key_falls_back_to_the_remembered_address() {
         // Nothing listens at the remembered address and mDNS found no box with this key: the link reports the
         // remembered address as unreachable, as before discovery, and the daemon moves on to the Relay.
-        let dir = std::env::temp_dir().join(format!("vibebuddy-lan-fallback-{}-{}", std::process::id(), rand_suffix()));
+        let dir = std::env::temp_dir().join(format!(
+            "vibebuddy-lan-fallback-{}-{}",
+            std::process::id(),
+            rand_suffix()
+        ));
         remember(&box_key_file(&dir), &URL_SAFE_NO_PAD.encode([3u8; 32]));
         remember(&box_address_file(&dir), "127.0.0.2");
-        let config = LanConfig { identity: Arc::new(identity()), state_dir: dir.clone(), fixed_address: None, discovery: Discovery::default() };
-        let found = Arc::new(Mutex::new(HashMap::from([("other".to_owned(), advertised(&["127.0.0.1:1"], Some([4; 32])))])));
-        let _ = config.discovery.browser.set(Some(Browser { _daemon: None, found }));
+        let config = LanConfig {
+            identity: Arc::new(identity()),
+            state_dir: dir.clone(),
+            fixed_address: None,
+            discovery: Discovery::default(),
+        };
+        let found = Arc::new(Mutex::new(HashMap::from([(
+            "other".to_owned(),
+            advertised(&["127.0.0.1:1"], Some([4; 32])),
+        )])));
+        let _ = config.discovery.browser.set(Some(Browser {
+            _daemon: None,
+            found,
+        }));
         assert!(config.advertised(&[3; 32]).is_empty());
         let (target, result) = link(&config, false).await.unwrap();
         assert_eq!(target.address, format!("127.0.0.2:{PORT}"));
         assert!(matches!(result, Err(LinkError::Unreachable(_))));
-        assert_eq!(std::fs::read_to_string(box_address_file(&dir)).unwrap().trim(), "127.0.0.2", "nothing new remembered");
+        assert_eq!(
+            std::fs::read_to_string(box_address_file(&dir))
+                .unwrap()
+                .trim(),
+            "127.0.0.2",
+            "nothing new remembered"
+        );
         std::fs::remove_dir_all(dir).ok();
     }
 
@@ -683,19 +925,43 @@ mod tests {
             let (stream, _) = listener.accept().await.unwrap();
             fake_box(stream, box_key, "welcome").await;
         });
-        let dir = std::env::temp_dir().join(format!("vibebuddy-lan-moved-{}-{}", std::process::id(), rand_suffix()));
+        let dir = std::env::temp_dir().join(format!(
+            "vibebuddy-lan-moved-{}-{}",
+            std::process::id(),
+            rand_suffix()
+        ));
         remember(&box_key_file(&dir), &URL_SAFE_NO_PAD.encode(public));
         remember(&box_address_file(&dir), "127.0.0.2");
-        let config = LanConfig { identity: Arc::new(identity()), state_dir: dir.clone(), fixed_address: None, discovery: Discovery::default() };
+        let config = LanConfig {
+            identity: Arc::new(identity()),
+            state_dir: dir.clone(),
+            fixed_address: None,
+            discovery: Discovery::default(),
+        };
         let found = HashMap::from([
-            ("another".to_owned(), advertised(&["127.0.0.1:1"], Some([4; 32]))),
-            ("ours".to_owned(), advertised(&[&moved.to_string()], Some(public))),
+            (
+                "another".to_owned(),
+                advertised(&["127.0.0.1:1"], Some([4; 32])),
+            ),
+            (
+                "ours".to_owned(),
+                advertised(&[&moved.to_string()], Some(public)),
+            ),
         ]);
-        let _ = config.discovery.browser.set(Some(Browser { _daemon: None, found: Arc::new(Mutex::new(found)) }));
+        let _ = config.discovery.browser.set(Some(Browser {
+            _daemon: None,
+            found: Arc::new(Mutex::new(found)),
+        }));
         let (target, result) = link(&config, false).await.unwrap();
         assert_eq!(target.address, moved.to_string());
         assert!(result.is_ok());
-        assert_eq!(std::fs::read_to_string(box_address_file(&dir)).unwrap().trim(), "127.0.0.1", "the new address is remembered");
+        assert_eq!(
+            std::fs::read_to_string(box_address_file(&dir))
+                .unwrap()
+                .trim(),
+            "127.0.0.1",
+            "the new address is remembered"
+        );
         std::fs::remove_dir_all(dir).ok();
     }
 }

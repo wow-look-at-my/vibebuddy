@@ -96,21 +96,31 @@ pub fn generate_key() -> Result<(String, String), Error> {
     let mut seed = [0u8; 32];
     getrandom::fill(&mut seed).map_err(|error| Error::Key(error.to_string()))?;
     let key = SigningKey::from_bytes(&seed);
-    Ok((STANDARD.encode(seed), STANDARD.encode(key.verifying_key().as_bytes())))
+    Ok((
+        STANDARD.encode(seed),
+        STANDARD.encode(key.verifying_key().as_bytes()),
+    ))
 }
 
 pub fn sign(manifest: &Manifest, key: &SigningKey) -> Signed {
     let text = serde_json::to_string_pretty(manifest).expect("a manifest always serializes");
     let signature = key.sign(text.as_bytes());
-    Signed { manifest: text, signature: STANDARD.encode(signature.to_bytes()) }
+    Signed {
+        manifest: text,
+        signature: STANDARD.encode(signature.to_bytes()),
+    }
 }
 
 /// Checks the signature before reading a single field of the manifest.
 pub fn verify(signed: &Signed, key: &VerifyingKey) -> Result<Manifest, Error> {
-    let bytes = STANDARD.decode(signed.signature.trim()).map_err(|error| Error::Encoding(error.to_string()))?;
+    let bytes = STANDARD
+        .decode(signed.signature.trim())
+        .map_err(|error| Error::Encoding(error.to_string()))?;
     let signature = Signature::from_slice(&bytes).map_err(|_| Error::BadSignature)?;
-    key.verify(signed.manifest.as_bytes(), &signature).map_err(|_| Error::BadSignature)?;
-    let manifest: Manifest = serde_json::from_str(&signed.manifest).map_err(|error| Error::Json(error.to_string()))?;
+    key.verify(signed.manifest.as_bytes(), &signature)
+        .map_err(|_| Error::BadSignature)?;
+    let manifest: Manifest =
+        serde_json::from_str(&signed.manifest).map_err(|error| Error::Json(error.to_string()))?;
     if manifest.schema != SCHEMA {
         return Err(Error::UnknownSchema(manifest.schema));
     }
@@ -118,8 +128,12 @@ pub fn verify(signed: &Signed, key: &VerifyingKey) -> Result<Manifest, Error> {
 }
 
 fn key_bytes(base64: &str) -> Result<[u8; 32], Error> {
-    let bytes = STANDARD.decode(base64.trim()).map_err(|error| Error::Encoding(error.to_string()))?;
-    bytes.try_into().map_err(|bytes: Vec<u8>| Error::Key(format!("{} bytes, expected 32", bytes.len())))
+    let bytes = STANDARD
+        .decode(base64.trim())
+        .map_err(|error| Error::Encoding(error.to_string()))?;
+    bytes
+        .try_into()
+        .map_err(|bytes: Vec<u8>| Error::Key(format!("{} bytes, expected 32", bytes.len())))
 }
 
 #[cfg(test)]
@@ -134,11 +148,21 @@ mod tests {
             min_supported_app: "0.3.2".to_owned(),
             app: BTreeMap::from([(
                 "macos-arm64".to_owned(),
-                Download { version: "0.4.0".to_owned(), url: "https://example/app.dmg".to_owned(), sha256: "aa".to_owned(), notes: notes.clone() },
+                Download {
+                    version: "0.4.0".to_owned(),
+                    url: "https://example/app.dmg".to_owned(),
+                    sha256: "aa".to_owned(),
+                    notes: notes.clone(),
+                },
             )]),
             firmware: vec![Firmware {
                 min_app: "0.4.0".to_owned(),
-                download: Download { version: "0.3.3".to_owned(), url: "https://example/fw.zip".to_owned(), sha256: "bb".to_owned(), notes },
+                download: Download {
+                    version: "0.3.3".to_owned(),
+                    url: "https://example/fw.zip".to_owned(),
+                    sha256: "bb".to_owned(),
+                    notes,
+                },
             }],
             relay: None,
         }
@@ -146,7 +170,10 @@ mod tests {
 
     fn keys() -> (SigningKey, VerifyingKey) {
         let (private, public) = generate_key().unwrap();
-        (signing_key(&private).unwrap(), verifying_key(&public).unwrap())
+        (
+            signing_key(&private).unwrap(),
+            verifying_key(&public).unwrap(),
+        )
     }
 
     #[test]
@@ -160,7 +187,9 @@ mod tests {
     fn a_tampered_manifest_is_rejected() {
         let (private, public) = keys();
         let mut signed = sign(&manifest(), &private);
-        signed.manifest = signed.manifest.replace("https://example/fw.zip", "https://evil/fw.zip");
+        signed.manifest = signed
+            .manifest
+            .replace("https://example/fw.zip", "https://evil/fw.zip");
         assert_eq!(verify(&signed, &public), Err(Error::BadSignature));
     }
 
@@ -168,7 +197,10 @@ mod tests {
     fn another_key_is_rejected() {
         let (private, _) = keys();
         let (_, other) = keys();
-        assert_eq!(verify(&sign(&manifest(), &private), &other), Err(Error::BadSignature));
+        assert_eq!(
+            verify(&sign(&manifest(), &private), &other),
+            Err(Error::BadSignature)
+        );
     }
 
     #[test]
@@ -184,7 +216,10 @@ mod tests {
         let (private, public) = keys();
         let mut future = manifest();
         future.schema = SCHEMA + 1;
-        assert_eq!(verify(&sign(&future, &private), &public), Err(Error::UnknownSchema(SCHEMA + 1)));
+        assert_eq!(
+            verify(&sign(&future, &private), &public),
+            Err(Error::UnknownSchema(SCHEMA + 1))
+        );
     }
 
     #[test]

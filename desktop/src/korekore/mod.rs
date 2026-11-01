@@ -44,7 +44,14 @@ impl Sprite {
     /// RGBA bytes at `scale` whole times the size, nearest-neighbour. `tint` (0xRRGGBB) replaces every colour,
     /// for the one-colour tag.
     pub fn rgba(&self, scale: u32, tint: Option<u32>) -> Vec<u8> {
-        rgba(self.width, self.height, self.palette, self.pixels, scale, tint)
+        rgba(
+            self.width,
+            self.height,
+            self.palette,
+            self.pixels,
+            scale,
+            tint,
+        )
     }
 
     /// The sprite in gray, as CSS `grayscale(1) brightness(b)` draws it: each colour's luminance (Rec. 709
@@ -54,17 +61,32 @@ impl Sprite {
             .palette
             .iter()
             .map(|&rgb| {
-                let (r, g, b) = ((rgb >> 16 & 0xFF) as f32, (rgb >> 8 & 0xFF) as f32, (rgb & 0xFF) as f32);
-                let level = ((0.2126 * r + 0.7152 * g + 0.0722 * b) * brightness).round().clamp(0.0, 255.0) as u32;
+                let (r, g, b) = (
+                    (rgb >> 16 & 0xFF) as f32,
+                    (rgb >> 8 & 0xFF) as f32,
+                    (rgb & 0xFF) as f32,
+                );
+                let level = ((0.2126 * r + 0.7152 * g + 0.0722 * b) * brightness)
+                    .round()
+                    .clamp(0.0, 255.0) as u32;
                 level << 16 | level << 8 | level
             })
             .collect();
-        GraySprite { width: self.width, height: self.height, palette, pixels: self.pixels }
+        GraySprite {
+            width: self.width,
+            height: self.height,
+            palette,
+            pixels: self.pixels,
+        }
     }
 
     /// An image of the sprite at `scale` whole times its size; show it at that size, so nothing resamples it.
     pub fn handle(&self, scale: u32, tint: Option<u32>) -> image::Handle {
-        image::Handle::from_rgba(self.width * scale, self.height * scale, self.rgba(scale, tint))
+        image::Handle::from_rgba(
+            self.width * scale,
+            self.height * scale,
+            self.rgba(scale, tint),
+        )
     }
 }
 
@@ -78,16 +100,37 @@ pub struct GraySprite {
 
 impl GraySprite {
     pub fn rgba(&self, scale: u32) -> Vec<u8> {
-        rgba(self.width, self.height, &self.palette, self.pixels, scale, None)
+        rgba(
+            self.width,
+            self.height,
+            &self.palette,
+            self.pixels,
+            scale,
+            None,
+        )
     }
 
     pub fn handle(&self, scale: u32, tint: Option<u32>) -> image::Handle {
-        let bytes = rgba(self.width, self.height, &self.palette, self.pixels, scale, tint);
+        let bytes = rgba(
+            self.width,
+            self.height,
+            &self.palette,
+            self.pixels,
+            scale,
+            tint,
+        );
         image::Handle::from_rgba(self.width * scale, self.height * scale, bytes)
     }
 }
 
-fn rgba(width: u32, height: u32, palette: &[u32], pixels: &[u8], scale: u32, tint: Option<u32>) -> Vec<u8> {
+fn rgba(
+    width: u32,
+    height: u32,
+    palette: &[u32],
+    pixels: &[u8],
+    scale: u32,
+    tint: Option<u32>,
+) -> Vec<u8> {
     let (out_width, out_height) = (width * scale, height * scale);
     let mut bytes = Vec::with_capacity((out_width * out_height * 4) as usize);
     for y in 0..out_height {
@@ -109,16 +152,26 @@ fn rgba(width: u32, height: u32, palette: &[u32], pixels: &[u8], scale: u32, tin
 /// agent needs you, gray and asleep without a link. ARGB32 rows, as StatusNotifierItem pixmaps are.
 pub fn tray_icon(picture: &picture::BoxPicture, scale: u32) -> (u32, u32, Vec<u8>) {
     // The dot is the design's 7 px circle with its 1.5 px ink edge, at whole pixels.
-    const DOT: [&str; 7] = ["..iii..", ".isssi.", "isssssi", "isssssi", "isssssi", ".isssi.", "..iii.."];
+    const DOT: [&str; 7] = [
+        "..iii..", ".isssi.", "isssssi", "isssssi", "isssssi", ".isssi.", "..iii..",
+    ];
     let needs_you = picture.needs_you();
-    let kore = if needs_you { &sprites::KORE_INPUT } else { &sprites::KORE_NORMAL };
+    let kore = if needs_you {
+        &sprites::KORE_INPUT
+    } else {
+        &sprites::KORE_NORMAL
+    };
     let rgba = if picture.mood == picture::Mood::NoLink {
         sprites::KORE_SLEEP.grayed(0.75).rgba(scale)
     } else {
         kore.rgba(scale, None)
     };
     let kore_width = kore.width * scale;
-    let width = if needs_you { kore_width + (4 + 7) * scale } else { kore_width };
+    let width = if needs_you {
+        kore_width + (4 + 7) * scale
+    } else {
+        kore_width
+    };
     let height = kore.height * scale;
     let mut out = vec![0u8; (width * height * 4) as usize];
     for y in 0..height {
@@ -128,8 +181,13 @@ pub fn tray_icon(picture: &picture::BoxPicture, scale: u32) -> (u32, u32, Vec<u8
                 [rgba[at + 3], rgba[at], rgba[at + 1], rgba[at + 2]]
             } else {
                 let (dx, dy) = ((x - kore_width) / scale, y / scale);
-                let row = dy.checked_sub((kore.height - 7) / 2).and_then(|row| DOT.get(row as usize));
-                match row.and_then(|row| dx.checked_sub(4).and_then(|col| row.as_bytes().get(col as usize))) {
+                let row = dy
+                    .checked_sub((kore.height - 7) / 2)
+                    .and_then(|row| DOT.get(row as usize));
+                match row.and_then(|row| {
+                    dx.checked_sub(4)
+                        .and_then(|col| row.as_bytes().get(col as usize))
+                }) {
                     Some(b'i') => [0xFF, 0x1C, 0x17, 0x30],
                     Some(b's') => [0xFF, 0xFF, 0xD2, 0x3F],
                     _ => [0; 4],
@@ -153,8 +211,14 @@ pub enum Section {
 }
 
 impl Section {
-    pub const ALL: [Section; 6] =
-        [Section::Character, Section::Agents, Section::Conversation, Section::Device, Section::General, Section::Advanced];
+    pub const ALL: [Section; 6] = [
+        Section::Character,
+        Section::Agents,
+        Section::Conversation,
+        Section::Device,
+        Section::General,
+        Section::Advanced,
+    ];
 
     pub fn title(self) -> String {
         match self {
@@ -191,7 +255,10 @@ impl Section {
     }
 
     pub fn of(tab: crate::Tab) -> Self {
-        Section::ALL.into_iter().find(|section| section.tab() == tab).unwrap_or(Section::Character)
+        Section::ALL
+            .into_iter()
+            .find(|section| section.tab() == tab)
+            .unwrap_or(Section::Character)
     }
 
     pub fn tile(self) -> &'static str {
@@ -227,15 +294,28 @@ mod tests {
     fn a_tint_recolours_only_what_is_drawn() {
         let tag = &sprites::TAG_YOUR_VIBEBUDDY;
         let rgba = tag.rgba(1, Some(0xE2466F));
-        assert!(rgba.chunks(4).all(|pixel| pixel == [0; 4] || pixel == [0xE2, 0x46, 0x6F, 0xFF]));
+        assert!(
+            rgba.chunks(4)
+                .all(|pixel| pixel == [0; 4] || pixel == [0xE2, 0x46, 0x6F, 0xFF])
+        );
         assert!(rgba.chunks(4).any(|pixel| pixel[3] == 0xFF));
     }
 
     #[test]
     fn every_sprite_is_whole_and_indexes_its_palette() {
         for (name, sprite) in sprites::ALL {
-            assert_eq!(sprite.pixels.len(), (sprite.width * sprite.height) as usize, "{name}");
-            assert!(sprite.pixels.iter().all(|&index| usize::from(index) <= sprite.palette.len()), "{name}");
+            assert_eq!(
+                sprite.pixels.len(),
+                (sprite.width * sprite.height) as usize,
+                "{name}"
+            );
+            assert!(
+                sprite
+                    .pixels
+                    .iter()
+                    .all(|&index| usize::from(index) <= sprite.palette.len()),
+                "{name}"
+            );
         }
     }
 
@@ -246,7 +326,12 @@ mod tests {
         status.device.connected = true;
         let (width, height, pixels) = tray_icon(&picture::BoxPicture::derive(Some(&status)), 2);
         assert_eq!((width, height, pixels.len()), (40, 36, 40 * 36 * 4));
-        status.activities = vec![Activity { agent: "codex".into(), title: "CX:Ask".into(), state: "needs_input".into(), ..Activity::default() }];
+        status.activities = vec![Activity {
+            agent: "codex".into(),
+            title: "CX:Ask".into(),
+            state: "needs_input".into(),
+            ..Activity::default()
+        }];
         let (width, _, pixels) = tray_icon(&picture::BoxPicture::derive(Some(&status)), 2);
         assert_eq!(width, 62);
         // The dot's centre, in ARGB: sun.

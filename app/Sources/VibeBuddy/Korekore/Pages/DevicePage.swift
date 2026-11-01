@@ -359,7 +359,9 @@ struct KorekoreFirmwareUnavailable: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if let updates = model.updates, updates.enabled {
+            if !UpdateSwitch.compiledIn {
+                KNote(String(localized: "This build doesn't download firmware. Use Flash from file… on the Device page."))
+            } else if let updates = model.updates, updates.enabled {
                 if let error = updates.error {
                     KTag(String(localized: "Couldn't get the firmware: \(error)"), color: Theme.Colors.korePinkText)
                 } else if model.offeredFirmware != nil {
@@ -371,8 +373,10 @@ struct KorekoreFirmwareUnavailable: View {
             } else {
                 KNote(String(localized: "Update checks are off, so korekore doesn't download firmware. Turn them on in General, or get it from Releases."))
             }
-            Link(destination: Resources.releasesPage) {
-                Text("Releases").font(.rounded(13, weight: 400)).foregroundStyle(Theme.Colors.korePinkText)
+            if UpdateSwitch.compiledIn {
+                Link(destination: Resources.releasesPage) {
+                    Text("Releases").font(.rounded(13, weight: 400)).foregroundStyle(Theme.Colors.korePinkText)
+                }
             }
         }
     }

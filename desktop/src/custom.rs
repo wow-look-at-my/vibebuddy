@@ -43,7 +43,12 @@ impl Settings {
 
     pub fn save(&self) {
         let Some(path) = settings_file() else { return };
-        write(&path, serde_json::to_string_pretty(self).unwrap_or_default().as_bytes());
+        write(
+            &path,
+            serde_json::to_string_pretty(self)
+                .unwrap_or_default()
+                .as_bytes(),
+        );
     }
 
     pub fn address(&self, language: Language) -> Option<&str> {
@@ -52,7 +57,9 @@ impl Settings {
 
     pub fn set_address(&mut self, language: Language, form: Option<&str>) {
         match form {
-            Some(form) => self.address.insert(language.code().to_owned(), form.to_owned()),
+            Some(form) => self
+                .address
+                .insert(language.code().to_owned(), form.to_owned()),
             None => self.address.remove(language.code()),
         };
     }
@@ -69,7 +76,10 @@ pub fn write(path: &Path, bytes: &[u8]) {
 /// order (normal, eyes closed, happy, sad). Ok(None) when the user cancels.
 pub async fn choose_drawings() -> Result<Option<Vec<Image>>, String> {
     #[cfg(target_os = "linux")]
-    let files = rfd::AsyncFileDialog::new().add_filter("Images", &["png", "jpg", "jpeg"]).pick_files().await;
+    let files = rfd::AsyncFileDialog::new()
+        .add_filter("Images", &["png", "jpg", "jpeg"])
+        .pick_files()
+        .await;
     #[cfg(not(target_os = "linux"))]
     let files: Option<Vec<PathBuf>> = None;
     let Some(files) = files else { return Ok(None) };
@@ -81,12 +91,24 @@ pub async fn choose_drawings() -> Result<Option<Vec<Image>>, String> {
     if !(1..=4).contains(&paths.len()) {
         return Err(crate::i18n::tr("Pick one to four PNG or JPEG images.", &[]));
     }
-    tokio::task::spawn_blocking(move || paths.iter().map(|path| decode(path)).collect::<Result<Vec<_>, _>>().map(Some))
-        .await
-        .map_err(|error| error.to_string())?
+    tokio::task::spawn_blocking(move || {
+        paths
+            .iter()
+            .map(|path| decode(path))
+            .collect::<Result<Vec<_>, _>>()
+            .map(Some)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 fn decode(path: &Path) -> Result<Image, String> {
-    let image = image::open(path).map_err(|error| format!("{}: {error}", path.display()))?.to_rgba8();
-    Ok(Image { width: image.width() as usize, height: image.height() as usize, pixels: image.into_raw() })
+    let image = image::open(path)
+        .map_err(|error| format!("{}: {error}", path.display()))?
+        .to_rgba8();
+    Ok(Image {
+        width: image.width() as usize,
+        height: image.height() as usize,
+        pixels: image.into_raw(),
+    })
 }

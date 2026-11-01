@@ -214,10 +214,8 @@ mod tests {
     use super::*;
 
     fn temp_dir(tag: &str) -> PathBuf {
-        let base = std::env::temp_dir().join(format!(
-            "session-titles-{}-{tag}",
-            std::process::id()
-        ));
+        let base =
+            std::env::temp_dir().join(format!("session-titles-{}-{tag}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).expect("create temp dir");
         base
@@ -276,14 +274,20 @@ mod tests {
             )
             .unwrap();
         drop(connection);
-        assert_eq!(codex_thread_title(&db, "named").as_deref(), Some("Review 两个PR"));
+        assert_eq!(
+            codex_thread_title(&db, "named").as_deref(),
+            Some("Review 两个PR")
+        );
         assert_eq!(
             codex_thread_title(&db, "branched").as_deref(),
             Some("k2-source-navigation")
         );
         assert_eq!(codex_thread_title(&db, "bare"), None);
         assert_eq!(codex_thread_title(&db, "missing"), None);
-        assert_eq!(codex_thread_title(&dir.join("absent.sqlite"), "named"), None);
+        assert_eq!(
+            codex_thread_title(&dir.join("absent.sqlite"), "named"),
+            None
+        );
     }
 
     #[test]
@@ -300,7 +304,10 @@ mod tests {
         drop(connection);
         assert_eq!(codex_thread_exists(&db, "real"), Some(true));
         assert_eq!(codex_thread_exists(&db, "ghost"), Some(false));
-        assert_eq!(codex_thread_exists(&dir.join("absent.sqlite"), "real"), None);
+        assert_eq!(
+            codex_thread_exists(&dir.join("absent.sqlite"), "real"),
+            None
+        );
 
         let mut titles = SessionTitles::with_codex_db(db);
         assert_eq!(titles.codex_thread_known("real"), Some(true));

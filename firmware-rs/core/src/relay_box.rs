@@ -41,7 +41,9 @@ pub fn url_host(url: &str) -> Option<&str> {
     let host = host.strip_suffix('/').unwrap_or(host);
     let valid = !host.is_empty()
         && host.len() <= 253
-        && host.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'.' || byte == b'-')
+        && host
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'.' || byte == b'-')
         && !host.starts_with(['.', '-'])
         && !host.ends_with(['.', '-']);
     valid.then_some(host)
@@ -80,12 +82,19 @@ impl RelayBox {
         let link = firmware.link()?;
         let box_id = link::encode(&link.public_key());
         let sig = link.sign(&signed_message("box", &box_id, nonce));
-        Some(text(json!({"t": "hello", "role": "box", "key": box_id, "sig": link::encode(&sig), "v": PROTOCOL_VERSION})))
+        Some(text(
+            json!({"t": "hello", "role": "box", "key": box_id, "sig": link::encode(&sig), "v": PROTOCOL_VERSION}),
+        ))
     }
 
     /// A message from the Relay other than the challenge; returns what to send the Relay at once, before
     /// any of the box's output.
-    pub fn message<B: Board>(&mut self, firmware: &mut Firmware, board: &mut B, value: &Value) -> Vec<String> {
+    pub fn message<B: Board>(
+        &mut self,
+        firmware: &mut Firmware,
+        board: &mut B,
+        value: &Value,
+    ) -> Vec<String> {
         let mut out = Vec::new();
         match value["t"].as_str() {
             Some("welcome") => {
@@ -109,7 +118,9 @@ impl RelayBox {
                 self.computer = None;
             }
             Some("data") => {
-                let Some(line) = value["line"].as_str() else { return out };
+                let Some(line) = value["line"].as_str() else {
+                    return out;
+                };
                 if let Some(opener) = &mut self.opener {
                     match opener.open(line.as_bytes()) {
                         Some(line) => firmware.relay_line(board, &line),
@@ -142,7 +153,9 @@ impl RelayBox {
     }
 
     fn opener_line(&self, firmware: &Firmware) -> Option<String> {
-        firmware.link().map(|link| data(&noise::opener(&link.public_key())))
+        firmware
+            .link()
+            .map(|link| data(&noise::opener(&link.public_key())))
     }
 
     fn end_session<B: Board>(&mut self, board: &mut B) {
@@ -165,10 +178,19 @@ impl RelayBox {
         if !self.welcomed {
             return out;
         }
-        let Some(link) = firmware.link() else { return out };
-        let paired: Vec<(String, String)> = link.paired.iter().map(|paired| (link::encode(&paired.key), paired.name.clone())).collect();
+        let Some(link) = firmware.link() else {
+            return out;
+        };
+        let paired: Vec<(String, String)> = link
+            .paired
+            .iter()
+            .map(|paired| (link::encode(&paired.key), paired.name.clone()))
+            .collect();
         if self.paired.as_ref() != Some(&paired) {
-            let computers: Vec<Value> = paired.iter().map(|(key, name)| json!({"key": key, "name": name})).collect();
+            let computers: Vec<Value> = paired
+                .iter()
+                .map(|(key, name)| json!({"key": key, "name": name}))
+                .collect();
             out.push(text(json!({"t": "paired", "computers": computers})));
             self.paired = Some(paired);
         }
@@ -195,8 +217,19 @@ mod tests {
     #[test]
     fn only_a_wss_host_is_a_relay_url() {
         assert_eq!(url_host(DEFAULT_URL), Some("relay.korekore.ai"));
-        assert_eq!(url_host("wss://relay-staging.korekore.ai/"), Some("relay-staging.korekore.ai"));
-        for bad in ["ws://relay.korekore.ai", "wss://", "wss://host:8443", "wss://host/v1", "https://host", "wss://-host", "wss://a b"] {
+        assert_eq!(
+            url_host("wss://relay-staging.korekore.ai/"),
+            Some("relay-staging.korekore.ai")
+        );
+        for bad in [
+            "ws://relay.korekore.ai",
+            "wss://",
+            "wss://host:8443",
+            "wss://host/v1",
+            "https://host",
+            "wss://-host",
+            "wss://a b",
+        ] {
             assert_eq!(url_host(bad), None, "{bad}");
         }
     }

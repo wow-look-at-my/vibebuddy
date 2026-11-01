@@ -142,6 +142,12 @@ curl -H 'content-type: application/json' \
 
 See [`docs/protocol.md`](docs/protocol.md) for the events.
 
+### This fork has no updates
+
+This fork never checks for, downloads or offers updates, for the App or for the box's firmware. No setting or environment variable turns that on. The daemon has no update source, the Mac app never starts Sparkle, and the Linux app shows no update controls. The code stays behind compile-time switches (`COMPILED_IN` in `daemon/src/updates.rs`, `UpdateSwitch.compiledIn` in `app/Sources/VibeBuddyCore/UpdateSwitch.swift`, `UPDATES_COMPILED_IN` in `desktop/src/status.rs`). The `update-manifest` workflow runs only when started by hand. A new version is built from source, and firmware goes onto the box with Settings → Device → Flash from file.
+
+The section below describes how the upstream project works.
+
 ### Updates
 
 The App and the box's firmware are released separately, and VibeBuddy looks for new versions of both ([ADR-0010](docs/adr/0010-firmware-and-app-release-separately-behind-an-update-manifest.md)). Apart from the Relay (next section), this is the only time it contacts anything on the internet:

@@ -29,17 +29,30 @@ pub fn opener_key(line: &str) -> Option<[u8; 32]> {
     if value["event"] != "link.noise" {
         return None;
     }
-    URL_SAFE_NO_PAD.decode(value["box"].as_str()?).ok()?.try_into().ok()
+    URL_SAFE_NO_PAD
+        .decode(value["box"].as_str()?)
+        .ok()?
+        .try_into()
+        .ok()
 }
 
 /// A handshake started, waiting for the box's reply.
 pub struct Handshake(snow::HandshakeState);
 
 /// Starts a handshake with the box whose key is `box_key`; returns the first message as a line.
-pub fn start(identity: &Identity, box_key: &[u8; 32], payload: &[u8]) -> Result<(Handshake, String), String> {
-    let box_public = ed25519_dalek::VerifyingKey::from_bytes(box_key).map_err(|error| error.to_string())?.to_montgomery().to_bytes();
+pub fn start(
+    identity: &Identity,
+    box_key: &[u8; 32],
+    payload: &[u8],
+) -> Result<(Handshake, String), String> {
+    let box_public = ed25519_dalek::VerifyingKey::from_bytes(box_key)
+        .map_err(|error| error.to_string())?
+        .to_montgomery()
+        .to_bytes();
     let secret = identity.noise_secret();
-    let params = PATTERN.parse().map_err(|error: snow::Error| error.to_string())?;
+    let params = PATTERN
+        .parse()
+        .map_err(|error: snow::Error| error.to_string())?;
     let mut handshake = snow::Builder::new(params)
         .local_private_key(&secret)
         .and_then(|builder| builder.remote_public_key(&box_public))
@@ -47,17 +60,30 @@ pub fn start(identity: &Identity, box_key: &[u8; 32], payload: &[u8]) -> Result<
         .and_then(snow::Builder::build_initiator)
         .map_err(|error| error.to_string())?;
     let mut message = vec![0u8; MAX_MESSAGE];
-    let length = handshake.write_message(payload, &mut message).map_err(|error| error.to_string())?;
-    Ok((Handshake(handshake), URL_SAFE_NO_PAD.encode(&message[..length])))
+    let length = handshake
+        .write_message(payload, &mut message)
+        .map_err(|error| error.to_string())?;
+    Ok((
+        Handshake(handshake),
+        URL_SAFE_NO_PAD.encode(&message[..length]),
+    ))
 }
 
 impl Handshake {
     /// Reads the box's reply, which proves its key, and turns to the session.
     pub fn finish(mut self, reply: &str) -> Result<Session, String> {
-        let reply = URL_SAFE_NO_PAD.decode(reply.trim()).map_err(|_| "the box's reply isn't a handshake message".to_owned())?;
+        let reply = URL_SAFE_NO_PAD
+            .decode(reply.trim())
+            .map_err(|_| "the box's reply isn't a handshake message".to_owned())?;
         let mut payload = vec![0u8; MAX_MESSAGE];
-        self.0.read_message(&reply, &mut payload).map_err(|_| "the box didn't prove its key".to_owned())?;
-        Ok(Session(self.0.into_transport_mode().map_err(|error| error.to_string())?))
+        self.0
+            .read_message(&reply, &mut payload)
+            .map_err(|_| "the box didn't prove its key".to_owned())?;
+        Ok(Session(
+            self.0
+                .into_transport_mode()
+                .map_err(|error| error.to_string())?,
+        ))
     }
 }
 
@@ -67,15 +93,23 @@ pub struct Session(snow::TransportState);
 impl Session {
     pub fn seal(&mut self, line: &[u8]) -> Result<String, String> {
         let mut message = vec![0u8; line.len() + 16];
-        let length = self.0.write_message(line, &mut message).map_err(|error| error.to_string())?;
+        let length = self
+            .0
+            .write_message(line, &mut message)
+            .map_err(|error| error.to_string())?;
         Ok(URL_SAFE_NO_PAD.encode(&message[..length]))
     }
 
     /// The line inside one of the box's sealed lines; an error if it was tampered with, replayed or lost.
     pub fn open(&mut self, line: &str) -> Result<Vec<u8>, String> {
-        let message = URL_SAFE_NO_PAD.decode(line.trim()).map_err(|_| "not a sealed line".to_owned())?;
+        let message = URL_SAFE_NO_PAD
+            .decode(line.trim())
+            .map_err(|_| "not a sealed line".to_owned())?;
         let mut out = vec![0u8; message.len()];
-        let length = self.0.read_message(&message, &mut out).map_err(|_| "a line that doesn't open".to_owned())?;
+        let length = self
+            .0
+            .read_message(&message, &mut out)
+            .map_err(|_| "a line that doesn't open".to_owned())?;
         out.truncate(length);
         Ok(out)
     }
@@ -83,7 +117,10 @@ impl Session {
 
 /// Runs a session over a stream of sealed lines and returns the plain side, which carries the VibeBuddy Protocol
 /// as the cable does. The plain side ends when the stream does, or on the first line that doesn't open.
-pub fn bridge<S: AsyncRead + AsyncWrite + Send + 'static>(stream: S, mut session: Session) -> DuplexStream {
+pub fn bridge<S: AsyncRead + AsyncWrite + Send + 'static>(
+    stream: S,
+    mut session: Session,
+) -> DuplexStream {
     let (ours, theirs) = tokio::io::duplex(64 * 1024);
     tokio::spawn(async move {
         let (sealed_read, mut sealed_write) = tokio::io::split(stream);
@@ -129,7 +166,10 @@ pub fn bridge<S: AsyncRead + AsyncWrite + Send + 'static>(stream: S, mut session
 /// Reads the rest of one line onto `line`, without its newline; false at the end of the stream. A line longer than
 /// [`MAX_SEALED_LINE`] is an error. Cancel-safe: whatever was read before a cancel stays in `line`, so the caller
 /// clears it only after a whole line, never before reading.
-pub async fn read_line<R: tokio::io::AsyncBufRead + Unpin>(reader: &mut R, line: &mut Vec<u8>) -> std::io::Result<bool> {
+pub async fn read_line<R: tokio::io::AsyncBufRead + Unpin>(
+    reader: &mut R,
+    line: &mut Vec<u8>,
+) -> std::io::Result<bool> {
     loop {
         let buffer = reader.fill_buf().await?;
         if buffer.is_empty() {
@@ -162,12 +202,15 @@ pub struct Memory {
 
 impl Memory {
     pub fn new(state_dir: &Path) -> Self {
-        Self { path: state_dir.join("box-noise") }
+        Self {
+            path: state_dir.join("box-noise"),
+        }
     }
 
     /// The box with this key spoke Noise before: never link to it in the clear.
     pub fn knows(&self, box_key: &[u8; 32]) -> bool {
-        std::fs::read_to_string(&self.path).is_ok_and(|text| text.trim() == URL_SAFE_NO_PAD.encode(box_key))
+        std::fs::read_to_string(&self.path)
+            .is_ok_and(|text| text.trim() == URL_SAFE_NO_PAD.encode(box_key))
     }
 
     pub fn learned(&self, box_key: &[u8; 32]) {
@@ -191,13 +234,21 @@ mod tests {
     pub fn identity() -> Identity {
         let mut suffix = [0u8; 4];
         getrandom::fill(&mut suffix).unwrap();
-        let dir = std::env::temp_dir().join(format!("vibebuddy-noise-test-{}-{}", std::process::id(), u32::from_le_bytes(suffix)));
+        let dir = std::env::temp_dir().join(format!(
+            "vibebuddy-noise-test-{}-{}",
+            std::process::id(),
+            u32::from_le_bytes(suffix)
+        ));
         Identity::load_or_create(&dir.join("identity"), "test".to_owned()).unwrap()
     }
 
     fn paired_box(identity: &Identity) -> Link {
         let mut link = Link::new([1; 32]);
-        let key: [u8; 32] = URL_SAFE_NO_PAD.decode(identity.public_key()).unwrap().try_into().unwrap();
+        let key: [u8; 32] = URL_SAFE_NO_PAD
+            .decode(identity.public_key())
+            .unwrap()
+            .try_into()
+            .unwrap();
         link.pair(key, "test").unwrap();
         link
     }
@@ -206,14 +257,20 @@ mod tests {
     fn the_daemon_and_the_firmware_agree() {
         let identity = identity();
         let link = paired_box(&identity);
-        let (handshake, first) = start(&identity, &link.public_key(), br#"{"takeover":false}"#).unwrap();
+        let (handshake, first) =
+            start(&identity, &link.public_key(), br#"{"takeover":false}"#).unwrap();
         let accepted = box_noise::accept(&link, [4; 32], first.as_bytes()).unwrap();
         assert_eq!(accepted.payload, br#"{"takeover":false}"#);
         let mut session = handshake.finish(&accepted.reply).unwrap();
         let (mut box_sealer, mut box_opener) = (accepted.sealer, accepted.opener);
 
-        let sealed = session.seal(br#"{"version":1,"event":"device.hello"}"#).unwrap();
-        assert_eq!(box_opener.open(sealed.as_bytes()).unwrap(), br#"{"version":1,"event":"device.hello"}"#);
+        let sealed = session
+            .seal(br#"{"version":1,"event":"device.hello"}"#)
+            .unwrap();
+        assert_eq!(
+            box_opener.open(sealed.as_bytes()).unwrap(),
+            br#"{"version":1,"event":"device.hello"}"#
+        );
         let back = box_sealer.seal(b"MODE DUTY").unwrap();
         assert_eq!(session.open(&back).unwrap(), b"MODE DUTY");
         assert!(session.open(&back).is_err(), "replayed");
@@ -234,8 +291,14 @@ mod tests {
     #[test]
     fn the_opener_names_the_box() {
         let link = Link::new([1; 32]);
-        assert_eq!(opener_key(&box_noise::opener(&link.public_key())), Some(link.public_key()));
-        assert_eq!(opener_key(r#"{"version":1,"event":"link.challenge"}"#), None);
+        assert_eq!(
+            opener_key(&box_noise::opener(&link.public_key())),
+            Some(link.public_key())
+        );
+        assert_eq!(
+            opener_key(r#"{"version":1,"event":"link.challenge"}"#),
+            None
+        );
     }
 
     #[tokio::test]
@@ -245,7 +308,11 @@ mod tests {
         let mut reader = tokio::io::BufReader::new(reader);
         let mut line = Vec::new();
         writer.write_all(b"half of ").await.unwrap();
-        let cancelled = tokio::time::timeout(std::time::Duration::from_millis(20), read_line(&mut reader, &mut line)).await;
+        let cancelled = tokio::time::timeout(
+            std::time::Duration::from_millis(20),
+            read_line(&mut reader, &mut line),
+        )
+        .await;
         assert!(cancelled.is_err());
         writer.write_all(b"a line\n").await.unwrap();
         assert!(read_line(&mut reader, &mut line).await.unwrap());
@@ -254,7 +321,8 @@ mod tests {
 
     #[test]
     fn the_memory_is_per_box() {
-        let dir = std::env::temp_dir().join(format!("vibebuddy-noise-memory-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("vibebuddy-noise-memory-{}", std::process::id()));
         let memory = Memory::new(&dir);
         assert!(!memory.knows(&[1; 32]));
         memory.learned(&[1; 32]);

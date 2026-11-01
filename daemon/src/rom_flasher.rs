@@ -98,7 +98,11 @@ impl RomFlasher {
                 candidate.port_name == port_name
                     && matches!(candidate.port_type, serialport::SerialPortType::UsbPort(info) if (info.vid, info.pid) == (0x303A, 0x1001))
             });
-        Ok(Self { port, paced, usb_jtag })
+        Ok(Self {
+            port,
+            paced,
+            usb_jtag,
+        })
     }
 
     /// Selects the reset sequence for the port, enters download mode, then syncs.
@@ -166,11 +170,15 @@ impl RomFlasher {
     }
 
     fn set_dtr(&mut self, dtr: bool) -> Result<(), String> {
-        self.port.write_data_terminal_ready(dtr).map_err(|error| format!("failed to set DTR: {error}"))
+        self.port
+            .write_data_terminal_ready(dtr)
+            .map_err(|error| format!("failed to set DTR: {error}"))
     }
 
     fn set_rts(&mut self, rts: bool) -> Result<(), String> {
-        self.port.write_request_to_send(rts).map_err(|error| format!("failed to set RTS: {error}"))
+        self.port
+            .write_request_to_send(rts)
+            .map_err(|error| format!("failed to set RTS: {error}"))
     }
 
     fn drain(&mut self) {
@@ -186,11 +194,15 @@ impl RomFlasher {
 
     fn write_paced(&mut self, bytes: &[u8]) -> Result<(), String> {
         if !self.paced {
-            self.port.write_all(bytes).map_err(|error| error.to_string())?;
+            self.port
+                .write_all(bytes)
+                .map_err(|error| error.to_string())?;
             return self.port.flush().map_err(|error| error.to_string());
         }
         for piece in bytes.chunks(crate::serial_transport::PACE_PIECE_BYTES) {
-            self.port.write_all(piece).map_err(|error| error.to_string())?;
+            self.port
+                .write_all(piece)
+                .map_err(|error| error.to_string())?;
             self.port.flush().map_err(|error| error.to_string())?;
             std::thread::sleep(crate::serial_transport::piece_delay(piece.len(), BAUD));
         }
@@ -207,7 +219,9 @@ impl RomFlasher {
             let remaining = deadline
                 .checked_duration_since(Instant::now())
                 .ok_or_else(|| "timed out waiting for a reply".to_owned())?;
-            let _ = self.port.set_timeout(remaining.min(Duration::from_millis(200)));
+            let _ = self
+                .port
+                .set_timeout(remaining.min(Duration::from_millis(200)));
             match self.port.read(&mut byte) {
                 Ok(1) => {}
                 Ok(_) => continue,
@@ -259,14 +273,23 @@ impl RomFlasher {
             if response.data.len() >= STATUS_BYTES {
                 let status = &response.data[response.data.len() - STATUS_BYTES..];
                 if status[0] != 0 {
-                    return Err(format!("ROM returned error {:#04x} (command {op:#04x})", status[1]));
+                    return Err(format!(
+                        "ROM returned error {:#04x} (command {op:#04x})",
+                        status[1]
+                    ));
                 }
             }
             return Ok(response);
         }
     }
 
-    fn call(&mut self, op: u8, data: &[u8], checksum: u32, timeout: Duration) -> Result<Response, String> {
+    fn call(
+        &mut self,
+        op: u8,
+        data: &[u8],
+        checksum: u32,
+        timeout: Duration,
+    ) -> Result<Response, String> {
         let started = Instant::now();
         self.write_paced(&slip_encode(&command(op, data, checksum)))?;
         let written = started.elapsed();
@@ -283,12 +306,18 @@ impl RomFlasher {
     fn sync(&mut self) -> Result<(), String> {
         let mut data = vec![0x07, 0x07, 0x12, 0x20];
         data.extend(std::iter::repeat_n(0x55, 32));
-        self.call(OP_SYNC, &data, 0, Duration::from_millis(100)).map(|_| ())
+        self.call(OP_SYNC, &data, 0, Duration::from_millis(100))
+            .map(|_| ())
     }
 
     fn read_reg(&mut self, address: u32) -> Result<u32, String> {
-        self.call(OP_READ_REG, &address.to_le_bytes(), 0, Duration::from_secs(3))
-            .map(|response| response.value)
+        self.call(
+            OP_READ_REG,
+            &address.to_le_bytes(),
+            0,
+            Duration::from_secs(3),
+        )
+        .map(|response| response.value)
     }
 
     /// Has the ROM attach the SPI flash and tells it the 16 MB parameters.
@@ -301,15 +330,26 @@ impl RomFlasher {
         for value in [0_u32, 16 * 1024 * 1024, 64 * 1024, 4 * 1024, 256, 0xFFFF] {
             params.extend_from_slice(&value.to_le_bytes());
         }
-        self.call(OP_SPI_SET_PARAMS, &params, 0, Duration::from_secs(3)).map(|_| ())
+        self.call(OP_SPI_SET_PARAMS, &params, 0, Duration::from_secs(3))
+            .map(|_| ())
     }
 
-    pub fn write_segment(&mut self, segment: &Segment, progress: &mut Progress<'_>) -> Result<(), String> {
+    pub fn write_segment(
+        &mut self,
+        segment: &Segment,
+        progress: &mut Progress<'_>,
+    ) -> Result<(), String> {
         let size = segment.data.len();
         let blocks = size.div_ceil(BLOCK_BYTES);
         let started = Instant::now();
         let mut begin = Vec::new();
-        for value in [size as u32, blocks as u32, BLOCK_BYTES as u32, segment.address, 0] {
+        for value in [
+            size as u32,
+            blocks as u32,
+            BLOCK_BYTES as u32,
+            segment.address,
+            0,
+        ] {
             begin.extend_from_slice(&value.to_le_bytes());
         }
         // Erasing gets about 40 seconds of extra timeout per MB, the same figure esptool uses.
@@ -323,7 +363,12 @@ impl RomFlasher {
                 data.extend_from_slice(&value.to_le_bytes());
             }
             data.extend_from_slice(&padded);
-            self.call(OP_FLASH_DATA, &data, checksum(&padded), Duration::from_secs(5))?;
+            self.call(
+                OP_FLASH_DATA,
+                &data,
+                checksum(&padded),
+                Duration::from_secs(5),
+            )?;
             if (index + 1) % 256 == 0 {
                 tracing::info!(
                     address = format_args!("{:#x}", segment.address),
@@ -360,7 +405,10 @@ impl RomFlasher {
         let actual = String::from_utf8_lossy(digest).to_ascii_lowercase();
         let expected = format!("{:x}", <md5::Md5 as md5::Digest>::digest(&segment.data));
         if actual != expected {
-            return Err(format!("verify mismatch at {:#x}: flash {actual}, file {expected}", segment.address));
+            return Err(format!(
+                "verify mismatch at {:#x}: flash {actual}, file {expected}",
+                segment.address
+            ));
         }
         Ok(())
     }
@@ -374,17 +422,30 @@ pub fn blank_otadata(table: &[u8]) -> Option<Segment> {
     const MAGIC: [u8; 2] = [0xAA, 0x50];
     const DATA: u8 = 0x01;
     const OTA: u8 = 0x00;
-    table.as_chunks::<ENTRY>().0.iter().take_while(|entry| entry[..2] == MAGIC).find_map(|entry| {
-        (entry[2] == DATA && entry[3] == OTA).then(|| {
-            let address = u32::from_le_bytes(entry[4..8].try_into().unwrap());
-            let size = u32::from_le_bytes(entry[8..12].try_into().unwrap());
-            Segment { address, data: vec![0xFF; size as usize] }
+    table
+        .as_chunks::<ENTRY>()
+        .0
+        .iter()
+        .take_while(|entry| entry[..2] == MAGIC)
+        .find_map(|entry| {
+            (entry[2] == DATA && entry[3] == OTA).then(|| {
+                let address = u32::from_le_bytes(entry[4..8].try_into().unwrap());
+                let size = u32::from_le_bytes(entry[8..12].try_into().unwrap());
+                Segment {
+                    address,
+                    data: vec![0xFF; size as usize],
+                }
+            })
         })
-    })
 }
 
 /// The whole flow: enter download mode, identify the chip, attach flash, write and verify each segment, hard reset.
-pub fn flash(port_name: &str, paced: bool, segments: &[Segment], on_progress: &mut dyn FnMut(f32, &str)) -> Result<(), String> {
+pub fn flash(
+    port_name: &str,
+    paced: bool,
+    segments: &[Segment],
+    on_progress: &mut dyn FnMut(f32, &str),
+) -> Result<(), String> {
     let mut flasher = RomFlasher::open(port_name, paced)?;
     on_progress(0.0, "entering download mode");
     flasher.connect()?;
@@ -413,15 +474,23 @@ mod tests {
     #[test]
     #[ignore = "requires exclusive access to an ESP32-S3 native USB device"]
     fn native_usb_enters_rom_download_mode() {
-        let port = std::env::var("VIBEBUDDY_TEST_PORT").expect("set VIBEBUDDY_TEST_PORT to the native USB port");
+        let port = std::env::var("VIBEBUDDY_TEST_PORT")
+            .expect("set VIBEBUDDY_TEST_PORT to the native USB port");
         let mut flasher = RomFlasher::open(&port, false).expect("open the device");
-        flasher.connect().expect("enter ROM download mode and read the ESP32-S3 chip ID");
-        flasher.hard_reset().expect("restart the device after the check");
+        flasher
+            .connect()
+            .expect("enter ROM download mode and read the ESP32-S3 chip ID");
+        flasher
+            .hard_reset()
+            .expect("restart the device after the check");
     }
 
     #[test]
     fn slip_escapes_end_and_escape_bytes() {
-        assert_eq!(slip_encode(&[0x01, 0xC0, 0xDB, 0x02]), vec![0xC0, 0x01, 0xDB, 0xDC, 0xDB, 0xDD, 0x02, 0xC0]);
+        assert_eq!(
+            slip_encode(&[0x01, 0xC0, 0xDB, 0x02]),
+            vec![0xC0, 0x01, 0xDB, 0xDC, 0xDB, 0xDD, 0x02, 0xC0]
+        );
     }
 
     #[test]
@@ -449,7 +518,12 @@ mod tests {
 
     #[test]
     fn blank_otadata_finds_the_ota_data_partition() {
-        let mut table = [entry(0x01, 0x02, 0x9000, 0x6000), entry(0x00, 0x10, 0x10000, 0x40_0000), entry(0x01, 0x00, 0xA1_0000, 0x2000)].concat();
+        let mut table = [
+            entry(0x01, 0x02, 0x9000, 0x6000),
+            entry(0x00, 0x10, 0x10000, 0x40_0000),
+            entry(0x01, 0x00, 0xA1_0000, 0x2000),
+        ]
+        .concat();
         table.extend_from_slice(&[0xEB, 0xEB]);
         table.resize(0xC00, 0xFF);
         let segment = blank_otadata(&table).expect("an otadata segment");
@@ -459,7 +533,12 @@ mod tests {
 
     #[test]
     fn a_single_slot_table_has_no_otadata() {
-        let mut table = [entry(0x01, 0x02, 0x9000, 0x6000), entry(0x00, 0x00, 0x10000, 0x40_0000), entry(0x01, 0x40, 0x41_0000, 0x20_0000)].concat();
+        let mut table = [
+            entry(0x01, 0x02, 0x9000, 0x6000),
+            entry(0x00, 0x00, 0x10000, 0x40_0000),
+            entry(0x01, 0x40, 0x41_0000, 0x20_0000),
+        ]
+        .concat();
         table.resize(0xC00, 0xFF);
         assert!(blank_otadata(&table).is_none());
     }
@@ -469,12 +548,22 @@ mod tests {
         let csv = concat!(env!("CARGO_MANIFEST_DIR"), "/../firmware/partitions.csv");
         let out = std::env::temp_dir().join(format!("vibebuddy-pt-{}.bin", std::process::id()));
         let status = std::process::Command::new("python3")
-            .args([concat!(env!("CARGO_MANIFEST_DIR"), "/../tools/make-partition-table.py"), csv, out.to_str().unwrap()])
+            .args([
+                concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../tools/make-partition-table.py"
+                ),
+                csv,
+                out.to_str().unwrap(),
+            ])
             .output()
             .expect("run make-partition-table.py");
         assert!(status.status.success());
         let table = std::fs::read(&out).unwrap();
         std::fs::remove_file(&out).ok();
-        assert_eq!(blank_otadata(&table).map(|segment| (segment.address, segment.data.len())), Some((0xA1_0000, 0x2000)));
+        assert_eq!(
+            blank_otadata(&table).map(|segment| (segment.address, segment.data.len())),
+            Some((0xA1_0000, 0x2000))
+        );
     }
 }

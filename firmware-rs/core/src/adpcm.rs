@@ -8,10 +8,11 @@
 //! holds the encoder, and the tests here check the two agree on the same sample.
 
 const STEPS: [i32; 89] = [
-    7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66, 73, 80, 88, 97, 107, 118, 130,
-    143, 157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408, 449, 494, 544, 598, 658, 724, 796, 876, 963, 1060, 1166,
-    1282, 1411, 1552, 1707, 1878, 2066, 2272, 2499, 2749, 3024, 3327, 3660, 4026, 4428, 4871, 5358, 5894, 6484, 7132, 7845,
-    8630, 9493, 10442, 11487, 12635, 13899, 15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767,
+    7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66,
+    73, 80, 88, 97, 107, 118, 130, 143, 157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408, 449,
+    494, 544, 598, 658, 724, 796, 876, 963, 1060, 1166, 1282, 1411, 1552, 1707, 1878, 2066, 2272,
+    2499, 2749, 3024, 3327, 3660, 4026, 4428, 4871, 5358, 5894, 6484, 7132, 7845, 8630, 9493,
+    10442, 11487, 12635, 13899, 15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767,
 ];
 
 const INDEX_CHANGE: [i32; 16] = [-1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8];
@@ -26,7 +27,10 @@ impl Decoder {
     /// A decoder that picks up a stream at a known state: a voice command line carries the coder's
     /// predictor and step index before its first nibble, so each line decodes on its own.
     pub fn with_state(predictor: i16, index: u8) -> Self {
-        Self { predictor: predictor as i32, index: (index as i32).clamp(0, 88) }
+        Self {
+            predictor: predictor as i32,
+            index: (index as i32).clamp(0, 88),
+        }
     }
 
     /// The predictor (the last sample) and the step index.
@@ -46,7 +50,12 @@ impl Decoder {
         if nibble & 1 != 0 {
             diff += step >> 2;
         }
-        self.predictor = if nibble & 8 != 0 { self.predictor - diff } else { self.predictor + diff }.clamp(-32768, 32767);
+        self.predictor = if nibble & 8 != 0 {
+            self.predictor - diff
+        } else {
+            self.predictor + diff
+        }
+        .clamp(-32768, 32767);
         self.index = (self.index + INDEX_CHANGE[(nibble & 15) as usize]).clamp(0, 88);
         self.predictor as i16
     }
@@ -163,7 +172,8 @@ impl LineStream {
                 self.position += 1;
             }
             let third = (at % 3) as i32;
-            let sample = (self.current as i32 + (self.next as i32 - self.current as i32) * third / 3) as i16;
+            let sample =
+                (self.current as i32 + (self.next as i32 - self.current as i32) * third / 3) as i16;
             let bytes = sample.to_le_bytes();
             out[written..written + 4].copy_from_slice(&[bytes[0], bytes[1], bytes[0], bytes[1]]);
             written += 4;
@@ -191,7 +201,9 @@ mod tests {
     }
 
     fn sine(count: usize) -> Vec<i16> {
-        (0..count).map(|index| (libm::sinf(index as f32 * 0.05) * 12000.0) as i16).collect()
+        (0..count)
+            .map(|index| (libm::sinf(index as f32 * 0.05) * 12000.0) as i16)
+            .collect()
     }
 
     fn decode_all(bytes: &[u8], samples: u32) -> Vec<i16> {
@@ -203,7 +215,11 @@ mod tests {
         assert_eq!(stream.remaining_bytes(), 0);
         out.chunks(4)
             .map(|frame| {
-                assert_eq!(frame[..2], frame[2..], "both channels carry the same sample");
+                assert_eq!(
+                    frame[..2],
+                    frame[2..],
+                    "both channels carry the same sample"
+                );
                 i16::from_le_bytes([frame[0], frame[1]])
             })
             .collect()
@@ -218,15 +234,24 @@ mod tests {
         // the step size is still catching up, it tracks the original closely.
         for (k, &sample) in decoded.iter().enumerate().skip(60).step_by(3) {
             let expected = original[k * 2 / 3] as i32;
-            assert!((sample as i32 - expected).abs() < 600, "output {k}: {sample} vs {expected}");
+            assert!(
+                (sample as i32 - expected).abs() < 600,
+                "output {k}: {sample} vs {expected}"
+            );
         }
     }
 
     #[test]
     fn the_python_encoder_agrees() {
         // tools/character_pack.py encodes these samples (the start of sine()) to these bytes.
-        let samples = [0, 599, 1198, 1793, 2384, 2968, 3546, 4114, 4673, 5219, 5753, 6272, 6775, 7262, 7730, 8179];
-        assert_eq!(encode(&samples), [0x70, 0x77, 0x77, 0x77, 0x05, 0x11, 0x10, 0x11]);
+        let samples = [
+            0, 599, 1198, 1793, 2384, 2968, 3546, 4114, 4673, 5219, 5753, 6272, 6775, 7262, 7730,
+            8179,
+        ];
+        assert_eq!(
+            encode(&samples),
+            [0x70, 0x77, 0x77, 0x77, 0x05, 0x11, 0x10, 0x11]
+        );
     }
 
     #[test]
@@ -244,22 +269,39 @@ mod tests {
             if written == 0 {
                 break;
             }
-            pieces.extend(buffer[..written].chunks(4).map(|frame| i16::from_le_bytes([frame[0], frame[1]])));
+            pieces.extend(
+                buffer[..written]
+                    .chunks(4)
+                    .map(|frame| i16::from_le_bytes([frame[0], frame[1]])),
+            );
         }
         assert_eq!(pieces, whole);
-        assert_eq!(pieces.len(), 452, "301 samples at 16 kHz become ceil(301 × 1.5) at 24 kHz");
+        assert_eq!(
+            pieces.len(),
+            452,
+            "301 samples at 16 kHz become ceil(301 × 1.5) at 24 kHz"
+        );
     }
 
     /// What a computer does with a voice command line: start a decoder at the line's state and decode
     /// every nibble, low first.
     fn decode_line(predictor: i16, index: u8, bytes: &[u8]) -> Vec<i16> {
         let mut decoder = Decoder::with_state(predictor, index);
-        bytes.iter().flat_map(|&byte| [byte & 15, byte >> 4]).map(|nibble| decoder.decode(nibble)).collect()
+        bytes
+            .iter()
+            .flat_map(|&byte| [byte & 15, byte >> 4])
+            .map(|nibble| decoder.decode(nibble))
+            .collect()
     }
 
     #[test]
     fn the_encoder_tracks_exactly_what_the_decoder_reproduces() {
-        let original: Vec<i16> = (0..4800).map(|index| (libm::sinf(index as f32 * 0.07) * 9000.0 + libm::sinf(index as f32 * 0.31) * 3000.0) as i16).collect();
+        let original: Vec<i16> = (0..4800)
+            .map(|index| {
+                (libm::sinf(index as f32 * 0.07) * 9000.0
+                    + libm::sinf(index as f32 * 0.31) * 3000.0) as i16
+            })
+            .collect();
         let mut encoder = Encoder::default();
         let mut tracked = Vec::new();
         let bytes: Vec<u8> = original
@@ -273,41 +315,79 @@ mod tests {
         let decoded = decode_line(0, 0, &bytes);
         assert_eq!(decoded.len(), original.len());
         // The encoder's predictor after each byte is the decoder's output for its second sample.
-        assert_eq!(decoded.iter().skip(1).step_by(2).copied().collect::<Vec<_>>(), tracked);
+        assert_eq!(
+            decoded
+                .iter()
+                .skip(1)
+                .step_by(2)
+                .copied()
+                .collect::<Vec<_>>(),
+            tracked
+        );
         for (index, (&got, &want)) in decoded.iter().zip(&original).enumerate().skip(40) {
-            assert!((got as i32 - want as i32).abs() < 700, "sample {index}: {got} vs {want}");
+            assert!(
+                (got as i32 - want as i32).abs() < 700,
+                "sample {index}: {got} vs {want}"
+            );
         }
     }
 
     #[test]
     fn a_stream_cut_into_lines_decodes_line_by_line_from_each_lines_state() {
-        let original: Vec<i16> = (0..3000).map(|index| (libm::sinf(index as f32 * 0.05) * 15000.0) as i16).collect();
+        let original: Vec<i16> = (0..3000)
+            .map(|index| (libm::sinf(index as f32 * 0.05) * 15000.0) as i16)
+            .collect();
         let mut encoder = Encoder::default();
         let mut whole = Vec::new();
         let mut lines = Vec::new();
         for piece in original.chunks(600) {
             let (predictor, index) = encoder.state();
-            let bytes: Vec<u8> = piece.chunks(2).map(|pair| encoder.encode_pair(pair[0], pair[1])).collect();
+            let bytes: Vec<u8> = piece
+                .chunks(2)
+                .map(|pair| encoder.encode_pair(pair[0], pair[1]))
+                .collect();
             whole.extend_from_slice(&bytes);
             lines.push((predictor, index, bytes));
         }
         let from_start = decode_line(0, 0, &whole);
         // Dropping the second line loses only its stretch: the third still decodes exactly.
         let third = &lines[2];
-        assert_eq!(decode_line(third.0, third.1, &third.2), from_start[1200..1800]);
-        let joined: Vec<i16> = lines.iter().flat_map(|(predictor, index, bytes)| decode_line(*predictor, *index, bytes)).collect();
+        assert_eq!(
+            decode_line(third.0, third.1, &third.2),
+            from_start[1200..1800]
+        );
+        let joined: Vec<i16> = lines
+            .iter()
+            .flat_map(|(predictor, index, bytes)| decode_line(*predictor, *index, bytes))
+            .collect();
         assert_eq!(joined, from_start);
     }
 
     #[test]
     fn extremes_stay_in_range() {
         let mut encoder = Encoder::default();
-        let samples = [i16::MAX, i16::MIN, i16::MAX, i16::MIN, 0, 0, i16::MAX, i16::MAX];
-        let bytes: Vec<u8> = samples.chunks(2).map(|pair| encoder.encode_pair(pair[0], pair[1])).collect();
+        let samples = [
+            i16::MAX,
+            i16::MIN,
+            i16::MAX,
+            i16::MIN,
+            0,
+            0,
+            i16::MAX,
+            i16::MAX,
+        ];
+        let bytes: Vec<u8> = samples
+            .chunks(2)
+            .map(|pair| encoder.encode_pair(pair[0], pair[1]))
+            .collect();
         let decoded = decode_line(0, 0, &bytes);
         assert_eq!(decoded.len(), samples.len());
         let (_, index) = encoder.state();
         assert!(index <= 88);
-        assert_eq!(Decoder::with_state(-5, 200).state(), (-5, 88), "an index past the table is clamped");
+        assert_eq!(
+            Decoder::with_state(-5, 200).state(),
+            (-5, 88),
+            "an index past the table is clamped"
+        );
     }
 }

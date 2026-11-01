@@ -5,8 +5,8 @@
 //! [`crate::resident`]. It takes any reader and writer, so tests drive it with an in-memory fake server.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
@@ -15,9 +15,16 @@ use tokio::sync::{Mutex, mpsc, oneshot};
 /// Something the server sent that isn't an answer to one of our requests.
 #[derive(Debug)]
 pub enum Incoming {
-    Notification { method: String, params: Value },
+    Notification {
+        method: String,
+        params: Value,
+    },
     /// A server-to-client request: it must be answered with [`Client::respond`] or [`Client::respond_error`].
-    Request { id: Value, method: String, params: Value },
+    Request {
+        id: Value,
+        method: String,
+        params: Value,
+    },
 }
 
 #[derive(Debug, PartialEq)]
@@ -31,7 +38,9 @@ pub enum RpcError {
 impl std::fmt::Display for RpcError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Server { code, message } => write!(formatter, "app-server error {code}: {message}"),
+            Self::Server { code, message } => {
+                write!(formatter, "app-server error {code}: {message}")
+            }
             Self::Closed => write!(formatter, "app-server exited"),
         }
     }
@@ -73,12 +82,18 @@ impl Client {
     pub async fn request(&self, method: &str, params: Value) -> Result<Value, RpcError> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let (sender, receiver) = oneshot::channel();
-        self.pending.lock().expect("pending lock").insert(id, sender);
+        self.pending
+            .lock()
+            .expect("pending lock")
+            .insert(id, sender);
         if self.closed.load(Ordering::Relaxed) {
             self.pending.lock().expect("pending lock").remove(&id);
             return Err(RpcError::Closed);
         }
-        if let Err(error) = self.write(&json!({"id": id, "method": method, "params": params})).await {
+        if let Err(error) = self
+            .write(&json!({"id": id, "method": method, "params": params}))
+            .await
+        {
             self.pending.lock().expect("pending lock").remove(&id);
             return Err(error);
         }
@@ -94,7 +109,8 @@ impl Client {
     }
 
     pub async fn respond_error(&self, id: Value, code: i64, message: &str) -> Result<(), RpcError> {
-        self.write(&json!({"id": id, "error": {"code": code, "message": message}})).await
+        self.write(&json!({"id": id, "error": {"code": code, "message": message}}))
+            .await
     }
 
     async fn write(&self, message: &Value) -> Result<(), RpcError> {
@@ -129,8 +145,14 @@ async fn read_loop(
             tracing::warn!("app-server sent a line that isn't JSON");
             continue;
         };
-        let method = message.get("method").and_then(Value::as_str).map(str::to_owned);
-        let params = message.get_mut("params").map(Value::take).unwrap_or(Value::Null);
+        let method = message
+            .get("method")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        let params = message
+            .get_mut("params")
+            .map(Value::take)
+            .unwrap_or(Value::Null);
         match (method, message.get_mut("id").map(Value::take)) {
             (Some(method), Some(id)) => {
                 let _ = incoming.send(Incoming::Request { id, method, params });
@@ -139,16 +161,26 @@ async fn read_loop(
                 let _ = incoming.send(Incoming::Notification { method, params });
             }
             (None, Some(id)) => {
-                let Some(sender) = id.as_u64().and_then(|id| pending.lock().expect("pending lock").remove(&id)) else {
+                let Some(sender) = id
+                    .as_u64()
+                    .and_then(|id| pending.lock().expect("pending lock").remove(&id))
+                else {
                     tracing::warn!(%id, "app-server answered a request we didn't send");
                     continue;
                 };
                 let result = match message.get_mut("error") {
                     Some(error) => Err(RpcError::Server {
                         code: error.get("code").and_then(Value::as_i64).unwrap_or(0),
-                        message: error.get("message").and_then(Value::as_str).unwrap_or_default().to_owned(),
+                        message: error
+                            .get("message")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                            .to_owned(),
                     }),
-                    None => Ok(message.get_mut("result").map(Value::take).unwrap_or(Value::Null)),
+                    None => Ok(message
+                        .get_mut("result")
+                        .map(Value::take)
+                        .unwrap_or(Value::Null)),
                 };
                 let _ = sender.send(result);
             }
@@ -173,7 +205,8 @@ mod tests {
 
         let server = tokio::spawn(async move {
             let mut lines = BufReader::new(server_read).lines();
-            let request: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+            let request: Value =
+                serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
             assert_eq!(request["method"], "ping");
             let id = request["id"].clone();
             let out = format!(
@@ -183,13 +216,21 @@ mod tests {
                 json!({"id": id, "result": {"pong": true}}),
             );
             server_write.write_all(out.as_bytes()).await.unwrap();
-            let answer: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+            let answer: Value =
+                serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
             assert_eq!(answer, json!({"id": "srv-1", "result": {"ok": 1}}));
         });
 
-        assert_eq!(client.request("ping", json!({})).await, Ok(json!({"pong": true})));
-        assert!(matches!(incoming.recv().await, Some(Incoming::Notification { method, .. }) if method == "note"));
-        let Some(Incoming::Request { id, method, .. }) = incoming.recv().await else { panic!("expected a request") };
+        assert_eq!(
+            client.request("ping", json!({})).await,
+            Ok(json!({"pong": true}))
+        );
+        assert!(
+            matches!(incoming.recv().await, Some(Incoming::Notification { method, .. }) if method == "note")
+        );
+        let Some(Incoming::Request { id, method, .. }) = incoming.recv().await else {
+            panic!("expected a request")
+        };
         assert_eq!(method, "ask");
         client.respond(id, json!({"ok": 1})).await.unwrap();
         server.await.unwrap();
@@ -215,13 +256,20 @@ mod tests {
         let (client, _incoming) = Client::spawn(client_read, client_write);
         tokio::spawn(async move {
             let mut lines = BufReader::new(server_read).lines();
-            let request: Value = serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+            let request: Value =
+                serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
             let reply = json!({"id": request["id"], "error": {"code": -32600, "message": "no such thread"}});
-            server_write.write_all(format!("{reply}\n").as_bytes()).await.unwrap();
+            server_write
+                .write_all(format!("{reply}\n").as_bytes())
+                .await
+                .unwrap();
         });
         assert_eq!(
             client.request("thread/resume", json!({})).await,
-            Err(RpcError::Server { code: -32600, message: "no such thread".to_owned() })
+            Err(RpcError::Server {
+                code: -32600,
+                message: "no such thread".to_owned()
+            })
         );
     }
 }

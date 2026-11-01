@@ -5,8 +5,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use base64::Engine;
-use vibebuddy_protocol::Event;
 use tokio::sync::broadcast;
+use vibebuddy_protocol::Event;
 
 use crate::serial_transport::{DeviceMessage, Transport, TransportError};
 
@@ -25,7 +25,11 @@ pub fn voice_id_of(pack: &[u8]) -> Option<String> {
     let raw = &pack[16..48];
     let end = raw.iter().position(|byte| *byte == 0).unwrap_or(raw.len());
     let id = std::str::from_utf8(&raw[..end]).ok()?;
-    if id.is_empty() { None } else { Some(id.to_owned()) }
+    if id.is_empty() {
+        None
+    } else {
+        Some(id.to_owned())
+    }
 }
 
 fn event(name: &str, fields: Vec<(&str, serde_json::Value)>) -> Event {
@@ -83,7 +87,9 @@ async fn wait_for(
         let message = match tokio::time::timeout_at(deadline, bus.recv()).await {
             Ok(Ok(message)) => message,
             Ok(Err(broadcast::error::RecvError::Lagged(_))) => continue,
-            Ok(Err(broadcast::error::RecvError::Closed)) => return Err("device message channel closed".to_owned()),
+            Ok(Err(broadcast::error::RecvError::Closed)) => {
+                return Err("device message channel closed".to_owned());
+            }
             Err(_) => return Err(format!("timed out waiting for {wanted}")),
         };
         match message {
@@ -143,7 +149,11 @@ mod tests {
         pack[16..28].copy_from_slice(b"wanwanxiaohe");
         assert_eq!(voice_id_of(&pack).as_deref(), Some("wanwanxiaohe"));
         pack[0..4].copy_from_slice(b"VBCP");
-        assert_eq!(voice_id_of(&pack).as_deref(), Some("wanwanxiaohe"), "a Character pack");
+        assert_eq!(
+            voice_id_of(&pack).as_deref(),
+            Some("wanwanxiaohe"),
+            "a Character pack"
+        );
         pack[0] = b'X';
         assert_eq!(voice_id_of(&pack), None);
         assert_eq!(voice_id_of(&[]), None);

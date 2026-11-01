@@ -106,10 +106,20 @@ struct Preview {
 
 impl Preview {
     fn new(directory: &Path) -> Self {
-        let mut board = PreviewBoard { now: Cell::new(1000), frame: vec![0; FRAME_BYTES], flash: NoFlash, keys: (false, false, false), finger: None };
+        let mut board = PreviewBoard {
+            now: Cell::new(1000),
+            frame: vec![0; FRAME_BYTES],
+            flash: NoFlash,
+            keys: (false, false, false),
+            finger: None,
+        };
         let mut firmware = Firmware::new(1, 1000, b"v0.3.2-11-g0adc18b 2026-10-06 16:34", "0.3.2");
         firmware.boot(&mut board);
-        let mut preview = Self { directory: directory.to_path_buf(), board, firmware };
+        let mut preview = Self {
+            directory: directory.to_path_buf(),
+            board,
+            firmware,
+        };
         preview.send(r#"{"version":1,"event":"device.heartbeat","build":"0.3.1 v0.3.1-12-ga4a667c 2026-10-06 16:26","hour":14,"day":20261005}"#);
         preview.send(
             r#"{"version":1,"event":"task.start","title":"CC:MUSE DUAL BOOT","stats":["13 DONE","1 ASKS","46M BUSY"],"tasks":[{"title":"CC:MUSE DUAL BOOT","status":"working","elapsed_s":420,"project":"VIBE-BUDDY"},{"title":"CX:RELEASE NOTES","status":"done","elapsed_s":1500,"project":"VIBE-BUDDY"}]}"#,
@@ -166,7 +176,11 @@ impl Preview {
 }
 
 fn main() {
-    let directory = PathBuf::from(std::env::args().nth(1).expect("usage: menu_preview <output directory>"));
+    let directory = PathBuf::from(
+        std::env::args()
+            .nth(1)
+            .expect("usage: menu_preview <output directory>"),
+    );
     fs::create_dir_all(&directory).expect("create directory");
 
     let mut preview = Preview::new(&directory);

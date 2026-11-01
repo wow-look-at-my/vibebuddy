@@ -142,6 +142,10 @@ curl -H 'content-type: application/json' \
 
 事件列表见 [`docs/protocol.md`](docs/protocol.md)。
 
+### 这个分支没有更新
+
+这个分支不会检查、下载或提示更新，不论是 App 还是盒子的固件，也没有任何设置或环境变量能把它打开。daemon 没有更新来源，Mac 版 App 不会启动 Sparkle，Linux 版 App 不显示任何更新控件。相关代码仍在，由编译期开关控制（`daemon/src/updates.rs` 里的 `COMPILED_IN`、`app/Sources/VibeBuddyCore/UpdateSwitch.swift` 里的 `UpdateSwitch.compiledIn`、`desktop/src/status.rs` 里的 `UPDATES_COMPILED_IN`），`update-manifest` 工作流只在手动触发时运行。新版本从源码编译，固件用 设置 → 设备 → 从文件刷入 刷进盒子。下面一节讲的是上游项目的做法。
+
 ### 更新
 
 App 和盒子固件分开发布，VibeBuddy 会检查两者有没有新版本（[ADR-0010](docs/adr/0010-firmware-and-app-release-separately-behind-an-update-manifest.md)）。除了中转（见下一节），这是它唯一会联网的地方：

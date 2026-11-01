@@ -14,8 +14,18 @@ fn colours_are_the_tokens_in_rgb565() {
 #[test]
 fn every_sprite_is_whole_and_indexes_its_palette() {
     for (name, sprite) in sprites::ALL {
-        assert_eq!(sprite.pixels.len(), usize::from(sprite.width) * usize::from(sprite.height), "{name}");
-        assert!(sprite.pixels.iter().all(|&index| usize::from(index) <= sprite.palette.len()), "{name}");
+        assert_eq!(
+            sprite.pixels.len(),
+            usize::from(sprite.width) * usize::from(sprite.height),
+            "{name}"
+        );
+        assert!(
+            sprite
+                .pixels
+                .iter()
+                .all(|&index| usize::from(index) <= sprite.palette.len()),
+            "{name}"
+        );
     }
 }
 
@@ -23,9 +33,16 @@ fn every_sprite_is_whole_and_indexes_its_palette() {
 fn the_box_carries_kore_the_tiles_and_the_tag_but_not_the_character_drafts() {
     let names: Vec<&str> = sprites::ALL.iter().map(|(name, _)| *name).collect();
     for expression in ["normal", "working", "input", "happy", "sad", "sleep"] {
-        assert!(names.contains(&format!("kore-{expression}").as_str()), "{expression}");
+        assert!(
+            names.contains(&format!("kore-{expression}").as_str()),
+            "{expression}"
+        );
     }
-    assert!(names.contains(&"icon-cc") && names.contains(&"icon-nav-box") && names.contains(&"tag-your-vibebuddy"));
+    assert!(
+        names.contains(&"icon-cc")
+            && names.contains(&"icon-nav-box")
+            && names.contains(&"tag-your-vibebuddy")
+    );
     assert!(!names.iter().any(|name| name.starts_with("character-")));
 }
 

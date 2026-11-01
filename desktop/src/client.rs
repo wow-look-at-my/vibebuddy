@@ -69,24 +69,40 @@ pub async fn put_config(config: Config) -> Result<Config, String> {
 
 /// The box reports its new volume back, and that is when the status stream shows it.
 pub async fn set_volume(level: u8, preview: bool) -> Result<(), String> {
-    post("/v1/device/volume", Some(serde_json::json!({ "level": level, "preview": preview }))).await
+    post(
+        "/v1/device/volume",
+        Some(serde_json::json!({ "level": level, "preview": preview })),
+    )
+    .await
 }
 
 /// `style` is `robot` or `korekore`; the box reports a SCREENS line once it has stored it, and the status follows.
 pub async fn set_screens(style: &'static str) -> Result<(), String> {
-    post("/v1/device/screens", Some(serde_json::json!({ "style": style }))).await
+    post(
+        "/v1/device/screens",
+        Some(serde_json::json!({ "style": style })),
+    )
+    .await
 }
 
 /// The daemon accepts the pack and writes it in the background; progress arrives in the status stream.
 /// `lender` (the Character lending a custom one its voice, persona and lines) and `address` (the form of address
 /// its lines carry) aren't in the pack; the daemon keeps them for the buddy's spoken replies.
-pub async fn write_voice_pack(pack: Vec<u8>, lender: Option<&str>, address: Option<&str>) -> Result<(), String> {
+pub async fn write_voice_pack(
+    pack: Vec<u8>,
+    lender: Option<&str>,
+    address: Option<&str>,
+) -> Result<(), String> {
     // Both are ids from fixed lists (`ada`, `laoban`): nothing to escape.
     let query: Vec<String> = [("lender", lender), ("address", address)]
         .into_iter()
         .filter_map(|(name, value)| Some(format!("{name}={}", value?)))
         .collect();
-    let query = if query.is_empty() { String::new() } else { format!("?{}", query.join("&")) };
+    let query = if query.is_empty() {
+        String::new()
+    } else {
+        format!("?{}", query.join("&"))
+    };
     let request = reqwest::Client::new()
         .post(format!("{BASE}/v1/device/voice-pack{query}"))
         .header("content-type", "application/octet-stream")
@@ -106,12 +122,19 @@ pub async fn flash_firmware(directory: std::path::PathBuf) -> Result<(), String>
 }
 
 pub async fn check_for_updates() -> Result<(), String> {
+    if !crate::status::UPDATES_COMPILED_IN {
+        return Err("update checks are not built into this app".to_owned());
+    }
     post("/v1/updates/check", None).await
 }
 
 /// The daemon remembers the choice and connects to that device on its next look around.
 pub async fn choose_box(usb_serial: String) -> Result<(), String> {
-    post("/v1/device/choice", Some(serde_json::json!({ "usb_serial": usb_serial }))).await
+    post(
+        "/v1/device/choice",
+        Some(serde_json::json!({ "usb_serial": usb_serial })),
+    )
+    .await
 }
 
 /// Forgets another computer on the box; the daemon refuses this computer, which pairs again whenever it's plugged in.
@@ -126,7 +149,11 @@ pub async fn take_over() -> Result<(), String> {
 
 /// The password goes to the box over the cable and is kept nowhere else.
 pub async fn set_wifi(ssid: String, password: String) -> Result<(), String> {
-    post("/v1/device/wifi", Some(serde_json::json!({ "ssid": ssid, "password": password }))).await
+    post(
+        "/v1/device/wifi",
+        Some(serde_json::json!({ "ssid": ssid, "password": password })),
+    )
+    .await
 }
 
 /// The box scans; what it hears arrives in the status as `wifi_seen`.
@@ -165,10 +192,13 @@ pub async fn restart_daemon() -> Result<(), String> {
 
 /// Whether the daemon runs the experimental resident session (`VIBEBUDDY_RESIDENT_SESSION=1`).
 pub async fn resident_enabled() -> Result<bool, String> {
-    resident_info().await.map(|info| info.enabled).map_err(|error| match error {
-        HistoryError::DaemonDown => "the daemon isn't running".to_owned(),
-        HistoryError::Unavailable(why) => why,
-    })
+    resident_info()
+        .await
+        .map(|info| info.enabled)
+        .map_err(|error| match error {
+            HistoryError::DaemonDown => "the daemon isn't running".to_owned(),
+            HistoryError::Unavailable(why) => why,
+        })
 }
 
 /// `GET /v1/resident`.
@@ -201,11 +231,20 @@ impl ResidentInfo {
     pub fn voice_off_note(&self) -> Option<String> {
         let back = || crate::status::voice_comes_back(chrono::Utc::now(), &chrono::Local);
         Some(match self.voice_off.as_deref()? {
-            "bridge_firmware" => tr("The box is on its UART bridge, and its firmware can't carry voice there. Update the firmware, or plug the cable into the box's native USB port.", &[]),
-            "bridge_slow" => tr("The box is on its UART bridge, which didn't hold the speed voice needs. Plug the cable into the box's native USB port, or plug it in again to try once more.", &[]),
+            "bridge_firmware" => tr(
+                "The box is on its UART bridge, and its firmware can't carry voice there. Update the firmware, or plug the cable into the box's native USB port.",
+                &[],
+            ),
+            "bridge_slow" => tr(
+                "The box is on its UART bridge, which didn't hold the speed voice needs. Plug the cable into the box's native USB port, or plug it in again to try once more.",
+                &[],
+            ),
             "signed_out" => tr("Voice needs this computer signed in to VibeBuddy.", &[]),
             "allowance" => tr("Today's voice is used up. It comes back at %@.", &[&back()]),
-            "global_cap" => tr("Voice is paused for everyone today. It comes back at %@.", &[&back()]),
+            "global_cap" => tr(
+                "Voice is paused for everyone today. It comes back at %@.",
+                &[&back()],
+            ),
             _ => return None,
         })
     }
@@ -250,7 +289,9 @@ impl BrainChoice {
 
 /// Which Agent answers voice commands. Its own endpoint, not part of the config.
 pub async fn set_resident_brain(choice: BrainChoice) -> Result<ResidentInfo, String> {
-    let request = reqwest::Client::new().put(format!("{BASE}/v1/resident/brain")).json(&serde_json::json!({"brain": choice.as_str()}));
+    let request = reqwest::Client::new()
+        .put(format!("{BASE}/v1/resident/brain"))
+        .json(&serde_json::json!({"brain": choice.as_str()}));
     resident_setting(request).await
 }
 
@@ -287,14 +328,23 @@ impl KeyProvider {
 /// Sets the user's own key for a provider of spoken replies (None clears it). The daemon never sends it back; the
 /// status says it is set.
 pub async fn set_voice_key(provider: KeyProvider, key: Option<String>) -> Result<(), String> {
-    let request = reqwest::Client::new().put(format!("{BASE}/v1/voice-keys")).json(&serde_json::json!({provider.as_str(): key}));
-    let response = request.timeout(Duration::from_secs(10)).send().await.map_err(|error| error.to_string())?;
+    let request = reqwest::Client::new()
+        .put(format!("{BASE}/v1/voice-keys"))
+        .json(&serde_json::json!({provider.as_str(): key}));
+    let response = request
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
     let status = response.status();
     if status.is_success() {
         return Ok(());
     }
     let body: serde_json::Value = response.json().await.unwrap_or_default();
-    Err(body["message"].as_str().map(str::to_owned).unwrap_or_else(|| format!("the daemon answered {status}")))
+    Err(body["message"]
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("the daemon answered {status}")))
 }
 
 /// The voices a made Character can speak with.
@@ -304,22 +354,38 @@ pub async fn character_voices() -> Result<Vec<crate::making::Voice>, String> {
 
 /// Tries a voice in the user's own account with their own key, saying `text`; the daemon keeps it when the provider
 /// speaks it. Answers the voice and what it said, as a 16 kHz WAV.
-pub async fn add_own_voice(provider: String, voice: String, name: String, text: String) -> Result<(crate::making::Voice, Vec<u8>), String> {
+pub async fn add_own_voice(
+    provider: String,
+    voice: String,
+    name: String,
+    text: String,
+) -> Result<(crate::making::Voice, Vec<u8>), String> {
     #[derive(Deserialize)]
     struct Answer {
         voice: crate::making::Voice,
         audio: String,
     }
-    let body = serde_json::json!({"provider": provider, "voice": voice, "name": name, "text": text});
+    let body =
+        serde_json::json!({"provider": provider, "voice": voice, "name": name, "text": text});
     // Volcano Engine may be tried on four resources, each a whole line.
-    let response = reqwest::Client::new().post(format!("{BASE}/v1/voices")).json(&body).timeout(Duration::from_secs(120)).send().await.map_err(|error| error.to_string())?;
+    let response = reqwest::Client::new()
+        .post(format!("{BASE}/v1/voices"))
+        .json(&body)
+        .timeout(Duration::from_secs(120))
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
     let status = response.status();
     if !status.is_success() {
         let body: serde_json::Value = response.json().await.unwrap_or_default();
-        return Err(body["message"].as_str().map(str::to_owned).unwrap_or_else(|| format!("the daemon answered {status}")));
+        return Err(body["message"]
+            .as_str()
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("the daemon answered {status}")));
     }
     let answer: Answer = response.json().await.map_err(|error| error.to_string())?;
-    let audio = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, answer.audio).map_err(|error| error.to_string())?;
+    let audio = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, answer.audio)
+        .map_err(|error| error.to_string())?;
     Ok((answer.voice, audio))
 }
 
@@ -330,13 +396,21 @@ pub async fn elevenlabs_voices() -> Result<Vec<crate::making::ProviderVoice>, St
 
 /// Forgets one of the user's own voices; the daemon refuses while a Character made here speaks with it.
 pub async fn delete_own_voice(id: String) -> Result<(), String> {
-    let response = reqwest::Client::new().delete(format!("{BASE}/v1/voices/{id}")).timeout(Duration::from_secs(10)).send().await.map_err(|error| error.to_string())?;
+    let response = reqwest::Client::new()
+        .delete(format!("{BASE}/v1/voices/{id}"))
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
     let status = response.status();
     if status.is_success() {
         return Ok(());
     }
     let body: serde_json::Value = response.json().await.unwrap_or_default();
-    Err(body["message"].as_str().map(str::to_owned).unwrap_or_else(|| format!("the daemon answered {status}")))
+    Err(body["message"]
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("the daemon answered {status}")))
 }
 
 /// The Characters made on this computer.
@@ -350,14 +424,24 @@ pub async fn preset_lines(id: &str) -> Result<Vec<crate::making::Line>, String> 
 }
 
 /// Starts making a Character's line audio, or resumes one stopped (`request.id`); `making` in the status follows it.
-pub async fn make_character(request: crate::making::Request) -> Result<crate::making::Making, String> {
-    let response = reqwest::Client::new().post(format!("{BASE}/v1/characters")).json(&request).send().await.map_err(|error| error.to_string())?;
+pub async fn make_character(
+    request: crate::making::Request,
+) -> Result<crate::making::Making, String> {
+    let response = reqwest::Client::new()
+        .post(format!("{BASE}/v1/characters"))
+        .json(&request)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
     let status = response.status();
     if status.is_success() {
         return response.json().await.map_err(|error| error.to_string());
     }
     let body: serde_json::Value = response.json().await.unwrap_or_default();
-    Err(body["message"].as_str().map(str::to_owned).unwrap_or_else(|| format!("the daemon answered {status}")))
+    Err(body["message"]
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("the daemon answered {status}")))
 }
 
 /// Deletes a Character made here; the daemon refuses while it is being made.
@@ -366,7 +450,12 @@ pub async fn delete_character(id: String) -> Result<(), String> {
 }
 
 async fn get_json<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, String> {
-    let response = reqwest::Client::new().get(format!("{BASE}{path}")).timeout(Duration::from_secs(10)).send().await.map_err(|error| error.to_string())?;
+    let response = reqwest::Client::new()
+        .get(format!("{BASE}{path}"))
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
     let status = response.status();
     if !status.is_success() {
         return Err(format!("the daemon answered {status}"));
@@ -375,11 +464,18 @@ async fn get_json<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, Strin
 }
 
 async fn resident_setting(request: reqwest::RequestBuilder) -> Result<ResidentInfo, String> {
-    let response = request.timeout(Duration::from_secs(10)).send().await.map_err(|error| error.to_string())?;
+    let response = request
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
     let status = response.status();
     let body: serde_json::Value = response.json().await.map_err(|error| error.to_string())?;
     if !status.is_success() {
-        return Err(body["message"].as_str().map(str::to_owned).unwrap_or_else(|| format!("the daemon answered {status}")));
+        return Err(body["message"]
+            .as_str()
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("the daemon answered {status}")));
     }
     serde_json::from_value(body).map_err(|error| error.to_string())
 }
@@ -391,8 +487,17 @@ pub async fn resident_info() -> Result<ResidentInfo, HistoryError> {
         .timeout(Duration::from_secs(5))
         .send()
         .await
-        .map_err(|error| if error.is_connect() { HistoryError::DaemonDown } else { HistoryError::Unavailable(error.to_string()) })?;
-    let body = response.bytes().await.map_err(|error| HistoryError::Unavailable(error.to_string()))?;
+        .map_err(|error| {
+            if error.is_connect() {
+                HistoryError::DaemonDown
+            } else {
+                HistoryError::Unavailable(error.to_string())
+            }
+        })?;
+    let body = response
+        .bytes()
+        .await
+        .map_err(|error| HistoryError::Unavailable(error.to_string()))?;
     serde_json::from_slice(&body).map_err(|error| HistoryError::Unavailable(error.to_string()))
 }
 
@@ -425,7 +530,13 @@ pub async fn resident_history(limit: usize) -> Result<Vec<Exchange>, HistoryErro
         .timeout(Duration::from_secs(60))
         .send()
         .await
-        .map_err(|error| if error.is_connect() { HistoryError::DaemonDown } else { HistoryError::Unavailable(error.to_string()) })?;
+        .map_err(|error| {
+            if error.is_connect() {
+                HistoryError::DaemonDown
+            } else {
+                HistoryError::Unavailable(error.to_string())
+            }
+        })?;
     if !response.status().is_success() {
         let status = response.status();
         return Err(HistoryError::Unavailable(
@@ -437,7 +548,10 @@ pub async fn resident_history(limit: usize) -> Result<Vec<Exchange>, HistoryErro
                 .unwrap_or_else(|| format!("the daemon answered {status}")),
         ));
     }
-    let history: History = response.json().await.map_err(|error| HistoryError::Unavailable(error.to_string()))?;
+    let history: History = response
+        .json()
+        .await
+        .map_err(|error| HistoryError::Unavailable(error.to_string()))?;
     Ok(history.exchanges)
 }
 
@@ -456,9 +570,14 @@ pub async fn sign_in() -> Result<String, String> {
     let status = response.status();
     let body: serde_json::Value = response.json().await.map_err(|error| error.to_string())?;
     if !status.is_success() {
-        return Err(body["message"].as_str().map(str::to_owned).unwrap_or_else(|| format!("the daemon answered {status}")));
+        return Err(body["message"]
+            .as_str()
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("the daemon answered {status}")));
     }
-    serde_json::from_value::<SignIn>(body).map(|sign_in| sign_in.url).map_err(|error| error.to_string())
+    serde_json::from_value::<SignIn>(body)
+        .map(|sign_in| sign_in.url)
+        .map_err(|error| error.to_string())
 }
 
 /// Ends this computer's session only.
@@ -507,7 +626,9 @@ mod tests {
 
     #[test]
     fn events_split_across_chunks_are_reassembled() {
-        let mut buffer = b"event: status\ndata: {\"today\":{\"done\":2}}\n\nevent: status\ndata: {\"today\":".to_vec();
+        let mut buffer =
+            b"event: status\ndata: {\"today\":{\"done\":2}}\n\nevent: status\ndata: {\"today\":"
+                .to_vec();
         let statuses = drain_events(&mut buffer);
         assert_eq!(statuses.len(), 1);
         assert_eq!(statuses[0].today.done, 2);
@@ -522,37 +643,90 @@ mod tests {
     fn the_resident_info_reads_its_revision_and_problem_and_an_older_daemons_without_them() {
         let parse = |json: &str| serde_json::from_str::<ResidentInfo>(json).unwrap();
         let older = parse(r#"{"enabled":true,"thread_id":null}"#);
-        let nothing = ResidentInfo { enabled: true, revision: None, problem: None, brain_setting: None, anthropic_key_set: None, voice_off: None };
+        let nothing = ResidentInfo {
+            enabled: true,
+            revision: None,
+            problem: None,
+            brain_setting: None,
+            anthropic_key_set: None,
+            voice_off: None,
+        };
         assert_eq!(older, nothing);
-        let ready = parse(r#"{"enabled":true,"thread_id":"t1","revision":7,"ready":true,"problem":null}"#);
-        assert_eq!(ready, ResidentInfo { revision: Some(7), ..nothing.clone() });
-        let missing = parse(r#"{"enabled":true,"thread_id":null,"revision":0,"ready":false,"problem":"codex_missing"}"#);
+        let ready =
+            parse(r#"{"enabled":true,"thread_id":"t1","revision":7,"ready":true,"problem":null}"#);
+        assert_eq!(
+            ready,
+            ResidentInfo {
+                revision: Some(7),
+                ..nothing.clone()
+            }
+        );
+        let missing = parse(
+            r#"{"enabled":true,"thread_id":null,"revision":0,"ready":false,"problem":"codex_missing"}"#,
+        );
         assert_eq!(missing.problem, Some(Problem::CodexMissing));
-        let logged_out = parse(r#"{"enabled":true,"thread_id":null,"revision":0,"ready":false,"problem":"codex_logged_out"}"#);
+        let logged_out = parse(
+            r#"{"enabled":true,"thread_id":null,"revision":0,"ready":false,"problem":"codex_logged_out"}"#,
+        );
         assert_eq!(logged_out.problem, Some(Problem::CodexLoggedOut));
-        let later = parse(r#"{"enabled":true,"thread_id":null,"revision":0,"ready":false,"problem":"something_new"}"#);
+        let later = parse(
+            r#"{"enabled":true,"thread_id":null,"revision":0,"ready":false,"problem":"something_new"}"#,
+        );
         assert_eq!(later.problem, Some(Problem::Other));
     }
 
     #[test]
     fn the_resident_info_says_why_voice_is_off() {
         let parse = |json: &str| serde_json::from_str::<ResidentInfo>(json).unwrap();
-        assert_eq!(parse(r#"{"enabled":true}"#).voice_off_note(), None, "an older daemon says nothing");
+        assert_eq!(
+            parse(r#"{"enabled":true}"#).voice_off_note(),
+            None,
+            "an older daemon says nothing"
+        );
         let bridge = parse(r#"{"enabled":true,"ready":true,"voice_off":"bridge_firmware"}"#);
-        assert!(bridge.voice_off_note().is_some_and(|note| note.contains("UART bridge")), "{bridge:?}");
-        assert!(parse(r#"{"enabled":true,"voice_off":"allowance"}"#).voice_off_note().is_some_and(|note| note.contains("comes back at")));
-        assert_eq!(parse(r#"{"enabled":true,"voice_off":"something_new"}"#).voice_off_note(), None);
+        assert!(
+            bridge
+                .voice_off_note()
+                .is_some_and(|note| note.contains("UART bridge")),
+            "{bridge:?}"
+        );
+        assert!(
+            parse(r#"{"enabled":true,"voice_off":"allowance"}"#)
+                .voice_off_note()
+                .is_some_and(|note| note.contains("comes back at"))
+        );
+        assert_eq!(
+            parse(r#"{"enabled":true,"voice_off":"something_new"}"#).voice_off_note(),
+            None
+        );
     }
 
     #[test]
     fn the_resident_info_says_which_agent_answers_and_whether_a_key_is_stored() {
         let parse = |json: &str| serde_json::from_str::<ResidentInfo>(json).unwrap();
-        let claude = parse(r#"{"enabled":true,"thread_id":"s1","revision":3,"ready":true,"problem":null,"brain":"claude","brain_setting":"auto","anthropic_key_set":true}"#);
-        assert_eq!((claude.brain_setting, claude.anthropic_key_set), (Some(BrainChoice::Auto), Some(true)));
-        let no_key = parse(r#"{"enabled":true,"problem":"anthropic_key_missing","brain_setting":"claude","anthropic_key_set":false}"#);
-        assert_eq!((no_key.problem, no_key.brain_setting), (Some(Problem::AnthropicKeyMissing), Some(BrainChoice::Claude)));
-        let no_claude = parse(r#"{"enabled":true,"problem":"claude_missing","brain_setting":"something_new"}"#);
-        assert_eq!((no_claude.problem, no_claude.brain_setting), (Some(Problem::ClaudeMissing), Some(BrainChoice::Other)));
+        let claude = parse(
+            r#"{"enabled":true,"thread_id":"s1","revision":3,"ready":true,"problem":null,"brain":"claude","brain_setting":"auto","anthropic_key_set":true}"#,
+        );
+        assert_eq!(
+            (claude.brain_setting, claude.anthropic_key_set),
+            (Some(BrainChoice::Auto), Some(true))
+        );
+        let no_key = parse(
+            r#"{"enabled":true,"problem":"anthropic_key_missing","brain_setting":"claude","anthropic_key_set":false}"#,
+        );
+        assert_eq!(
+            (no_key.problem, no_key.brain_setting),
+            (
+                Some(Problem::AnthropicKeyMissing),
+                Some(BrainChoice::Claude)
+            )
+        );
+        let no_claude =
+            parse(r#"{"enabled":true,"problem":"claude_missing","brain_setting":"something_new"}"#);
+        assert_eq!(
+            (no_claude.problem, no_claude.brain_setting),
+            (Some(Problem::ClaudeMissing), Some(BrainChoice::Other))
+        );
         assert_eq!(BrainChoice::Other.as_str(), "auto");
     }
 }
