@@ -122,6 +122,9 @@ pub async fn flash_firmware(directory: std::path::PathBuf) -> Result<(), String>
 }
 
 pub async fn check_for_updates() -> Result<(), String> {
+    if !crate::status::UPDATES_COMPILED_IN {
+        return Err("update checks are not built into this app".to_owned());
+    }
     post("/v1/updates/check", None).await
 }
 

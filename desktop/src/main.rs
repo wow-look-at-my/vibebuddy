@@ -870,6 +870,9 @@ impl App {
                 return Task::perform(client::put_config(config), Message::ConfigSaved);
             }
             Message::CheckUpdates(enabled) => {
+                if !status::UPDATES_COMPILED_IN {
+                    return Task::none();
+                }
                 let mut config = self
                     .status
                     .as_ref()
@@ -879,6 +882,9 @@ impl App {
                 return Task::perform(client::put_config(config), Message::ConfigSaved);
             }
             Message::CheckForUpdatesNow => {
+                if !status::UPDATES_COMPILED_IN {
+                    return Task::none();
+                }
                 return Task::perform(client::check_for_updates(), Message::Done);
             }
             Message::OpenReleases => {
@@ -1528,6 +1534,9 @@ impl App {
                 return Task::perform(client::restart_daemon(), Message::Done);
             }
             Message::CheckFromMenu => {
+                if !status::UPDATES_COMPILED_IN {
+                    return Task::none();
+                }
                 self.tab = Tab::General;
                 return Task::batch([
                     Task::done(Message::OpenSettings),
@@ -1798,6 +1807,9 @@ impl App {
     }
 
     fn updates(&self) -> Option<&status::Updates> {
+        if !status::UPDATES_COMPILED_IN {
+            return None;
+        }
         self.status.as_ref()?.updates.as_ref()
     }
 
@@ -2035,6 +2047,9 @@ fn set_launch_at_login(enabled: bool) -> Result<(), String> {
 /// One notification per new firmware version, only while the box is there to take it and once it's downloaded, as on
 /// the Mac; the version last told about is kept in the state directory.
 fn notify_new_firmware(status: &Status) {
+    if !status::UPDATES_COMPILED_IN {
+        return;
+    }
     let Some(offer) = status
         .updates
         .as_ref()
