@@ -42,7 +42,9 @@ pub enum CodexTrust {
 
 pub fn codex_trust(modified: Option<&str>, last_event: Option<&str>) -> CodexTrust {
     let parse = |time: &str| chrono::DateTime::parse_from_rfc3339(time).ok();
-    let Some(last) = last_event.and_then(parse) else { return CodexTrust::WaitingFirstEvent };
+    let Some(last) = last_event.and_then(parse) else {
+        return CodexTrust::WaitingFirstEvent;
+    };
     match modified.filter(|modified| parse(modified).is_some_and(|modified| modified > last)) {
         Some(modified) => CodexTrust::ChangedSinceLastEvent(modified.to_owned()),
         None => CodexTrust::Trusted,
@@ -51,7 +53,8 @@ pub fn codex_trust(modified: Option<&str>, last_event: Option<&str>) -> CodexTru
 
 pub async fn status() -> Result<Vec<Setup>, String> {
     let output = hook(&["status"]).await?;
-    serde_json::from_str(&output).map_err(|error| format!("unexpected answer from vibebuddy-hook status: {error}"))
+    serde_json::from_str(&output)
+        .map_err(|error| format!("unexpected answer from vibebuddy-hook status: {error}"))
 }
 
 pub async fn plan(agent: String, installing: bool) -> Result<Plan, String> {
@@ -62,19 +65,34 @@ pub async fn plan(agent: String, installing: bool) -> Result<Plan, String> {
     }
     let action = if installing { "install" } else { "uninstall" };
     let output = hook(&["plan", action, &agent]).await?;
-    let answer: Answer =
-        serde_json::from_str(&output).map_err(|error| format!("unexpected answer from vibebuddy-hook plan: {error}"))?;
-    Ok(Plan { agent, installing, config: answer.config, lines: answer.lines })
+    let answer: Answer = serde_json::from_str(&output)
+        .map_err(|error| format!("unexpected answer from vibebuddy-hook plan: {error}"))?;
+    Ok(Plan {
+        agent,
+        installing,
+        config: answer.config,
+        lines: answer.lines,
+    })
 }
 
 /// Writes what the plan showed. The hook works it out again from the file as it is now, so a file changed in the
 /// meantime is never overwritten with a stale copy.
 pub async fn apply(plan: Plan) -> Result<String, String> {
-    hook(&[if plan.installing { "install" } else { "uninstall" }, &plan.agent]).await
+    hook(&[
+        if plan.installing {
+            "install"
+        } else {
+            "uninstall"
+        },
+        &plan.agent,
+    ])
+    .await
 }
 
 async fn hook(args: &[&str]) -> Result<String, String> {
-    let hook = std::env::current_exe().map_err(|error| error.to_string())?.with_file_name("vibebuddy-hook");
+    let hook = std::env::current_exe()
+        .map_err(|error| error.to_string())?
+        .with_file_name("vibebuddy-hook");
     let output = tokio::process::Command::new(&hook)
         .args(args)
         .output()
@@ -104,13 +122,22 @@ mod tests {
     #[test]
     fn codex_trust_follows_the_mac() {
         let written = "2026-10-09T10:00:00+08:00";
-        assert_eq!(codex_trust(Some(written), None), CodexTrust::WaitingFirstEvent);
-        assert_eq!(codex_trust(Some(written), Some("2026-10-09T10:05:00+08:00")), CodexTrust::Trusted);
+        assert_eq!(
+            codex_trust(Some(written), None),
+            CodexTrust::WaitingFirstEvent
+        );
+        assert_eq!(
+            codex_trust(Some(written), Some("2026-10-09T10:05:00+08:00")),
+            CodexTrust::Trusted
+        );
         // A different offset for the same instant ordering still compares by time, not text.
         assert_eq!(
             codex_trust(Some(written), Some("2026-10-09T01:59:00Z")),
             CodexTrust::ChangedSinceLastEvent(written.to_owned())
         );
-        assert_eq!(codex_trust(None, Some("2026-10-09T01:59:00Z")), CodexTrust::Trusted);
+        assert_eq!(
+            codex_trust(None, Some("2026-10-09T01:59:00Z")),
+            CodexTrust::Trusted
+        );
     }
 }

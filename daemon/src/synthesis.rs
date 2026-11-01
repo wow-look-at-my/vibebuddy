@@ -37,7 +37,12 @@ const MAX_AUDIO: usize = 4 * 1024 * 1024;
 pub trait Synthesizer: Send + Sync {
     /// Calls `on_audio` with each piece of the MP3 as it arrives (not on frame boundaries); `on_audio` returns false
     /// to stop. An error after some audio means the stream was cut short.
-    fn synthesize(&self, text: &str, voice: &str, on_audio: &mut dyn FnMut(&[u8]) -> bool) -> Result<(), String>;
+    fn synthesize(
+        &self,
+        text: &str,
+        voice: &str,
+        on_audio: &mut dyn FnMut(&[u8]) -> bool,
+    ) -> Result<(), String>;
 
     /// Whether it can speak in `voice` at all; when not, the reply stays text and nothing is tried.
     fn speaks(&self, _voice: &str) -> bool {
@@ -57,15 +62,27 @@ impl VoiceService {
         format!("{}/v1/voice/speak", self.base_url.trim_end_matches('/'))
     }
 
-    fn speak(&self, text: &str, voice: &str, on_audio: &mut dyn FnMut(&[u8]) -> bool) -> Result<bool, String> {
+    fn speak(
+        &self,
+        text: &str,
+        voice: &str,
+        on_audio: &mut dyn FnMut(&[u8]) -> bool,
+    ) -> Result<bool, String> {
         let url = self.url();
         let host = url.split('/').nth(2).unwrap_or_default().to_owned();
         let body = json!({"text": text, "voice": voice}).to_string();
-        let token = self.session.as_ref().map(|session| session.token().ok_or("not signed in")).transpose()?;
+        let token = self
+            .session
+            .as_ref()
+            .map(|session| session.token().ok_or("not signed in"))
+            .transpose()?;
         // One agent for every reply, so its connection to the service is reused: a fresh TLS handshake cost about
         // half a second a reply.
         static AGENT: std::sync::OnceLock<ureq::Agent> = std::sync::OnceLock::new();
-        let mut request = AGENT.get_or_init(|| crate::speech::agent(TIMEOUT)).post(&url).header("Content-Type", "application/json");
+        let mut request = AGENT
+            .get_or_init(|| crate::speech::agent(TIMEOUT))
+            .post(&url)
+            .header("Content-Type", "application/json");
         if let Some(token) = token {
             request = request.header("Authorization", &format!("Bearer {token}"));
         }
@@ -74,11 +91,20 @@ impl VoiceService {
             .map_err(|error| format!("calling {host}: {error}"))?;
         let status = response.status().as_u16();
         if status != 200 {
-            let answer = response.body_mut().with_config().limit(1024).read_to_string().unwrap_or_default();
-            if let Some(refusal) = crate::speech::refusal(status, &answer, self.session.as_deref()) {
+            let answer = response
+                .body_mut()
+                .with_config()
+                .limit(1024)
+                .read_to_string()
+                .unwrap_or_default();
+            if let Some(refusal) = crate::speech::refusal(status, &answer, self.session.as_deref())
+            {
                 return Err(refusal.to_string());
             }
-            return Err(format!("the voice service answered {status}: {}", answer.trim()));
+            return Err(format!(
+                "the voice service answered {status}: {}",
+                answer.trim()
+            ));
         }
         if let Some(session) = &self.session {
             session.note_reply(text);
@@ -88,12 +114,18 @@ impl VoiceService {
 }
 
 /// Hands on an MP3 body as it arrives; false when `on_audio` stopped it.
-fn forward(mut reader: impl Read, host: &str, on_audio: &mut dyn FnMut(&[u8]) -> bool) -> Result<bool, String> {
+fn forward(
+    mut reader: impl Read,
+    host: &str,
+    on_audio: &mut dyn FnMut(&[u8]) -> bool,
+) -> Result<bool, String> {
     let mut buffer = [0u8; 4096];
     let mut total = 0;
     loop {
         // A connection cut before the end of the chunked body is an error here, not an end.
-        let read = reader.read(&mut buffer).map_err(|error| format!("reading audio from {host}: {error}"))?;
+        let read = reader
+            .read(&mut buffer)
+            .map_err(|error| format!("reading audio from {host}: {error}"))?;
         if read == 0 {
             return Ok(true);
         }
@@ -108,7 +140,12 @@ fn forward(mut reader: impl Read, host: &str, on_audio: &mut dyn FnMut(&[u8]) ->
 }
 
 impl Synthesizer for VoiceService {
-    fn synthesize(&self, text: &str, voice: &str, on_audio: &mut dyn FnMut(&[u8]) -> bool) -> Result<(), String> {
+    fn synthesize(
+        &self,
+        text: &str,
+        voice: &str,
+        on_audio: &mut dyn FnMut(&[u8]) -> bool,
+    ) -> Result<(), String> {
         // MP3 frames stand alone, so the pieces of a long reply play as one stream.
         for piece in split(text, MAX_TEXT) {
             if !self.speak(piece, voice, on_audio)? {
@@ -142,18 +179,39 @@ pub struct Synthesis {
 
 impl Synthesis {
     /// One piece of a reply from `provider`, with the user's own key; false when `on_audio` stopped it.
-    fn own(&self, provider: Provider, voice: &str, key: &str, text: &str, on_audio: &mut dyn FnMut(&[u8]) -> bool) -> Result<bool, String> {
+    fn own(
+        &self,
+        provider: Provider,
+        voice: &str,
+        key: &str,
+        text: &str,
+        on_audio: &mut dyn FnMut(&[u8]) -> bool,
+    ) -> Result<bool, String> {
         static AGENT: std::sync::OnceLock<ureq::Agent> = std::sync::OnceLock::new();
         let agent = AGENT.get_or_init(|| crate::speech::agent(TIMEOUT));
         let (name, request) = match provider {
             Provider::ElevenLabs => {
-                let url = format!("{}/v1/text-to-speech/{voice}/stream?output_format={ELEVENLABS_FORMAT}", self.elevenlabs_url);
-                let request = agent.post(&url).header("xi-api-key", key).header("Accept", "audio/mpeg");
-                ("ElevenLabs", request.header("Content-Type", "application/json").send(json!({"text": text, "model_id": ELEVENLABS_MODEL}).to_string().as_bytes()))
+                let url = format!(
+                    "{}/v1/text-to-speech/{voice}/stream?output_format={ELEVENLABS_FORMAT}",
+                    self.elevenlabs_url
+                );
+                let request = agent
+                    .post(&url)
+                    .header("xi-api-key", key)
+                    .header("Accept", "audio/mpeg");
+                (
+                    "ElevenLabs",
+                    request.header("Content-Type", "application/json").send(
+                        json!({"text": text, "model_id": ELEVENLABS_MODEL})
+                            .to_string()
+                            .as_bytes(),
+                    ),
+                )
             }
             Provider::Volc => {
                 // A speaker of the user's own carries the resource it answered on: `<speaker>#<resource>`.
-                let (speaker, resource) = voice.split_once('#').unwrap_or((voice, VOLC_RESOURCE_ID));
+                let (speaker, resource) =
+                    voice.split_once('#').unwrap_or((voice, VOLC_RESOURCE_ID));
                 let body = json!({
                     "user": {"uid": "vibebuddy"},
                     "req_params": {"text": text, "speaker": speaker, "audio_params": {"format": "mp3", "sample_rate": 24_000, "bit_rate": 48_000}},
@@ -171,11 +229,21 @@ impl Synthesis {
         let status = response.status().as_u16();
         if matches!(status, 401 | 403) {
             self.keys.refused(provider, true);
-            return Err(format!("{name} refused your own key ({status}); the reply stays text"));
+            return Err(format!(
+                "{name} refused your own key ({status}); the reply stays text"
+            ));
         }
         if status != 200 {
-            let answer = response.body_mut().with_config().limit(1024).read_to_string().unwrap_or_default();
-            return Err(format!("{name} answered {status}: {}", answer.trim().chars().take(200).collect::<String>()));
+            let answer = response
+                .body_mut()
+                .with_config()
+                .limit(1024)
+                .read_to_string()
+                .unwrap_or_default();
+            return Err(format!(
+                "{name} answered {status}: {}",
+                answer.trim().chars().take(200).collect::<String>()
+            ));
         }
         self.keys.refused(provider, false);
         let reader = response.into_body().into_reader();
@@ -187,10 +255,20 @@ impl Synthesis {
 }
 
 impl Synthesizer for Synthesis {
-    fn synthesize(&self, text: &str, voice: &str, on_audio: &mut dyn FnMut(&[u8]) -> bool) -> Result<(), String> {
-        let own = Provider::of(voice).and_then(|(provider, id)| Some((provider, id, self.keys.key(provider)?)));
+    fn synthesize(
+        &self,
+        text: &str,
+        voice: &str,
+        on_audio: &mut dyn FnMut(&[u8]) -> bool,
+    ) -> Result<(), String> {
+        let own = Provider::of(voice)
+            .and_then(|(provider, id)| Some((provider, id, self.keys.key(provider)?)));
         let Some((provider, id, key)) = own else {
-            return self.service.as_ref().ok_or("no voice service")?.synthesize(text, voice, on_audio);
+            return self
+                .service
+                .as_ref()
+                .ok_or("no voice service")?
+                .synthesize(text, voice, on_audio);
         };
         for piece in split(text, MAX_TEXT) {
             if !self.own(provider, id, &key, piece, on_audio)? {
@@ -201,13 +279,17 @@ impl Synthesizer for Synthesis {
     }
 
     fn speaks(&self, voice: &str) -> bool {
-        self.service.is_some() || Provider::of(voice).is_some_and(|(provider, _)| self.keys.key(provider).is_some())
+        self.service.is_some()
+            || Provider::of(voice).is_some_and(|(provider, _)| self.keys.key(provider).is_some())
     }
 }
 
 /// Volcano Engine's stream of JSON objects, as MP3. Its MP3 comes at 64 kbps whatever `bit_rate` asks, which the
 /// box decodes as well as 48, behind an ID3 tag, which is left out so the box gets frames only.
-fn forward_volc(reader: impl Read, on_audio: &mut dyn FnMut(&[u8]) -> bool) -> Result<bool, String> {
+fn forward_volc(
+    reader: impl Read,
+    on_audio: &mut dyn FnMut(&[u8]) -> bool,
+) -> Result<bool, String> {
     let mut tag = Id3::default();
     read_volc(reader, &mut |audio| {
         let audio = tag.strip(audio);
@@ -216,20 +298,40 @@ fn forward_volc(reader: impl Read, on_audio: &mut dyn FnMut(&[u8]) -> bool) -> R
 }
 
 /// Hands on the audio of each object in Volcano Engine's stream, until the last; false when `on_audio` stopped it.
-pub(crate) fn read_volc(reader: impl Read, on_audio: &mut dyn FnMut(&[u8]) -> bool) -> Result<bool, String> {
+pub(crate) fn read_volc(
+    reader: impl Read,
+    on_audio: &mut dyn FnMut(&[u8]) -> bool,
+) -> Result<bool, String> {
     let mut total = 0;
-    for message in serde_json::Deserializer::from_reader(std::io::BufReader::new(reader)).into_iter::<serde_json::Value>() {
-        let message = message.map_err(|error| format!("reading audio from Volcano Engine: {error}"))?;
+    for message in serde_json::Deserializer::from_reader(std::io::BufReader::new(reader))
+        .into_iter::<serde_json::Value>()
+    {
+        let message =
+            message.map_err(|error| format!("reading audio from Volcano Engine: {error}"))?;
         match message.get("code").and_then(serde_json::Value::as_i64) {
             Some(VOLC_DONE) => return Ok(true),
             Some(0) => {}
             code => {
-                let text = message.get("message").and_then(serde_json::Value::as_str).unwrap_or_default();
-                return Err(format!("Volcano Engine: error {}: {text}", code.unwrap_or_default()));
+                let text = message
+                    .get("message")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default();
+                return Err(format!(
+                    "Volcano Engine: error {}: {text}",
+                    code.unwrap_or_default()
+                ));
             }
         }
-        let Some(data) = message.get("data").and_then(serde_json::Value::as_str).filter(|data| !data.is_empty()) else { continue };
-        let audio = base64::engine::general_purpose::STANDARD.decode(data).map_err(|_| "Volcano Engine sent audio that isn't base64")?;
+        let Some(data) = message
+            .get("data")
+            .and_then(serde_json::Value::as_str)
+            .filter(|data| !data.is_empty())
+        else {
+            continue;
+        };
+        let audio = base64::engine::general_purpose::STANDARD
+            .decode(data)
+            .map_err(|_| "Volcano Engine sent audio that isn't base64")?;
         total += audio.len();
         if total > MAX_AUDIO {
             return Err("Volcano Engine sent more audio than any reply needs".to_owned());
@@ -264,7 +366,9 @@ impl Id3 {
             self.decided = true;
             if self.head.starts_with(b"ID3") {
                 // A syncsafe size (7 bits a byte) after the 10-byte header, and a 10-byte footer if flagged.
-                let size = self.head[6..10].iter().fold(0, |size, byte| size << 7 | usize::from(byte & 0x7f));
+                let size = self.head[6..10]
+                    .iter()
+                    .fold(0, |size, byte| size << 7 | usize::from(byte & 0x7f));
                 self.skip = 10 + size + if self.head[5] & 0x10 != 0 { 10 } else { 0 };
             }
             std::mem::take(&mut self.head)
@@ -283,7 +387,14 @@ pub(crate) fn request_id() -> Result<String, String> {
     bytes[6] = bytes[6] & 0x0f | 0x40;
     bytes[8] = bytes[8] & 0x3f | 0x80;
     let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
-    Ok(format!("{}-{}-{}-{}-{}", &hex[..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..]))
+    Ok(format!(
+        "{}-{}-{}-{}-{}",
+        &hex[..8],
+        &hex[8..12],
+        &hex[12..16],
+        &hex[16..20],
+        &hex[20..]
+    ))
 }
 
 /// `text` in pieces of at most `max` UTF-16 code units: at the end of a sentence where one fits, else at a comma or
@@ -332,7 +443,10 @@ pub(crate) const VOICE_FILES: &[(&str, &str)] = &[
     ("kai", include_str!("../../characters/kai/voice.env")),
     ("luna", include_str!("../../characters/luna/voice.env")),
     ("mei", include_str!("../../characters/mei/voice.env")),
-    ("wanwanxiaohe", include_str!("../../characters/wanwanxiaohe/voice.env")),
+    (
+        "wanwanxiaohe",
+        include_str!("../../characters/wanwanxiaohe/voice.env"),
+    ),
 ];
 /// The built-in default Character speaks with ElevenLabs' Jessica (voices/README.md); so does no Character pack, or
 /// one these files don't know.
@@ -351,14 +465,21 @@ pub fn voice_for(character: Option<&str>) -> String {
 
 /// [`voice_for`], with the Characters made in `made`.
 fn voice_among(character: Option<&str>, made: Option<&Path>) -> String {
-    let Some(file) = character.and_then(|character| VOICE_FILES.iter().find(|(id, _)| *id == character)) else {
-        return character.zip(made).and_then(|(id, made)| crate::making::voice_of(made, id)).unwrap_or_else(|| DEFAULT_VOICE.to_owned());
+    let Some(file) =
+        character.and_then(|character| VOICE_FILES.iter().find(|(id, _)| *id == character))
+    else {
+        return character
+            .zip(made)
+            .and_then(|(id, made)| crate::making::voice_of(made, id))
+            .unwrap_or_else(|| DEFAULT_VOICE.to_owned());
     };
     let field = |key: &str| voice_field(file.1, key);
     match (field("ENGINE"), field("VOICE")) {
         (Some("elevenlabs"), Some(voice)) => format!("elevenlabs:{voice}"),
         // The service speaks Doubao's 1.0 voices only.
-        (Some("volc"), Some(voice)) if field("VOLC_RESOURCE_ID").is_none() => format!("volc:{voice}"),
+        (Some("volc"), Some(voice)) if field("VOLC_RESOURCE_ID").is_none() => {
+            format!("volc:{voice}")
+        }
         _ if field("GENDER") == Some("male") => STOCK_MALE.to_owned(),
         _ => STOCK_FEMALE.to_owned(),
     }
@@ -366,19 +487,34 @@ fn voice_among(character: Option<&str>, made: Option<&Path>) -> String {
 
 /// One `KEY=value` of a `voice.env`.
 pub(crate) fn voice_field<'a>(file: &'a str, key: &str) -> Option<&'a str> {
-    file.lines().find_map(|line| line.strip_prefix(key)?.strip_prefix('='))
+    file.lines()
+        .find_map(|line| line.strip_prefix(key)?.strip_prefix('='))
 }
 
 /// The synthesizer: the user's own keys, and the voice service the environment configures, if any.
 pub fn from_env(session: Option<Arc<Account>>, keys: Arc<VoiceKeys>) -> Arc<dyn Synthesizer> {
-    let service = configure(service_base(std::env::var(BASE_URL_VARIABLE).ok(), crate::relay::release()), session);
-    Arc::new(Synthesis { service, keys, elevenlabs_url: ELEVENLABS_URL.to_owned(), volc_url: VOLC_URL.to_owned() })
+    let service = configure(
+        service_base(
+            std::env::var(BASE_URL_VARIABLE).ok(),
+            crate::relay::release(),
+        ),
+        session,
+    );
+    Arc::new(Synthesis {
+        service,
+        keys,
+        elevenlabs_url: ELEVENLABS_URL.to_owned(),
+        volc_url: VOLC_URL.to_owned(),
+    })
 }
 
 /// The voice service's base URL, which speech recognition ([`crate::speech`]) uses too: the variable's, else
 /// staging outside a release. None when it is `off`, not http(s), or a release has none.
 pub fn service_base(base_url: Option<String>, release: bool) -> Option<String> {
-    let base_url = match base_url.map(|url| url.trim().to_owned()).filter(|url| !url.is_empty()) {
+    let base_url = match base_url
+        .map(|url| url.trim().to_owned())
+        .filter(|url| !url.is_empty())
+    {
         Some(url) if url == "off" => return None,
         Some(url) => url,
         None if release => return None,
@@ -408,10 +544,18 @@ mod tests {
     fn each_character_speaks_in_the_voice_of_its_lines() {
         assert_eq!(voice_for(Some("ada")), "elevenlabs:tcSsCJFYrsHpK5rCQZMf");
         assert_eq!(voice_for(Some("hank")), "elevenlabs:U6jH23hcPh0zH17nf3DT");
-        assert_eq!(voice_for(Some("wanwanxiaohe")), "volc:zh_female_wanwanxiaohe_moon_bigtts", "a Doubao 1.0 voice");
+        assert_eq!(
+            voice_for(Some("wanwanxiaohe")),
+            "volc:zh_female_wanwanxiaohe_moon_bigtts",
+            "a Doubao 1.0 voice"
+        );
         assert_eq!(voice_for(Some("robot")), DEFAULT_VOICE);
         assert_eq!(voice_for(None), DEFAULT_VOICE, "no Character pack");
-        assert_eq!(voice_for(Some("hsiaoyu")), DEFAULT_VOICE, "an old voice pack");
+        assert_eq!(
+            voice_for(Some("hsiaoyu")),
+            DEFAULT_VOICE,
+            "an old voice pack"
+        );
     }
 
     #[test]
@@ -420,10 +564,24 @@ mod tests {
         std::fs::create_dir_all(made.join("owl-1a2b3c4d")).unwrap();
         let manifest = r#"{"name":"Owl","base":"ada","voice":"wanwanxiaohe","lines":[{"occasion":"done","text":"好了。"}]}"#;
         std::fs::write(made.join("owl-1a2b3c4d/manifest.json"), manifest).unwrap();
-        assert_eq!(voice_among(Some("owl-1a2b3c4d"), Some(&made)), "volc:zh_female_wanwanxiaohe_moon_bigtts");
-        assert_eq!(voice_among(Some("ada"), Some(&made)), "elevenlabs:tcSsCJFYrsHpK5rCQZMf", "a preset stays a preset");
-        assert_eq!(voice_among(Some("owl-0000"), Some(&made)), DEFAULT_VOICE, "not made here");
-        assert_eq!(voice_among(Some("../owl-1a2b3c4d"), Some(&made)), DEFAULT_VOICE);
+        assert_eq!(
+            voice_among(Some("owl-1a2b3c4d"), Some(&made)),
+            "volc:zh_female_wanwanxiaohe_moon_bigtts"
+        );
+        assert_eq!(
+            voice_among(Some("ada"), Some(&made)),
+            "elevenlabs:tcSsCJFYrsHpK5rCQZMf",
+            "a preset stays a preset"
+        );
+        assert_eq!(
+            voice_among(Some("owl-0000"), Some(&made)),
+            DEFAULT_VOICE,
+            "not made here"
+        );
+        assert_eq!(
+            voice_among(Some("../owl-1a2b3c4d"), Some(&made)),
+            DEFAULT_VOICE
+        );
         assert_eq!(voice_among(Some("owl-1a2b3c4d"), None), DEFAULT_VOICE);
         let _ = std::fs::remove_dir_all(made);
     }
@@ -432,7 +590,10 @@ mod tests {
     fn long_text_is_split_at_sentences_then_pauses_then_characters() {
         assert_eq!(split("  Short one.  ", 1000), ["Short one."]);
         assert_eq!(split("One. Two! Three?", 10), ["One. Two!", "Three?"]);
-        assert_eq!(split("第一句。第二句。第三句。", 8), ["第一句。第二句。", "第三句。"]);
+        assert_eq!(
+            split("第一句。第二句。第三句。", 8),
+            ["第一句。第二句。", "第三句。"]
+        );
         assert_eq!(split("one two three four", 9), ["one two", "three", "four"]);
         assert_eq!(split("abcdefghij", 4), ["abcd", "efgh", "ij"]);
         // A character outside the BMP is two units in JavaScript, which is how the service counts.
@@ -442,12 +603,18 @@ mod tests {
         let long = "This sentence is about forty characters. ".repeat(60);
         let pieces = split(&long, MAX_TEXT);
         assert!(pieces.len() > 1);
-        assert!(pieces.iter().all(|piece| piece.encode_utf16().count() <= MAX_TEXT && piece.ends_with('.')));
+        assert!(
+            pieces
+                .iter()
+                .all(|piece| piece.encode_utf16().count() <= MAX_TEXT && piece.ends_with('.'))
+        );
     }
 
     #[test]
     fn the_service_is_staging_outside_a_release_and_can_be_set_or_switched_off() {
-        let base = |url: Option<&str>, release| configure(service_base(url.map(str::to_owned), release), None).is_some();
+        let base = |url: Option<&str>, release| {
+            configure(service_base(url.map(str::to_owned), release), None).is_some()
+        };
         assert!(base(None, false));
         assert!(!base(None, true), "no production voice service yet");
         assert!(base(Some("https://api.korekore.ai"), true));
@@ -474,7 +641,9 @@ mod tests {
     }
 
     fn chunked(pieces: &[&[u8]], finished: bool) -> Vec<u8> {
-        let mut out = b"HTTP/1.1 200 OK\r\nContent-Type: audio/mpeg\r\nTransfer-Encoding: chunked\r\n\r\n".to_vec();
+        let mut out =
+            b"HTTP/1.1 200 OK\r\nContent-Type: audio/mpeg\r\nTransfer-Encoding: chunked\r\n\r\n"
+                .to_vec();
         for piece in pieces {
             out.extend_from_slice(format!("{:x}\r\n", piece.len()).as_bytes());
             out.extend_from_slice(piece);
@@ -487,7 +656,10 @@ mod tests {
     }
 
     fn collect(base: String) -> (Result<(), String>, Vec<u8>) {
-        let service = VoiceService { base_url: base, session: None };
+        let service = VoiceService {
+            base_url: base,
+            session: None,
+        };
         let mut audio = Vec::new();
         let result = service.synthesize("Hello there.", "en-US-JennyNeural", &mut |piece| {
             audio.extend_from_slice(piece);
@@ -503,9 +675,19 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(audio, b"ID3abc\xff\xf3def");
         let request = server.join().unwrap();
-        assert!(request.starts_with("POST /v1/voice/speak HTTP/1.1\r\n"), "{request}");
-        assert!(request.to_ascii_lowercase().contains("content-type: application/json"));
-        assert!(request.ends_with(r#"{"text":"Hello there.","voice":"en-US-JennyNeural"}"#), "{request}");
+        assert!(
+            request.starts_with("POST /v1/voice/speak HTTP/1.1\r\n"),
+            "{request}"
+        );
+        assert!(
+            request
+                .to_ascii_lowercase()
+                .contains("content-type: application/json")
+        );
+        assert!(
+            request.ends_with(r#"{"text":"Hello there.","voice":"en-US-JennyNeural"}"#),
+            "{request}"
+        );
     }
 
     #[test]
@@ -513,25 +695,50 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("vibebuddy-synthesis-{}", std::process::id()));
         let session = Arc::new(crate::account::signed_in_for_tests(&dir, "tok_xyz"));
         let (base, server) = serve(b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 24\r\nConnection: close\r\n\r\n{\"error\":\"unauthorized\"}".to_vec());
-        let service = VoiceService { base_url: base, session: Some(session.clone()) };
+        let service = VoiceService {
+            base_url: base,
+            session: Some(session.clone()),
+        };
         let result = service.synthesize("Hi.", "elevenlabs:x", &mut |_| true);
         assert!(result.unwrap_err().contains("signed_out"));
-        assert!(server.join().unwrap().to_ascii_lowercase().contains("authorization: bearer tok_xyz"));
+        assert!(
+            server
+                .join()
+                .unwrap()
+                .to_ascii_lowercase()
+                .contains("authorization: bearer tok_xyz")
+        );
         assert!(session.token().is_none());
         // Signed out, nothing more is sent.
-        assert_eq!(service.synthesize("Hi.", "elevenlabs:x", &mut |_| true), Err("not signed in".to_owned()));
+        assert_eq!(
+            service.synthesize("Hi.", "elevenlabs:x", &mut |_| true),
+            Err("not signed in".to_owned())
+        );
     }
 
     fn own_keys(keys: &[(Provider, &str)]) -> Arc<VoiceKeys> {
-        let keys_file = Arc::new(VoiceKeys::new(Some(&crate::voice_keys::tests::scratch("synthesis"))));
-        let changes: Vec<_> = keys.iter().map(|(provider, key)| (*provider, Some((*key).to_owned()))).collect();
+        let keys_file = Arc::new(VoiceKeys::new(Some(&crate::voice_keys::tests::scratch(
+            "synthesis",
+        ))));
+        let changes: Vec<_> = keys
+            .iter()
+            .map(|(provider, key)| (*provider, Some((*key).to_owned())))
+            .collect();
         keys_file.set(&changes).unwrap();
         keys_file
     }
 
-    fn synthesis(service: Option<String>, keys: Arc<VoiceKeys>, elevenlabs: &str, volc: &str) -> Synthesis {
+    fn synthesis(
+        service: Option<String>,
+        keys: Arc<VoiceKeys>,
+        elevenlabs: &str,
+        volc: &str,
+    ) -> Synthesis {
         Synthesis {
-            service: service.map(|base_url| VoiceService { base_url, session: None }),
+            service: service.map(|base_url| VoiceService {
+                base_url,
+                session: None,
+            }),
             keys,
             elevenlabs_url: elevenlabs.to_owned(),
             volc_url: volc.to_owned(),
@@ -555,16 +762,38 @@ mod tests {
         // Nothing listens on port 9: a reply sent there would fail.
         let synthesis = synthesis(Some(service), keys, &eleven, "http://127.0.0.1:9");
 
-        assert_eq!(speak_with(&synthesis, "elevenlabs:voice1"), (Ok(()), b"\xff\xf3own".to_vec()));
+        assert_eq!(
+            speak_with(&synthesis, "elevenlabs:voice1"),
+            (Ok(()), b"\xff\xf3own".to_vec())
+        );
         let request = eleven_server.join().unwrap();
-        assert!(request.starts_with("POST /v1/text-to-speech/voice1/stream?output_format=mp3_24000_48 HTTP/1.1\r\n"), "{request}");
-        assert!(request.to_ascii_lowercase().contains("xi-api-key: sk_own_eleven"));
-        assert!(request.contains(r#""model_id":"eleven_flash_v2_5""#) && request.contains(r#""text":"你好。""#), "{request}");
+        assert!(
+            request.starts_with(
+                "POST /v1/text-to-speech/voice1/stream?output_format=mp3_24000_48 HTTP/1.1\r\n"
+            ),
+            "{request}"
+        );
+        assert!(
+            request
+                .to_ascii_lowercase()
+                .contains("xi-api-key: sk_own_eleven")
+        );
+        assert!(
+            request.contains(r#""model_id":"eleven_flash_v2_5""#)
+                && request.contains(r#""text":"你好。""#),
+            "{request}"
+        );
 
         // No Volcano Engine key: that voice goes to the service, with no key of the user's.
-        assert_eq!(speak_with(&synthesis, "volc:zh_female_wanwanxiaohe_moon_bigtts"), (Ok(()), b"\xff\xf3ours".to_vec()));
+        assert_eq!(
+            speak_with(&synthesis, "volc:zh_female_wanwanxiaohe_moon_bigtts"),
+            (Ok(()), b"\xff\xf3ours".to_vec())
+        );
         let request = service_server.join().unwrap();
-        assert!(request.starts_with("POST /v1/voice/speak HTTP/1.1\r\n"), "{request}");
+        assert!(
+            request.starts_with("POST /v1/voice/speak HTTP/1.1\r\n"),
+            "{request}"
+        );
         assert!(!request.contains("sk_own_eleven"));
     }
 
@@ -579,35 +808,75 @@ mod tests {
             encode(&mp3[..7]),
             encode(&mp3[7..])
         );
-        let (volc, server) = serve(chunked(&[&objects.as_bytes()[..30], &objects.as_bytes()[30..]], true));
+        let (volc, server) = serve(chunked(
+            &[&objects.as_bytes()[..30], &objects.as_bytes()[30..]],
+            true,
+        ));
         let synthesis = synthesis(None, keys, "http://127.0.0.1:9", &volc);
         assert!(synthesis.speaks("volc:zh_female_wanwanxiaohe_moon_bigtts"));
-        assert!(!synthesis.speaks("elevenlabs:voice1"), "no service and no ElevenLabs key");
-        assert_eq!(speak_with(&synthesis, "volc:zh_female_wanwanxiaohe_moon_bigtts"), (Ok(()), b"\xff\xf3frame".to_vec()));
+        assert!(
+            !synthesis.speaks("elevenlabs:voice1"),
+            "no service and no ElevenLabs key"
+        );
+        assert_eq!(
+            speak_with(&synthesis, "volc:zh_female_wanwanxiaohe_moon_bigtts"),
+            (Ok(()), b"\xff\xf3frame".to_vec())
+        );
         let request = server.join().unwrap();
         let lower = request.to_ascii_lowercase();
-        assert!(lower.contains("x-api-key: volc_own_key") && lower.contains("x-api-resource-id: seed-tts-1.0"), "{request}");
-        assert!(request.contains(r#""speaker":"zh_female_wanwanxiaohe_moon_bigtts""#) && request.contains(r#""format":"mp3""#) && request.contains(r#""sample_rate":24000"#), "{request}");
+        assert!(
+            lower.contains("x-api-key: volc_own_key")
+                && lower.contains("x-api-resource-id: seed-tts-1.0"),
+            "{request}"
+        );
+        assert!(
+            request.contains(r#""speaker":"zh_female_wanwanxiaohe_moon_bigtts""#)
+                && request.contains(r#""format":"mp3""#)
+                && request.contains(r#""sample_rate":24000"#),
+            "{request}"
+        );
     }
 
     #[test]
     fn a_refused_own_key_is_reported_and_the_reply_stays_silent() {
         let keys = own_keys(&[(Provider::ElevenLabs, "sk_bad")]);
-        let (eleven, server) = serve(b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}".to_vec());
+        let (eleven, server) = serve(
+            b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}"
+                .to_vec(),
+        );
         // The service is there, but a refused own key must not fall back to it: port 9 would answer nothing.
-        let synthesis = synthesis(Some("http://127.0.0.1:9".to_owned()), keys.clone(), &eleven, "http://127.0.0.1:9");
+        let synthesis = synthesis(
+            Some("http://127.0.0.1:9".to_owned()),
+            keys.clone(),
+            &eleven,
+            "http://127.0.0.1:9",
+        );
         let (result, audio) = speak_with(&synthesis, "elevenlabs:voice1");
         server.join().unwrap();
         let error = result.unwrap_err();
-        assert!(error.contains("ElevenLabs refused your own key (401)") && !error.contains("sk_bad"), "{error}");
+        assert!(
+            error.contains("ElevenLabs refused your own key (401)") && !error.contains("sk_bad"),
+            "{error}"
+        );
         assert!(audio.is_empty());
-        assert_eq!(keys.status().elevenlabs, crate::voice_keys::KeyStatus { set: true, refused: true });
+        assert_eq!(
+            keys.status().elevenlabs,
+            crate::voice_keys::KeyStatus {
+                set: true,
+                refused: true
+            }
+        );
         assert!(!keys.status().volc.refused);
     }
 
     #[test]
     fn an_id3_tag_is_dropped_however_it_is_cut() {
-        let stream = b"ID3\x03\x00\x00\x00\x00\x01\x00".iter().copied().chain(std::iter::repeat_n(b'T', 128)).chain(*b"\xff\xf3abc").collect::<Vec<_>>();
+        let stream = b"ID3\x03\x00\x00\x00\x00\x01\x00"
+            .iter()
+            .copied()
+            .chain(std::iter::repeat_n(b'T', 128))
+            .chain(*b"\xff\xf3abc")
+            .collect::<Vec<_>>();
         for cut in [1, 4, 10, 100, 138, 139] {
             let mut tag = Id3::default();
             let mut out = tag.strip(&stream[..cut]);
@@ -627,10 +896,15 @@ mod tests {
         assert!(result.is_err(), "{result:?}");
         assert_eq!(audio, b"ID3abc");
 
-        let (base, server) = serve(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 15\r\n\r\nupstream failed".to_vec());
+        let (base, server) = serve(
+            b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 15\r\n\r\nupstream failed".to_vec(),
+        );
         let (result, audio) = collect(base);
         server.join().unwrap();
-        assert_eq!(result.unwrap_err(), "the voice service answered 502: upstream failed");
+        assert_eq!(
+            result.unwrap_err(),
+            "the voice service answered 502: upstream failed"
+        );
         assert!(audio.is_empty());
     }
 }

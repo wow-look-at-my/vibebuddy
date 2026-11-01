@@ -80,7 +80,12 @@ const GHOSTTY_LIST_TERMINALS: [&str; 7] = [
     "end tell",
 ];
 /// The daemon starts with launchd's bare PATH, so tmux is looked for where package managers put it.
-const TMUX_PATHS: [&str; 4] = ["/opt/homebrew/bin/tmux", "/usr/local/bin/tmux", "/usr/bin/tmux", "/run/current-system/sw/bin/tmux"];
+const TMUX_PATHS: [&str; 4] = [
+    "/opt/homebrew/bin/tmux",
+    "/usr/local/bin/tmux",
+    "/usr/bin/tmux",
+    "/run/current-system/sw/bin/tmux",
+];
 /// How long Ghostty gets to read a title off the tty before the listing is retried.
 const GHOSTTY_TITLE_POLLS: u32 = 10;
 const GHOSTTY_TITLE_POLL_INTERVAL: Duration = Duration::from_millis(50);
@@ -117,7 +122,13 @@ pub async fn open(source: ActivitySource) -> Result<String, String> {
         }
         return focus_window(pids).await;
     }
-    if let Some(Surface::Host { bundle_id, ttys, tmux, focus_url }) = surface_of(&source) {
+    if let Some(Surface::Host {
+        bundle_id,
+        ttys,
+        tmux,
+        focus_url,
+    }) = surface_of(&source)
+    {
         // Warp hands each session a deeplink back to its pane; it only counts when Warp really is the host,
         // since the variable is inherited by anything started from a Warp shell.
         if tmux.is_none()
@@ -126,7 +137,9 @@ pub async fn open(source: ActivitySource) -> Result<String, String> {
         {
             match focus_warp_session(bundle_id, url).await {
                 Ok(link) => return Ok(link),
-                Err(error) => tracing::info!(%error, "cannot open the session's Warp pane, bringing Warp forward"),
+                Err(error) => {
+                    tracing::info!(%error, "cannot open the session's Warp pane, bringing Warp forward")
+                }
             }
         }
         // Inside tmux, first switch the user's tmux client to the session's pane; the tab to find is then the
@@ -143,7 +156,9 @@ pub async fn open(source: ActivitySource) -> Result<String, String> {
         if !ttys.is_empty() {
             match focus_terminal_tab(bundle_id, &ttys).await {
                 Ok(target) => return Ok(target),
-                Err(error) => tracing::info!(%error, %bundle_id, "cannot find the session's tab, bringing the host forward"),
+                Err(error) => {
+                    tracing::info!(%error, %bundle_id, "cannot find the session's tab, bringing the host forward")
+                }
             }
         }
     }
@@ -171,8 +186,12 @@ fn command_for(source: &ActivitySource, desktop: Option<&str>) -> Result<Command
     // it would import a terminal session into the app as a copy.
     match surface_of(source) {
         Some(Surface::Host { bundle_id, .. }) => return activate(bundle_id),
-        Some(Surface::Headless) => return Err("session has no host window (SSH or background process)".to_owned()),
-        Some(Surface::Window { .. }) => return Err("a window is focused through the compositor, not a command".to_owned()),
+        Some(Surface::Headless) => {
+            return Err("session has no host window (SSH or background process)".to_owned());
+        }
+        Some(Surface::Window { .. }) => {
+            return Err("a window is focused through the compositor, not a command".to_owned());
+        }
         _ => {}
     }
     match source {
@@ -221,7 +240,11 @@ fn command_for(source: &ActivitySource, desktop: Option<&str>) -> Result<Command
                 return Err("invalid GitHub repo".to_owned());
             }
             Ok(CommandSpec {
-                program: if cfg!(target_os = "macos") { "/usr/bin/open" } else { "xdg-open" },
+                program: if cfg!(target_os = "macos") {
+                    "/usr/bin/open"
+                } else {
+                    "xdg-open"
+                },
                 args: vec![format!("https://github.com/{repo}/actions/runs/{run_id}")],
             })
         }
@@ -233,14 +256,24 @@ fn command_for(source: &ActivitySource, desktop: Option<&str>) -> Result<Command
 /// transcript on disk by CLI session id, which is one-to-many and opens a stale shadow session (see LESSONS.md).
 fn reported_desktop_session(source: &ActivitySource) -> Option<&str> {
     match source {
-        ActivitySource::ClaudeCode { surface: Surface::App { desktop_session_id }, .. } => desktop_session_id.as_deref(),
+        ActivitySource::ClaudeCode {
+            surface: Surface::App { desktop_session_id },
+            ..
+        } => desktop_session_id.as_deref(),
         _ => None,
     }
 }
 
 /// Old hooks and old state files don't report the desktop session id, so disambiguate by cwd in the session index.
 fn fallback_desktop_session(source: &ActivitySource) -> Option<String> {
-    let ActivitySource::ClaudeCode { session_id, cwd, surface: Surface::App { desktop_session_id: None } } = source else {
+    let ActivitySource::ClaudeCode {
+        session_id,
+        cwd,
+        surface: Surface::App {
+            desktop_session_id: None,
+        },
+    } = source
+    else {
         return None;
     };
     desktop_session_by_cli(&desktop_sessions_dir()?, session_id, cwd.as_deref())
@@ -267,7 +300,12 @@ async fn focus_terminal_tab(bundle_id: &str, ttys: &[String]) -> Result<String, 
         ITERM_BUNDLE_ID => &ITERM_FOCUS_TTY,
         _ => return Err("this host can't be asked about its tabs".to_owned()),
     };
-    let lines: Vec<&str> = TTY_TARGETS.iter().chain(script).chain(&["end run"]).copied().collect();
+    let lines: Vec<&str> = TTY_TARGETS
+        .iter()
+        .chain(script)
+        .chain(&["end run"])
+        .copied()
+        .collect();
     let args: Vec<&str> = ttys.iter().map(String::as_str).collect();
     let tty = run_osascript(&lines, &args).await?;
     Ok(format!("{bundle_id} tab on {}", tty.trim()))
@@ -306,14 +344,20 @@ async fn focus_ghostty_terminal(tty: &str) -> Result<String, String> {
     for _ in 0..GHOSTTY_TITLE_POLLS {
         tokio::time::sleep(GHOSTTY_TITLE_POLL_INTERVAL).await;
         let listing = run_osascript(&GHOSTTY_LIST_TERMINALS, &[]).await;
-        if let Some(id) = listing.ok().and_then(|listing| terminal_titled(&listing, &marker)) {
+        if let Some(id) = listing
+            .ok()
+            .and_then(|listing| terminal_titled(&listing, &marker))
+        {
             found = Some(id);
             break;
         }
     }
     // Hand the title back before anything else can fail. If no terminal showed the marker, the tty isn't a
     // Ghostty tab of its own (tmux, for one, keeps titles to itself), and clearing is all that's left.
-    let original = found.as_deref().and_then(|id| title_of(&before, id)).unwrap_or_default();
+    let original = found
+        .as_deref()
+        .and_then(|id| title_of(&before, id))
+        .unwrap_or_default();
     set_title(tty, &original)?;
     let id = found.ok_or_else(|| format!("no Ghostty terminal is on {tty}"))?;
     run_osascript(&GHOSTTY_FOCUS_TERMINAL, &[&id]).await?;
@@ -328,11 +372,15 @@ fn terminals(listing: &str) -> impl Iterator<Item = (&str, &str)> {
 }
 
 fn terminal_titled(listing: &str, title: &str) -> Option<String> {
-    terminals(listing).find(|(_, name)| *name == title).map(|(id, _)| id.to_owned())
+    terminals(listing)
+        .find(|(_, name)| *name == title)
+        .map(|(id, _)| id.to_owned())
 }
 
 fn title_of(listing: &str, id: &str) -> Option<String> {
-    terminals(listing).find(|(terminal, _)| *terminal == id).map(|(_, name)| name.to_owned())
+    terminals(listing)
+        .find(|(terminal, _)| *terminal == id)
+        .map(|(_, name)| name.to_owned())
 }
 
 /// Writes an OSC 2 title sequence to the tty. Control characters are dropped so a title read back from the
@@ -340,7 +388,10 @@ fn title_of(listing: &str, id: &str) -> Option<String> {
 fn set_title(tty: &str, title: &str) -> Result<(), String> {
     use std::io::Write;
     use std::os::unix::fs::OpenOptionsExt;
-    let title: String = title.chars().filter(|character| !character.is_control()).collect();
+    let title: String = title
+        .chars()
+        .filter(|character| !character.is_control())
+        .collect();
     std::fs::OpenOptions::new()
         .write(true)
         .custom_flags(libc::O_NOCTTY | libc::O_NONBLOCK)
@@ -351,8 +402,9 @@ fn set_title(tty: &str, title: &str) -> Result<(), String> {
 
 /// `ttys016`: a pseudo-terminal name, nothing that could point elsewhere under /dev.
 fn valid_tty(tty: &str) -> bool {
-    tty.strip_prefix("tty")
-        .is_some_and(|rest| !rest.is_empty() && rest.len() <= 8 && rest.bytes().all(|byte| byte.is_ascii_alphanumeric()))
+    tty.strip_prefix("tty").is_some_and(|rest| {
+        !rest.is_empty() && rest.len() <= 8 && rest.bytes().all(|byte| byte.is_ascii_alphanumeric())
+    })
 }
 
 /// Switches a tmux client to the session's pane, across sessions and windows, and returns the ttys of the
@@ -361,7 +413,11 @@ fn valid_tty(tty: &str) -> bool {
 async fn focus_tmux_pane(tmux: &TmuxPane) -> Result<Vec<String>, String> {
     let (client, pid) = switch_tmux_client(tmux).await?;
     let ttys = controlling_ttys(pid);
-    Ok(if ttys.is_empty() { vec![client.trim_start_matches("/dev/").to_owned()] } else { ttys })
+    Ok(if ttys.is_empty() {
+        vec![client.trim_start_matches("/dev/").to_owned()]
+    } else {
+        ttys
+    })
 }
 
 /// Switches a tmux client to the pane and returns that client's tty and pid.
@@ -376,10 +432,37 @@ async fn switch_tmux_client(tmux: &TmuxPane) -> Result<(String, u32), String> {
         .ok_or_else(|| "tmux not found".to_owned())?;
     let socket = tmux.socket.as_str();
     let pane = tmux.pane.as_str();
-    let session = run(program, &["-S", socket, "display-message", "-p", "-t", pane, "#{session_id}"]).await?;
-    let clients = run(program, &["-S", socket, "list-clients", "-F", "#{client_activity} #{client_tty} #{session_id} #{client_pid}"]).await?;
-    let (client, pid) = tmux_client_for(&clients, session.trim()).ok_or_else(|| "no tmux client is attached".to_owned())?;
-    run(program, &["-S", socket, "switch-client", "-c", &client, "-t", pane]).await?;
+    let session = run(
+        program,
+        &[
+            "-S",
+            socket,
+            "display-message",
+            "-p",
+            "-t",
+            pane,
+            "#{session_id}",
+        ],
+    )
+    .await?;
+    let clients = run(
+        program,
+        &[
+            "-S",
+            socket,
+            "list-clients",
+            "-F",
+            "#{client_activity} #{client_tty} #{session_id} #{client_pid}",
+        ],
+    )
+    .await?;
+    let (client, pid) = tmux_client_for(&clients, session.trim())
+        .ok_or_else(|| "no tmux client is attached".to_owned())?;
+    run(
+        program,
+        &["-S", socket, "switch-client", "-c", &client, "-t", pane],
+    )
+    .await?;
     Ok((client, pid))
 }
 
@@ -388,7 +471,10 @@ fn ancestor_pids(mut pid: u32) -> Vec<u32> {
     let mut pids = Vec::new();
     while pid > 1 && pids.len() < 16 {
         pids.push(pid);
-        let Some(parent) = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok().and_then(|stat| parent_from_stat(&stat)) else {
+        let Some(parent) = std::fs::read_to_string(format!("/proc/{pid}/stat"))
+            .ok()
+            .and_then(|stat| parent_from_stat(&stat))
+        else {
             break;
         };
         pid = parent;
@@ -399,7 +485,12 @@ fn ancestor_pids(mut pid: u32) -> Vec<u32> {
 /// The parent pid in `/proc/<pid>/stat`. The command name in parentheses may hold spaces and parentheses, so the
 /// fields are counted from the last `)`.
 fn parent_from_stat(stat: &str) -> Option<u32> {
-    stat.rsplit_once(')')?.1.split_whitespace().nth(1)?.parse().ok()
+    stat.rsplit_once(')')?
+        .1
+        .split_whitespace()
+        .nth(1)?
+        .parse()
+        .ok()
 }
 
 /// The controlling terminals from `pid` up, nearest first: the daemon's twin of the hook's walk, for a tmux
@@ -411,7 +502,15 @@ fn controlling_ttys(mut pid: u32) -> Vec<String> {
     for _ in 0..32 {
         let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
         let size = std::mem::size_of::<libc::proc_bsdinfo>() as libc::c_int;
-        let read = unsafe { libc::proc_pidinfo(pid as libc::c_int, libc::PROC_PIDTBSDINFO, 0, (&raw mut info).cast(), size) };
+        let read = unsafe {
+            libc::proc_pidinfo(
+                pid as libc::c_int,
+                libc::PROC_PIDTBSDINFO,
+                0,
+                (&raw mut info).cast(),
+                size,
+            )
+        };
         if read != size {
             break;
         }
@@ -448,7 +547,8 @@ fn tmux_client_for(clients: &str, session: &str) -> Option<(String, u32)> {
             let tty = fields.next()?;
             let same_session = fields.next()? == session;
             let pid: u32 = fields.next()?.parse().ok()?;
-            tty.starts_with("/dev/").then_some((same_session, activity, tty, pid))
+            tty.starts_with("/dev/")
+                .then_some((same_session, activity, tty, pid))
         })
         .max_by_key(|&(same_session, activity, _, _)| (same_session, activity))
         .map(|(_, _, tty, pid)| (tty.to_owned(), pid))
@@ -462,7 +562,8 @@ fn valid_tmux_pane(pane: &str) -> bool {
 /// The socket path comes from the hook; only a socket this user owns is handed to tmux.
 fn check_own_socket(socket: &str) -> Result<(), String> {
     use std::os::unix::fs::{FileTypeExt, MetadataExt};
-    let metadata = std::fs::metadata(socket).map_err(|error| format!("cannot read tmux socket: {error}"))?;
+    let metadata =
+        std::fs::metadata(socket).map_err(|error| format!("cannot read tmux socket: {error}"))?;
     let own = metadata.uid() == unsafe { libc::getuid() };
     if socket.starts_with('/') && metadata.file_type().is_socket() && own {
         Ok(())
@@ -481,10 +582,13 @@ async fn run_osascript(script: &[&str], args: &[&str]) -> Result<String, String>
 
 /// Runs a helper with arguments passed straight through, never a shell, and returns its stdout.
 async fn run(program: &str, args: &[&str]) -> Result<String, String> {
-    let output = tokio::time::timeout(OPEN_TIMEOUT, Command::new(program).args(args).kill_on_drop(true).output())
-        .await
-        .map_err(|_| format!("{program} timed out"))?
-        .map_err(|error| format!("cannot run {program}: {error}"))?;
+    let output = tokio::time::timeout(
+        OPEN_TIMEOUT,
+        Command::new(program).args(args).kill_on_drop(true).output(),
+    )
+    .await
+    .map_err(|_| format!("{program} timed out"))?
+    .map_err(|error| format!("cannot run {program}: {error}"))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!("{program} failed: {}", stderr.trim()));
@@ -509,8 +613,9 @@ fn activate(bundle_id: &str) -> Result<CommandSpec, String> {
 /// compositor here, and it can both list windows with their pids and focus one by address.
 async fn focus_window(pids: &[u32]) -> Result<String, String> {
     let clients = run_hyprctl(&["clients", "-j"]).await?;
-    let address = window_for(&clients, pids)
-        .ok_or_else(|| "session has no host window (SSH, tmux or a background process)".to_owned())?;
+    let address = window_for(&clients, pids).ok_or_else(|| {
+        "session has no host window (SSH, tmux or a background process)".to_owned()
+    })?;
     let target = format!("address:{address}");
     // Hyprland 0.56 made dispatch take Lua and rejects the old syntax; older releases only know the old one.
     // The address is plain hex (checked above), so it can't break out of the Lua string.
@@ -530,10 +635,15 @@ async fn run_hyprctl(args: &[&str]) -> Result<String, String> {
         .map_err(|_| "hyprctl timed out".to_owned())?
         .map_err(|error| format!("cannot run hyprctl (is this Hyprland?): {error}"))?;
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-    let failed = !output.status.success() || (args.first() == Some(&"dispatch") && stdout.trim() != "ok");
+    let failed =
+        !output.status.success() || (args.first() == Some(&"dispatch") && stdout.trim() != "ok");
     if failed {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("hyprctl failed: {} {}", stdout.trim(), stderr.trim()).trim_end().to_owned());
+        return Err(
+            format!("hyprctl failed: {} {}", stdout.trim(), stderr.trim())
+                .trim_end()
+                .to_owned(),
+        );
     }
     Ok(stdout)
 }
@@ -693,9 +803,15 @@ mod tests {
     #[test]
     fn the_tmux_client_on_the_panes_session_is_switched_before_a_busier_one() {
         let clients = "1791453500 /dev/ttys044 $1 4401\n1791453400 /dev/ttys016 $0 1601\n";
-        assert_eq!(tmux_client_for(clients, "$0"), Some(("/dev/ttys016".to_owned(), 1601)));
+        assert_eq!(
+            tmux_client_for(clients, "$0"),
+            Some(("/dev/ttys016".to_owned(), 1601))
+        );
         // Nobody watches the pane's session: the most recently used client is moved there.
-        assert_eq!(tmux_client_for(clients, "$7"), Some(("/dev/ttys044".to_owned(), 4401)));
+        assert_eq!(
+            tmux_client_for(clients, "$7"),
+            Some(("/dev/ttys044".to_owned(), 4401))
+        );
         assert_eq!(tmux_client_for("", "$0"), None);
     }
 
@@ -704,7 +820,12 @@ mod tests {
         let source = ActivitySource::Cli {
             agent: "opencode".to_owned(),
             session_id: "ses_1".to_owned(),
-            surface: Surface::Host { bundle_id: "com.apple.Terminal".to_owned(), ttys: Vec::new(), tmux: None, focus_url: None },
+            surface: Surface::Host {
+                bundle_id: "com.apple.Terminal".to_owned(),
+                ttys: Vec::new(),
+                tmux: None,
+                focus_url: None,
+            },
         };
         let spec = command_for(&source, None).expect("activatable");
         assert_eq!(spec.args, ["-b", "com.apple.Terminal"]);
@@ -712,8 +833,14 @@ mod tests {
 
     #[test]
     fn only_warp_session_links_are_opened() {
-        assert!(valid_warp_focus_url("warp://session/550e8400e29b41d4a716446655440000"));
-        for bogus in ["warp://action/new_tab?path=/", "https://example.com", "warp://session/zz0e8400e29b41d4a716446655440000"] {
+        assert!(valid_warp_focus_url(
+            "warp://session/550e8400e29b41d4a716446655440000"
+        ));
+        for bogus in [
+            "warp://action/new_tab?path=/",
+            "https://example.com",
+            "warp://session/zz0e8400e29b41d4a716446655440000",
+        ] {
             assert!(!valid_warp_focus_url(bogus), "{bogus}");
         }
     }
@@ -736,12 +863,27 @@ mod tests {
 
     #[test]
     fn a_host_tty_survives_a_state_file_round_trip() {
-        let surface = Surface::Host { bundle_id: GHOSTTY_BUNDLE_ID.to_owned(), ttys: vec!["ttys016".to_owned()], tmux: None, focus_url: None };
+        let surface = Surface::Host {
+            bundle_id: GHOSTTY_BUNDLE_ID.to_owned(),
+            ttys: vec!["ttys016".to_owned()],
+            tmux: None,
+            focus_url: None,
+        };
         let json = serde_json::to_string(&surface).unwrap();
         assert_eq!(serde_json::from_str::<Surface>(&json).unwrap(), surface);
         // State files from before the tty was reported still load.
-        let old: Surface = serde_json::from_str(r#"{"surface":"host","bundle_id":"com.mitchellh.ghostty"}"#).unwrap();
-        assert_eq!(old, Surface::Host { bundle_id: GHOSTTY_BUNDLE_ID.to_owned(), ttys: Vec::new(), tmux: None, focus_url: None });
+        let old: Surface =
+            serde_json::from_str(r#"{"surface":"host","bundle_id":"com.mitchellh.ghostty"}"#)
+                .unwrap();
+        assert_eq!(
+            old,
+            Surface::Host {
+                bundle_id: GHOSTTY_BUNDLE_ID.to_owned(),
+                ttys: Vec::new(),
+                tmux: None,
+                focus_url: None
+            }
+        );
     }
 
     #[test]
@@ -755,7 +897,10 @@ mod tests {
             },
         };
 
-        assert_eq!(reported_desktop_session(&source), Some("local_b65a60de-9adb-48b0-85c6-f9a178971322"));
+        assert_eq!(
+            reported_desktop_session(&source),
+            Some("local_b65a60de-9adb-48b0-85c6-f9a178971322")
+        );
         assert!(fallback_desktop_session(&source).is_none());
     }
 
@@ -764,7 +909,12 @@ mod tests {
         let source = ActivitySource::ClaudeCode {
             session_id: "19b63622-e3e0-4cd0-a37e-dc8d71253155".to_owned(),
             cwd: Some("/work/vibe-buddy".to_owned()),
-            surface: Surface::Host { ttys: Vec::new(), tmux: None, focus_url: None, bundle_id: "com.mitchellh.ghostty".to_owned() },
+            surface: Surface::Host {
+                ttys: Vec::new(),
+                tmux: None,
+                focus_url: None,
+                bundle_id: "com.mitchellh.ghostty".to_owned(),
+            },
         };
 
         assert!(reported_desktop_session(&source).is_none());
@@ -779,7 +929,12 @@ mod tests {
             &ActivitySource::ClaudeCode {
                 session_id: "19b63622-e3e0-4cd0-a37e-dc8d71253155".to_owned(),
                 cwd: Some("/work/vibe-buddy".to_owned()),
-                surface: Surface::Host { ttys: Vec::new(), tmux: None, focus_url: None, bundle_id: "com.mitchellh.ghostty".to_owned() },
+                surface: Surface::Host {
+                    ttys: Vec::new(),
+                    tmux: None,
+                    focus_url: None,
+                    bundle_id: "com.mitchellh.ghostty".to_owned(),
+                },
             },
             None,
         )
@@ -795,7 +950,12 @@ mod tests {
         let spec = command_for(
             &ActivitySource::Codex {
                 thread_id: "019c6e27-e55b-73d1-87d8-4e01f1f75043".to_owned(),
-                surface: Surface::Host { ttys: Vec::new(), tmux: None, focus_url: None, bundle_id: "net.example.SomeNewTerminal".to_owned() },
+                surface: Surface::Host {
+                    ttys: Vec::new(),
+                    tmux: None,
+                    focus_url: None,
+                    bundle_id: "net.example.SomeNewTerminal".to_owned(),
+                },
             },
             None,
         )
@@ -826,7 +986,12 @@ mod tests {
                 command_for(
                     &ActivitySource::Codex {
                         thread_id: "t".to_owned(),
-                        surface: Surface::Host { bundle_id: bogus.to_owned(), ttys: Vec::new(), tmux: None, focus_url: None },
+                        surface: Surface::Host {
+                            bundle_id: bogus.to_owned(),
+                            ttys: Vec::new(),
+                            tmux: None,
+                            focus_url: None
+                        },
                     },
                     None,
                 )
@@ -839,13 +1004,19 @@ mod tests {
     #[test]
     fn a_host_without_a_bundle_id_has_nowhere_to_go() {
         // The hook says there's a host but gave no target: skip it, rather than fall back to importing the session into the app.
-        assert_eq!(Surface::from_hook(Some("host"), None, None, None, None, None, None), Surface::Headless);
+        assert_eq!(
+            Surface::from_hook(Some("host"), None, None, None, None, None, None),
+            Surface::Headless
+        );
     }
 
     #[test]
     fn an_older_hook_keeps_the_desktop_behaviour() {
         // Old hooks and old state files report no surface; back then only the desktop app was supported.
-        assert_eq!(Surface::from_hook(None, None, None, None, None, None, None), Surface::default());
+        assert_eq!(
+            Surface::from_hook(None, None, None, None, None, None, None),
+            Surface::default()
+        );
         assert!(matches!(Surface::default(), Surface::App { .. }));
     }
 
@@ -1076,8 +1247,14 @@ mod tests {
     #[test]
     fn the_nearest_ancestor_with_a_window_wins() {
         // The hook's chain on Omarchy: claude, then the Ghostty that owns the window, then the user's systemd.
-        assert_eq!(window_for(CLIENTS, &[3620, 3534, 1017]).as_deref(), Some("0x618656fe7aa0"));
-        assert_eq!(window_for(CLIENTS, &[5576, 5487]).as_deref(), Some("0x618657e07910"));
+        assert_eq!(
+            window_for(CLIENTS, &[3620, 3534, 1017]).as_deref(),
+            Some("0x618656fe7aa0")
+        );
+        assert_eq!(
+            window_for(CLIENTS, &[5576, 5487]).as_deref(),
+            Some("0x618657e07910")
+        );
     }
 
     #[test]
@@ -1097,7 +1274,10 @@ mod tests {
         let source = ActivitySource::ClaudeCode {
             session_id: "s".to_owned(),
             cwd: None,
-            surface: Surface::Window { pids: vec![3534], tmux: None },
+            surface: Surface::Window {
+                pids: vec![3534],
+                tmux: None,
+            },
         };
         assert!(command_for(&source, None).is_err());
     }

@@ -45,7 +45,11 @@ impl ksni::Tray for Tray {
             .into_iter()
             .map(|scale| {
                 let (width, height, data) = crate::korekore::tray_icon(&self.kore, scale);
-                Icon { width: width as i32, height: height as i32, data }
+                Icon {
+                    width: width as i32,
+                    height: height as i32,
+                    data,
+                }
             })
             .collect()
     }
@@ -73,7 +77,12 @@ impl ksni::Tray for Tray {
 
     fn menu(&self) -> Vec<MenuItem<Self>> {
         let line = |label: &str| {
-            StandardItem { label: label.replace('_', "__"), enabled: false, ..Default::default() }.into()
+            StandardItem {
+                label: label.replace('_', "__"),
+                enabled: false,
+                ..Default::default()
+            }
+            .into()
         };
         let action = |label: String, event: TrayEvent| {
             StandardItem {
@@ -87,7 +96,11 @@ impl ksni::Tray for Tray {
         };
         let daemon_down = self.menu.icon == FaceIcon::DaemonDown;
         vec![
-            if daemon_down { action(self.menu.device_line.clone(), TrayEvent::RestartDaemon) } else { line(&self.menu.device_line) },
+            if daemon_down {
+                action(self.menu.device_line.clone(), TrayEvent::RestartDaemon)
+            } else {
+                line(&self.menu.device_line)
+            },
             line(&self.menu.mode_line),
             line(&self.menu.today_line),
             MenuItem::Separator,
@@ -106,11 +119,25 @@ pub const OMARCHY_PLUGIN: &str = "io.github.second-state.vibebuddy";
 /// Whether Omarchy's `shell.json` places our plugin in the bar. Enabling a bar widget adds it to the bar's layout
 /// and disabling it takes it out, so the layout is the answer.
 pub fn plugin_in_bar(shell_json: &str) -> bool {
-    let Ok(config) = serde_json::from_str::<serde_json::Value>(shell_json) else { return false };
-    let Some(sections) = config.pointer("/bar/layout").and_then(serde_json::Value::as_object) else { return false };
-    sections.values().filter_map(serde_json::Value::as_array).flatten().any(|entry| {
-        entry.as_str().or_else(|| entry.get("id").and_then(serde_json::Value::as_str)) == Some(OMARCHY_PLUGIN)
-    })
+    let Ok(config) = serde_json::from_str::<serde_json::Value>(shell_json) else {
+        return false;
+    };
+    let Some(sections) = config
+        .pointer("/bar/layout")
+        .and_then(serde_json::Value::as_object)
+    else {
+        return false;
+    };
+    sections
+        .values()
+        .filter_map(serde_json::Value::as_array)
+        .flatten()
+        .any(|entry| {
+            entry
+                .as_str()
+                .or_else(|| entry.get("id").and_then(serde_json::Value::as_str))
+                == Some(OMARCHY_PLUGIN)
+        })
 }
 
 /// Omarchy keeps tray icons in a drawer behind a chevron until they're pinned, while the Mac's icon always shows in the
@@ -131,14 +158,22 @@ commit "$NORMALIZE"' | .bar.layout[] |= map(
         and ((.hidden // []) | any(. == "vibebuddy") | not)
       then .pinned = ((.pinned // []) + ["vibebuddy"]) else . end)'
 "#;
-    match tokio::process::Command::new("bash").args(["-c", SCRIPT]).status().await {
+    match tokio::process::Command::new("bash")
+        .args(["-c", SCRIPT])
+        .status()
+        .await
+    {
         Ok(status) if status.success() => {
             let _ = marker.parent().map(std::fs::create_dir_all);
             let _ = std::fs::write(&marker, "");
         }
         Ok(status) if status.code() == Some(3) => {}
-        Ok(status) => eprintln!("vibebuddy-desktop: pinning the tray icon in Omarchy's bar failed ({status})"),
-        Err(error) => eprintln!("vibebuddy-desktop: cannot run bash to pin the tray icon ({error})"),
+        Ok(status) => {
+            eprintln!("vibebuddy-desktop: pinning the tray icon in Omarchy's bar failed ({status})")
+        }
+        Err(error) => {
+            eprintln!("vibebuddy-desktop: cannot run bash to pin the tray icon ({error})")
+        }
     }
 }
 
@@ -151,13 +186,19 @@ mod tests {
         let shell = r#"{"bar": {"layout": {"left": ["omarchy.menu"],
             "right": [{"id": "omarchy.tray", "pinned": ["vibebuddy"]}, {"id": "io.github.second-state.vibebuddy"}]}}}"#;
         assert!(plugin_in_bar(shell));
-        assert!(plugin_in_bar(r#"{"bar": {"layout": {"center": ["io.github.second-state.vibebuddy"]}}}"#));
+        assert!(plugin_in_bar(
+            r#"{"bar": {"layout": {"center": ["io.github.second-state.vibebuddy"]}}}"#
+        ));
     }
 
     #[test]
     fn a_pinned_tray_icon_or_a_broken_file_is_not_the_plugin() {
-        assert!(!plugin_in_bar(r#"{"bar": {"layout": {"right": [{"id": "omarchy.tray", "pinned": ["vibebuddy"]}]}}}"#));
-        assert!(!plugin_in_bar(r#"{"plugins": ["io.github.second-state.vibebuddy"]}"#));
+        assert!(!plugin_in_bar(
+            r#"{"bar": {"layout": {"right": [{"id": "omarchy.tray", "pinned": ["vibebuddy"]}]}}}"#
+        ));
+        assert!(!plugin_in_bar(
+            r#"{"plugins": ["io.github.second-state.vibebuddy"]}"#
+        ));
         assert!(!plugin_in_bar("not json"));
     }
 }

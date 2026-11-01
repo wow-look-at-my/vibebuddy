@@ -14,7 +14,10 @@ pub struct LinePicker {
 
 impl LinePicker {
     pub fn new(seed: u32) -> Self {
-        Self { state: seed | 1, recent: [[u8::MAX; MEMORY]; OCCASIONS] }
+        Self {
+            state: seed | 1,
+            recent: [[u8::MAX; MEMORY]; OCCASIONS],
+        }
     }
 
     fn next_random(&mut self) -> u32 {
@@ -76,9 +79,17 @@ mod tests {
         let mut picker = LinePicker::new(3);
         assert_eq!(picker.pick(2, 1), 0);
         let picks: Vec<usize> = (0..10).map(|_| picker.pick(4, 2)).collect();
-        assert!(picks.windows(2).all(|pair| pair[0] != pair[1]), "a pool of two alternates: {picks:?}");
+        assert!(
+            picks.windows(2).all(|pair| pair[0] != pair[1]),
+            "a pool of two alternates: {picks:?}"
+        );
         let picks: Vec<usize> = (0..30).map(|_| picker.pick(5, 3)).collect();
-        assert!(picks.windows(3).all(|run| run[0] != run[2] && run[0] != run[1]), "a pool of three cycles: {picks:?}");
+        assert!(
+            picks
+                .windows(3)
+                .all(|run| run[0] != run[2] && run[0] != run[1]),
+            "a pool of three cycles: {picks:?}"
+        );
     }
 
     #[test]
@@ -88,6 +99,10 @@ mod tests {
         for _ in 0..5 {
             picker.pick(1, 4);
         }
-        assert_ne!(picker.pick(0, 4), first, "occasion 0 still remembers its own last pick");
+        assert_ne!(
+            picker.pick(0, 4),
+            first,
+            "occasion 0 still remembers its own last pick"
+        );
     }
 }

@@ -34,13 +34,20 @@ pub struct Bitmap {
 
 fn nibble(alpha: &[u8], index: usize) -> u8 {
     let byte = alpha[index / 2];
-    if index.is_multiple_of(2) { byte & 15 } else { byte >> 4 }
+    if index.is_multiple_of(2) {
+        byte & 15
+    } else {
+        byte >> 4
+    }
 }
 
 impl Face {
     fn find(&self, character: char) -> Option<&Glyph> {
         let code = character as u32;
-        self.glyphs.binary_search_by_key(&code, |glyph| glyph.code).ok().map(|index| &self.glyphs[index])
+        self.glyphs
+            .binary_search_by_key(&code, |glyph| glyph.code)
+            .ok()
+            .map(|index| &self.glyphs[index])
     }
 
     /// The line's height: from the top of the line to the bottom of the descenders.
@@ -86,12 +93,22 @@ fn characters(text: &[u8]) -> core::str::Chars<'_> {
 
 /// How wide `text` is at `face`.
 pub fn width(face: &Face, text: &[u8]) -> i32 {
-    characters(text).map(|character| advance(face, &piece(face, character))).sum()
+    characters(text)
+        .map(|character| advance(face, &piece(face, character)))
+        .sum()
 }
 
 /// Draws `text` with the top of its line at `y`, as many whole characters as fit in `max_width`. Returns the width
 /// drawn.
-pub fn draw(canvas: &mut Canvas, face: &Face, x: i32, y: i32, text: &[u8], color: u16, max_width: i32) -> i32 {
+pub fn draw(
+    canvas: &mut Canvas,
+    face: &Face,
+    x: i32,
+    y: i32,
+    text: &[u8],
+    color: u16,
+    max_width: i32,
+) -> i32 {
     let mut pen = x;
     for character in characters(text) {
         let piece = piece(face, character);
@@ -105,7 +122,8 @@ pub fn draw(canvas: &mut Canvas, face: &Face, x: i32, y: i32, text: &[u8], color
                 let width = usize::from(glyph.width);
                 for row in 0..usize::from(glyph.height) {
                     for column in 0..width {
-                        let alpha = nibble(face.alpha, glyph.at as usize * 2 + row * width + column);
+                        let alpha =
+                            nibble(face.alpha, glyph.at as usize * 2 + row * width + column);
                         canvas.blend(left + column as i32, top + row as i32, color, alpha);
                     }
                 }
@@ -130,13 +148,36 @@ pub fn draw(canvas: &mut Canvas, face: &Face, x: i32, y: i32, text: &[u8], color
 }
 
 /// `draw` centred on `center_x`.
-pub fn draw_centered(canvas: &mut Canvas, face: &Face, center_x: i32, y: i32, text: &[u8], color: u16) {
-    draw(canvas, face, center_x - width(face, text) / 2, y, text, color, i32::MAX);
+pub fn draw_centered(
+    canvas: &mut Canvas,
+    face: &Face,
+    center_x: i32,
+    y: i32,
+    text: &[u8],
+    color: u16,
+) {
+    draw(
+        canvas,
+        face,
+        center_x - width(face, text) / 2,
+        y,
+        text,
+        color,
+        i32::MAX,
+    );
 }
 
 /// `draw` ending at `right`.
 pub fn draw_right(canvas: &mut Canvas, face: &Face, right: i32, y: i32, text: &[u8], color: u16) {
-    draw(canvas, face, right - width(face, text), y, text, color, i32::MAX);
+    draw(
+        canvas,
+        face,
+        right - width(face, text),
+        y,
+        text,
+        color,
+        i32::MAX,
+    );
 }
 
 /// A coverage bitmap with its top left at (x, y).
@@ -144,7 +185,12 @@ pub fn draw_bitmap(canvas: &mut Canvas, bitmap: &Bitmap, x: i32, y: i32, color: 
     let width = usize::from(bitmap.width);
     for row in 0..usize::from(bitmap.height) {
         for column in 0..width {
-            canvas.blend(x + column as i32, y + row as i32, color, nibble(bitmap.alpha, row * width + column));
+            canvas.blend(
+                x + column as i32,
+                y + row as i32,
+                color,
+                nibble(bitmap.alpha, row * width + column),
+            );
         }
     }
 }

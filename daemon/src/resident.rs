@@ -88,16 +88,36 @@ pub enum ResidentError {
 impl std::fmt::Display for ResidentError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Disabled => write!(formatter, "the resident session is experimental and off; start vibebuddyd with {ENABLE_VARIABLE}=1"),
-            Self::NoCodex => write!(formatter, "codex was not found on PATH (set {CODEX_VARIABLE} to its path)"),
-            Self::NotLoggedIn => write!(formatter, "Codex is not logged in; run `codex login` first"),
-            Self::NoClaude => {
-                write!(formatter, "claude was not found on PATH (set {} to its path)", crate::resident_claude::CLAUDE_VARIABLE)
+            Self::Disabled => write!(
+                formatter,
+                "the resident session is experimental and off; start vibebuddyd with {ENABLE_VARIABLE}=1"
+            ),
+            Self::NoCodex => write!(
+                formatter,
+                "codex was not found on PATH (set {CODEX_VARIABLE} to its path)"
+            ),
+            Self::NotLoggedIn => {
+                write!(formatter, "Codex is not logged in; run `codex login` first")
             }
-            Self::NoAnthropicKey => write!(formatter, "no Anthropic API key is set for Claude Code"),
+            Self::NoClaude => {
+                write!(
+                    formatter,
+                    "claude was not found on PATH (set {} to its path)",
+                    crate::resident_claude::CLAUDE_VARIABLE
+                )
+            }
+            Self::NoAnthropicKey => {
+                write!(formatter, "no Anthropic API key is set for Claude Code")
+            }
             Self::Rpc(message) => write!(formatter, "{message}"),
-            Self::Timeout => write!(formatter, "the resident session took longer than {} s and was interrupted", TURN_TIMEOUT.as_secs()),
-            Self::TurnEnded(message) => write!(formatter, "the turn ended without completing: {message}"),
+            Self::Timeout => write!(
+                formatter,
+                "the resident session took longer than {} s and was interrupted",
+                TURN_TIMEOUT.as_secs()
+            ),
+            Self::TurnEnded(message) => {
+                write!(formatter, "the turn ended without completing: {message}")
+            }
         }
     }
 }
@@ -156,7 +176,12 @@ struct Settings {
 }
 
 /// Readiness under a brain setting, from the last Codex check and whether Claude Code is there with a key.
-fn decide(choice: BrainChoice, codex: Readiness, claude_installed: bool, key_set: bool) -> Readiness {
+fn decide(
+    choice: BrainChoice,
+    codex: Readiness,
+    claude_installed: bool,
+    key_set: bool,
+) -> Readiness {
     let claude_problem = if !claude_installed {
         Some(Problem::ClaudeMissing)
     } else if !key_set {
@@ -164,8 +189,15 @@ fn decide(choice: BrainChoice, codex: Readiness, claude_installed: bool, key_set
     } else {
         None
     };
-    let codex_side = Readiness { brain: Some(Brain::Codex), ..codex };
-    let claude_side = Readiness { checked: Some(tokio::time::Instant::now()), problem: claude_problem, brain: Some(Brain::Claude) };
+    let codex_side = Readiness {
+        brain: Some(Brain::Codex),
+        ..codex
+    };
+    let claude_side = Readiness {
+        checked: Some(tokio::time::Instant::now()),
+        problem: claude_problem,
+        brain: Some(Brain::Claude),
+    };
     match choice {
         BrainChoice::Codex => codex_side,
         BrainChoice::Claude => claude_side,
@@ -176,7 +208,11 @@ fn decide(choice: BrainChoice, codex: Readiness, claude_installed: bool, key_set
         // A key says the user means Claude Code, so its problem is the one to fix; else Codex's.
         BrainChoice::Auto => Readiness {
             checked: codex.checked,
-            problem: if key_set { claude_problem } else { codex.problem },
+            problem: if key_set {
+                claude_problem
+            } else {
+                codex.problem
+            },
             brain: None,
         },
     }
@@ -278,7 +314,12 @@ pub struct Resident {
 impl Resident {
     /// `state_dir` is the daemon's state directory: the thread id is kept in `resident.json` there, the session
     /// works in `resident/`, and its Codex home is `resident-codex/`.
-    pub fn new(enabled: bool, state_dir: &Path, launcher: Launcher, activities: Arc<Mutex<ActivityTracker>>) -> Self {
+    pub fn new(
+        enabled: bool,
+        state_dir: &Path,
+        launcher: Launcher,
+        activities: Arc<Mutex<ActivityTracker>>,
+    ) -> Self {
         let dir = state_dir.join("resident");
         let state_file = state_dir.join("resident.json");
         let saved = load(&state_file);
@@ -291,7 +332,11 @@ impl Resident {
             codex_home: state_dir.join(CODEX_HOME_DIR),
             user_codex_home: user_codex_home(),
             launcher,
-            claude: ClaudeBrain::new(state_dir, crate::resident_claude::Launcher::Claude, activities.clone()),
+            claude: ClaudeBrain::new(
+                state_dir,
+                crate::resident_claude::Launcher::Claude,
+                activities.clone(),
+            ),
             activities,
             session: Mutex::new(None),
             thread_id: std::sync::Mutex::new(saved.thread_id),
@@ -309,7 +354,9 @@ impl Resident {
 
     /// Keeps the brain setting and the Anthropic API key in `path` (see [`SETTINGS_FILE`]), reading them now.
     pub fn with_settings_file(mut self, path: PathBuf) -> Self {
-        let settings = std::fs::read_to_string(&path).ok().and_then(|text| serde_json::from_str(&text).ok());
+        let settings = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok());
         self.settings = std::sync::Mutex::new(settings.unwrap_or_default());
         self.settings_file = Some(path);
         self
@@ -330,7 +377,11 @@ impl Resident {
     }
 
     fn anthropic_key(&self) -> Option<String> {
-        self.settings.lock().expect("settings lock").anthropic_api_key.clone()
+        self.settings
+            .lock()
+            .expect("settings lock")
+            .anthropic_api_key
+            .clone()
     }
 
     pub async fn set_brain(&self, choice: BrainChoice) -> std::io::Result<()> {
@@ -343,10 +394,15 @@ impl Resident {
     /// Sets or clears the user's Anthropic API key. A running Claude Code session is stopped, so the next command
     /// starts one with the new key.
     pub async fn set_anthropic_key(&self, key: Option<String>) -> std::io::Result<()> {
-        let key = key.map(|key| key.trim().to_owned()).filter(|key| !key.is_empty());
+        let key = key
+            .map(|key| key.trim().to_owned())
+            .filter(|key| !key.is_empty());
         let set = key.is_some();
         self.change_settings(|settings| settings.anthropic_api_key = key)?;
-        info!(set, "the Anthropic API key for the resident session changed");
+        info!(
+            set,
+            "the Anthropic API key for the resident session changed"
+        );
         self.claude.stop().await;
         self.check_readiness_now().await;
         Ok(())
@@ -367,10 +423,12 @@ impl Resident {
     /// The brain a voice command goes to now: the ready one, else the one the setting points at (Codex under
     /// `auto`), whose start then says what is missing.
     pub fn brain(&self) -> Brain {
-        self.readiness().brain.unwrap_or(match self.brain_setting() {
-            BrainChoice::Claude => Brain::Claude,
-            BrainChoice::Codex | BrainChoice::Auto => Brain::Codex,
-        })
+        self.readiness()
+            .brain
+            .unwrap_or(match self.brain_setting() {
+                BrainChoice::Claude => Brain::Claude,
+                BrainChoice::Codex | BrainChoice::Auto => Brain::Codex,
+            })
     }
 
     pub fn enabled(&self) -> bool {
@@ -396,7 +454,8 @@ impl Resident {
     }
 
     fn bump_revision(&self) {
-        self.revision.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.revision
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// The last readiness check, as it stands; see [`Resident::check_readiness`].
@@ -425,7 +484,9 @@ impl Resident {
         }
         let last = *self.codex_readiness.lock().expect("readiness lock");
         if self.brain_setting() != BrainChoice::Claude
-            && !last.checked.is_some_and(|checked| checked.elapsed() < READINESS_TTL)
+            && !last
+                .checked
+                .is_some_and(|checked| checked.elapsed() < READINESS_TTL)
         {
             let problem = match &self.launcher {
                 Launcher::Codex => self.login_problem().await,
@@ -446,7 +507,9 @@ impl Resident {
     }
 
     async fn login_problem(&self) -> Option<Problem> {
-        let Some(program) = find_codex() else { return Some(Problem::CodexMissing) };
+        let Some(program) = find_codex() else {
+            return Some(Problem::CodexMissing);
+        };
         if let Err(error) = prepare_codex_home(&self.codex_home, &self.user_codex_home) {
             warn!(%error, "cannot prepare the resident Codex home to check the login");
             return Some(Problem::CodexLoggedOut);
@@ -470,8 +533,11 @@ impl Resident {
 
     /// Records what a Codex check or start found; see [`Resident::publish`].
     pub(crate) fn note(&self, problem: Option<Problem>) {
-        *self.codex_readiness.lock().expect("readiness lock") =
-            Readiness { checked: Some(tokio::time::Instant::now()), problem, brain: None };
+        *self.codex_readiness.lock().expect("readiness lock") = Readiness {
+            checked: Some(tokio::time::Instant::now()),
+            problem,
+            brain: None,
+        };
         self.publish();
     }
 
@@ -479,7 +545,12 @@ impl Resident {
     /// the revision, since the history shown is the other brain's now.
     fn publish(&self) {
         let codex = *self.codex_readiness.lock().expect("readiness lock");
-        let now = decide(self.brain_setting(), codex, self.claude.installed(), self.anthropic_key_set());
+        let now = decide(
+            self.brain_setting(),
+            codex,
+            self.claude.installed(),
+            self.anthropic_key_set(),
+        );
         let mut switched = false;
         self.readiness.send_if_modified(|readiness| {
             let flipped = readiness.ready() != now.ready();
@@ -520,7 +591,9 @@ impl Resident {
     /// Hands one voice command to the resident session and waits for its spoken replies.
     pub async fn say(&self, text: &str, wearing: &Wearing) -> Result<Answer, ResidentError> {
         let mut replies = Vec::new();
-        let thread_id = self.say_streaming(text, wearing, &mut |reply| replies.push(reply.to_owned())).await?;
+        let thread_id = self
+            .say_streaming(text, wearing, &mut |reply| replies.push(reply.to_owned()))
+            .await?;
         Ok(Answer { thread_id, replies })
     }
 
@@ -555,8 +628,14 @@ impl Resident {
     ) -> Result<String, ResidentError> {
         let mut slot = self.session.lock().await;
         // A running thread keeps the instructions it was resumed with, so a new Character resumes it again.
-        if slot.as_ref().is_some_and(|session| session.persona != *persona) {
-            info!(character = persona.id, "the Character changed; resuming the resident thread with its persona");
+        if slot
+            .as_ref()
+            .is_some_and(|session| session.persona != *persona)
+        {
+            info!(
+                character = persona.id,
+                "the Character changed; resuming the resident thread with its persona"
+            );
             *slot = None;
         }
         let session = self.running(&mut slot, persona).await?;
@@ -564,7 +643,9 @@ impl Resident {
         let changed = spoke_as.as_deref() != Some(persona.id);
         let note = (changed && spoke_as.is_some()).then(|| change_note(persona));
         let context = command_context(persona, &chrono::Local::now(), local_time_zone().as_deref());
-        let result = self.run_turn(session, &context, note.as_deref(), text, on_reply).await;
+        let result = self
+            .run_turn(session, &context, note.as_deref(), text, on_reply)
+            .await;
         if session.client.is_closed() {
             *slot = None;
         }
@@ -592,7 +673,10 @@ impl Resident {
     ) -> Result<String, ResidentError> {
         let key = self.anthropic_key().ok_or(ResidentError::NoAnthropicKey)?;
         let instructions = instructions(persona, None, Brain::Claude);
-        let result = self.claude.say_streaming(&key, &instructions, persona, text, on_reply).await;
+        let result = self
+            .claude
+            .say_streaming(&key, &instructions, persona, text, on_reply)
+            .await;
         if result == Err(ResidentError::NoClaude) {
             self.publish();
         }
@@ -605,7 +689,10 @@ impl Resident {
             return persona;
         }
         let character = self.spoke_as.lock().expect("spoke as lock").clone();
-        Persona::of(&Wearing { character, address: None })
+        Persona::of(&Wearing {
+            character,
+            address: None,
+        })
     }
 
     /// Starts the app-server and resumes the thread ahead of the first voice command, which otherwise waits for
@@ -620,7 +707,9 @@ impl Resident {
         *self.persona.lock().expect("persona lock") = Some(persona.clone());
         if self.brain() == Brain::Claude {
             if let Some(key) = self.anthropic_key() {
-                self.claude.warm(&key, &instructions(&persona, None, Brain::Claude)).await;
+                self.claude
+                    .warm(&key, &instructions(&persona, None, Brain::Claude))
+                    .await;
             }
             return;
         }
@@ -650,13 +739,24 @@ impl Resident {
         if session.client.is_closed() {
             *slot = None;
         }
-        let turns = listed?.get("data").and_then(Value::as_array).cloned().unwrap_or_default();
+        let turns = listed?
+            .get("data")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
         Ok(turns.iter().rev().filter_map(exchange_of).collect())
     }
 
     /// The running session, started (again) if there is none or its app-server has exited.
-    async fn running<'a>(&self, slot: &'a mut Option<Session>, persona: &Persona) -> Result<&'a mut Session, ResidentError> {
-        if slot.as_ref().is_some_and(|session| session.client.is_closed()) {
+    async fn running<'a>(
+        &self,
+        slot: &'a mut Option<Session>,
+        persona: &Persona,
+    ) -> Result<&'a mut Session, ResidentError> {
+        if slot
+            .as_ref()
+            .is_some_and(|session| session.client.is_closed())
+        {
             warn!("the resident app-server exited; starting it again");
             *slot = None;
         }
@@ -675,8 +775,12 @@ impl Resident {
     }
 
     async fn start(&self, persona: &Persona) -> Result<Session, ResidentError> {
-        prepare_codex_home(&self.codex_home, &self.user_codex_home)
-            .map_err(|error| ResidentError::Rpc(format!("cannot prepare {}: {error}", self.codex_home.display())))?;
+        prepare_codex_home(&self.codex_home, &self.user_codex_home).map_err(|error| {
+            ResidentError::Rpc(format!(
+                "cannot prepare {}: {error}",
+                self.codex_home.display()
+            ))
+        })?;
         let (pipes, version) = match &self.launcher {
             Launcher::Codex => spawn_codex(&self.codex_home).await?,
             #[cfg(test)]
@@ -706,15 +810,18 @@ impl Resident {
             }
             return Err(ResidentError::NotLoggedIn);
         }
-        std::fs::create_dir_all(&self.dir)
-            .map_err(|error| ResidentError::Rpc(format!("cannot create {}: {error}", self.dir.display())))?;
+        std::fs::create_dir_all(&self.dir).map_err(|error| {
+            ResidentError::Rpc(format!("cannot create {}: {error}", self.dir.display()))
+        })?;
         let thread_id = match self.codex_thread_id() {
             // There is one resident thread for good. Only a thread that no longer exists is replaced (a thread
             // saved before the resident session had its own Codex home is one); one that can't be resumed for
             // another reason (another Codex process is its writer) fails this command and is tried again with the
             // next.
             Some(saved) => match self.resume(&client, &saved, persona).await {
-                Err(ResidentError::Rpc(message)) if !client.is_closed() && thread_is_gone(&message) => {
+                Err(ResidentError::Rpc(message))
+                    if !client.is_closed() && thread_is_gone(&message) =>
+                {
                     let thread = self.start_thread(&client, persona).await?;
                     warn!(old_thread = %saved, new_thread = %thread, %message, "the resident thread no longer exists; started a new one");
                     thread
@@ -727,27 +834,50 @@ impl Resident {
             },
             None => self.start_thread(&client, persona).await?,
         };
-        let previous = self.thread_id.lock().expect("thread id lock").replace(thread_id.clone());
+        let previous = self
+            .thread_id
+            .lock()
+            .expect("thread id lock")
+            .replace(thread_id.clone());
         if previous.as_deref() != Some(thread_id.as_str()) {
             self.bump_revision();
         }
         let spoke_as = self.spoke_as.lock().expect("spoke as lock").clone();
-        let saved = Saved { thread_id: Some(thread_id.clone()), codex_version: version, persona: spoke_as };
+        let saved = Saved {
+            thread_id: Some(thread_id.clone()),
+            codex_version: version,
+            persona: spoke_as,
+        };
         if let Err(error) = save(&self.state_file, &saved) {
             warn!(%error, "failed to save the resident thread id");
         }
         info!(thread = %thread_id, "resident session ready");
-        Ok(Session { client, incoming, thread_id, persona: persona.clone(), _child: pipes.child })
+        Ok(Session {
+            client,
+            incoming,
+            thread_id,
+            persona: persona.clone(),
+            _child: pipes.child,
+        })
     }
 
-    async fn start_thread(&self, client: &Client, persona: &Persona) -> Result<String, ResidentError> {
+    async fn start_thread(
+        &self,
+        client: &Client,
+        persona: &Persona,
+    ) -> Result<String, ResidentError> {
         let mut params = self.thread_params(persona);
         params["dynamicTools"] = tools();
         let started = request(client, "thread/start", params).await?;
         thread_id_of(&started)
     }
 
-    async fn resume(&self, client: &Client, thread_id: &str, persona: &Persona) -> Result<String, ResidentError> {
+    async fn resume(
+        &self,
+        client: &Client,
+        thread_id: &str,
+        persona: &Persona,
+    ) -> Result<String, ResidentError> {
         // Dynamic tools live with the thread and survive a resume; the instructions are sent again so a change
         // (a new Character) takes effect.
         let mut params = self.thread_params(persona);
@@ -777,18 +907,33 @@ impl Resident {
         while let Ok(message) = session.incoming.try_recv() {
             self.handle(&session.client, message, &mut |_| {}).await;
         }
-        let input: Vec<Value> =
-            [context].into_iter().chain(note).chain([text]).map(|text| json!({"type": "text", "text": text})).collect();
-        let started =
-            request(&session.client, "turn/start", json!({"threadId": session.thread_id, "input": input})).await?;
-        let turn_id = started.pointer("/turn/id").and_then(Value::as_str).unwrap_or_default().to_owned();
+        let input: Vec<Value> = [context]
+            .into_iter()
+            .chain(note)
+            .chain([text])
+            .map(|text| json!({"type": "text", "text": text}))
+            .collect();
+        let started = request(
+            &session.client,
+            "turn/start",
+            json!({"threadId": session.thread_id, "input": input}),
+        )
+        .await?;
+        let turn_id = started
+            .pointer("/turn/id")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
         let deadline = tokio::time::Instant::now() + TURN_TIMEOUT;
         loop {
             let message = match tokio::time::timeout_at(deadline, session.incoming.recv()).await {
                 Err(_) => {
                     let _ = session
                         .client
-                        .request("turn/interrupt", json!({"threadId": session.thread_id, "turnId": turn_id}))
+                        .request(
+                            "turn/interrupt",
+                            json!({"threadId": session.thread_id, "turnId": turn_id}),
+                        )
                         .await;
                     return Err(ResidentError::Timeout);
                 }
@@ -816,7 +961,12 @@ impl Resident {
     }
 
     /// Answers a server-to-client request; notifications other than the turn's end need nothing.
-    async fn handle(&self, client: &Client, message: Incoming, on_reply: &mut (dyn FnMut(&str) + Send)) {
+    async fn handle(
+        &self,
+        client: &Client,
+        message: Incoming,
+        on_reply: &mut (dyn FnMut(&str) + Send),
+    ) {
         let Incoming::Request { id, method, params } = message else {
             return;
         };
@@ -830,11 +980,15 @@ impl Resident {
                 client.respond(id, output).await
             }
             None if method == "currentTime/read" => {
-                client.respond(id, json!({"currentTimeAt": chrono::Utc::now().timestamp()})).await
+                client
+                    .respond(id, json!({"currentTimeAt": chrono::Utc::now().timestamp()}))
+                    .await
             }
             None => {
                 info!(%method, "refused an unsupported request from the resident session");
-                client.respond_error(id, -32601, "not supported by VibeBuddy").await
+                client
+                    .respond_error(id, -32601, "not supported by VibeBuddy")
+                    .await
             }
         };
         if let Err(error) = answered {
@@ -843,9 +997,19 @@ impl Resident {
     }
 
     async fn call_tool(&self, params: &Value, on_reply: &mut (dyn FnMut(&str) + Send)) -> Value {
-        let tool = params.get("tool").and_then(Value::as_str).unwrap_or_default();
+        let tool = params
+            .get("tool")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         let memories = self.user_codex_home.join("memories");
-        let (success, text) = run_tool(tool, &params["arguments"], &self.activities, Some(&memories), on_reply).await;
+        let (success, text) = run_tool(
+            tool,
+            &params["arguments"],
+            &self.activities,
+            Some(&memories),
+            on_reply,
+        )
+        .await;
         json!({"success": success, "contentItems": [{"type": "inputText", "text": text}]})
     }
 }
@@ -861,7 +1025,11 @@ pub(crate) async fn run_tool(
 ) -> (bool, String) {
     match (tool, memories) {
         ("speak", _) => {
-            let text = arguments.get("text").and_then(Value::as_str).unwrap_or_default().trim();
+            let text = arguments
+                .get("text")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .trim();
             if text.is_empty() {
                 (false, "text is empty".to_owned())
             } else {
@@ -875,7 +1043,10 @@ pub(crate) async fn run_tool(
             (true, json!(report).to_string())
         }
         ("search_memories", Some(memories)) => {
-            let query = arguments.get("query").and_then(Value::as_str).unwrap_or_default();
+            let query = arguments
+                .get("query")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             (true, search_memories(memories, query))
         }
         (other, _) => (false, format!("unknown tool {other}")),
@@ -885,7 +1056,9 @@ pub(crate) async fn run_tool(
 /// The answer that declines a server-to-client request asking for permission or input; None if it isn't one.
 fn decline(method: &str) -> Option<Value> {
     Some(match method {
-        "item/commandExecution/requestApproval" | "item/fileChange/requestApproval" => json!({"decision": "decline"}),
+        "item/commandExecution/requestApproval" | "item/fileChange/requestApproval" => {
+            json!({"decision": "decline"})
+        }
         "execCommandApproval" | "applyPatchApproval" => json!({"decision": "denied"}),
         "item/permissions/requestApproval" => json!({"permissions": {}}),
         "mcpServer/elicitation/request" => json!({"action": "decline"}),
@@ -941,7 +1114,13 @@ pub(crate) fn tools() -> Value {
 /// says where today's date is: in Codex's environment context, or in the context block the daemon puts before each
 /// voice command for Claude Code.
 pub(crate) fn instructions(persona: &Persona, memories: Option<&str>, brain: Brain) -> String {
-    let Persona { name, text, language, address, .. } = persona;
+    let Persona {
+        name,
+        text,
+        language,
+        address,
+        ..
+    } = persona;
     let address = address.map_or_else(String::new, |words| {
         format!(
             " The user likes to be called \"{words}\": call them that now and then, naturally, as your lines do, not \
@@ -956,7 +1135,9 @@ pub(crate) fn instructions(persona: &Persona, memories: Option<&str>, brain: Bra
     });
     let date = match brain {
         Brain::Codex => "today's date and the user's time zone are in the environment context",
-        Brain::Claude => "the user's local date, time and time zone come with each voice command, in a context block",
+        Brain::Claude => {
+            "the user's local date, time and time zone come with each voice command, in a context block"
+        }
     };
     format!(
         "You are the buddy of VibeBuddy: a small desk box that watches the user's coding Agents (Codex, Claude Code, \
@@ -1003,7 +1184,9 @@ fn thread_id_of(response: &Value) -> Result<String, ResidentError> {
 async fn request(client: &Client, method: &str, params: Value) -> Result<Value, ResidentError> {
     match tokio::time::timeout(REQUEST_TIMEOUT, client.request(method, params)).await {
         Ok(result) => Ok(result?),
-        Err(_) => Err(ResidentError::Rpc(format!("app-server did not answer {method}"))),
+        Err(_) => Err(ResidentError::Rpc(format!(
+            "app-server did not answer {method}"
+        ))),
     }
 }
 
@@ -1035,11 +1218,20 @@ async fn spawn_codex(codex_home: &Path) -> Result<(Pipes, Option<String>), Resid
         .stderr(std::process::Stdio::null())
         .kill_on_drop(true)
         .spawn()
-        .map_err(|error| ResidentError::Rpc(format!("cannot start {}: {error}", program.display())))?;
+        .map_err(|error| {
+            ResidentError::Rpc(format!("cannot start {}: {error}", program.display()))
+        })?;
     info!(program = %program.display(), mcp_servers_off = servers.len(), "started codex app-server for the resident session");
     let reader = child.stdout.take().expect("stdout is piped");
     let writer = child.stdin.take().expect("stdin is piped");
-    Ok((Pipes { reader: Box::new(reader), writer: Box::new(writer), child: Some(child) }, version))
+    Ok((
+        Pipes {
+            reader: Box::new(reader),
+            writer: Box::new(writer),
+            child: Some(child),
+        },
+        version,
+    ))
 }
 
 /// `codex` run in the resident session's own Codex home. The user's `config.toml`, `AGENTS.md`, hooks, plugins and
@@ -1094,8 +1286,10 @@ const FEATURES_OFF: [&str; 16] = [
 /// - [`MODEL`] at [`REASONING_EFFORT`]: a voice command waits on the answer. Measured on 2026-10-13, a turn's first
 ///   `speak` came 2.7 s in on gpt-6-luna at low, against 4.3 s on gpt-6.1-sol at high.
 fn tool_overrides() -> Vec<String> {
-    let mut args: Vec<String> =
-        FEATURES_OFF.iter().flat_map(|feature| ["-c".to_owned(), format!("features.{feature}=false")]).collect();
+    let mut args: Vec<String> = FEATURES_OFF
+        .iter()
+        .flat_map(|feature| ["-c".to_owned(), format!("features.{feature}=false")])
+        .collect();
     for setting in [
         format!("web_search=\"{WEB_SEARCH}\""),
         AUTH_STORE.to_owned(),
@@ -1133,7 +1327,9 @@ async fn enabled_mcp_servers(program: &Path, codex_home: &Path, base: &[String])
         .stderr(std::process::Stdio::null())
         .output()
         .await;
-    let listed = output.ok().and_then(|output| serde_json::from_slice::<Value>(&output.stdout).ok());
+    let listed = output
+        .ok()
+        .and_then(|output| serde_json::from_slice::<Value>(&output.stdout).ok());
     let Some(servers) = listed.as_ref().and_then(Value::as_array) else {
         warn!("could not list the MCP servers; the resident session may see their tools");
         return Vec::new();
@@ -1160,7 +1356,11 @@ fn find_codex() -> Option<PathBuf> {
     }
     let home = std::env::var_os("HOME").map(PathBuf::from);
     std::env::var_os("PATH")
-        .map(|path| std::env::split_paths(&path).map(|dir| dir.join("codex")).collect::<Vec<_>>())
+        .map(|path| {
+            std::env::split_paths(&path)
+                .map(|dir| dir.join("codex"))
+                .collect::<Vec<_>>()
+        })
         .unwrap_or_default()
         .into_iter()
         .chain(home.map(|home| home.join(".local/bin/codex")))
@@ -1173,7 +1373,10 @@ fn user_codex_home() -> PathBuf {
     if let Some(home) = std::env::var_os("CODEX_HOME").filter(|home| !home.is_empty()) {
         return PathBuf::from(home);
     }
-    std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default().join(".codex")
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_default()
+        .join(".codex")
 }
 
 /// Makes the resident session's Codex home (mode 0700) and links the user's login into it.
@@ -1206,7 +1409,8 @@ fn link_auth(codex_home: &Path, user_codex_home: &Path) -> std::io::Result<()> {
 /// The user's Codex memory summary (`memories/memory_summary.md`), cut at Codex's own cap; None if there is none.
 /// Read again at every start, so it follows the user's Codex as it consolidates.
 fn memory_summary(user_codex_home: &Path) -> Option<String> {
-    let text = std::fs::read_to_string(user_codex_home.join("memories").join("memory_summary.md")).ok()?;
+    let text =
+        std::fs::read_to_string(user_codex_home.join("memories").join("memory_summary.md")).ok()?;
     let text = text.trim();
     let end = text.floor_char_boundary(MEMORY_SUMMARY_MAX_BYTES);
     (!text.is_empty()).then(|| text[..end].to_owned())
@@ -1222,22 +1426,34 @@ fn search_memories(root: &Path, query: &str) -> String {
     }
     let mut files = vec![root.join("MEMORY.md"), root.join("raw_memories.md")];
     if let Ok(entries) = std::fs::read_dir(root.join("rollout_summaries")) {
-        let mut summaries: Vec<PathBuf> = entries.filter_map(Result::ok).map(|entry| entry.path()).collect();
+        let mut summaries: Vec<PathBuf> = entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .collect();
         summaries.sort();
         files.extend(summaries);
     }
     let mut out = String::new();
     'files: for file in files {
-        let Ok(text) = std::fs::read_to_string(&file) else { continue };
+        let Ok(text) = std::fs::read_to_string(&file) else {
+            continue;
+        };
         let lines: Vec<&str> = text.lines().collect();
-        let name = file.strip_prefix(root).unwrap_or(&file).display().to_string();
+        let name = file
+            .strip_prefix(root)
+            .unwrap_or(&file)
+            .display()
+            .to_string();
         let mut shown_until = 0;
         for (index, line) in lines.iter().enumerate() {
             let lower = line.to_lowercase();
             if index < shown_until || !words.iter().any(|word| lower.contains(word.as_str())) {
                 continue;
             }
-            let (from, to) = (index.saturating_sub(1).max(shown_until), (index + 2).min(lines.len()));
+            let (from, to) = (
+                index.saturating_sub(1).max(shown_until),
+                (index + 2).min(lines.len()),
+            );
             let block = format!("{name}:{}\n{}\n\n", from + 1, lines[from..to].join("\n"));
             if out.len() + block.len() > MEMORY_SEARCH_MAX_BYTES {
                 out.push_str("(more matches left out)");
@@ -1247,7 +1463,11 @@ fn search_memories(root: &Path, query: &str) -> String {
             shown_until = to;
         }
     }
-    if out.is_empty() { "no matches".to_owned() } else { out }
+    if out.is_empty() {
+        "no matches".to_owned()
+    } else {
+        out
+    }
 }
 
 /// A turn from `thread/turns/list` as an exchange: the user's text and what was said through `speak`.
@@ -1264,9 +1484,16 @@ fn exchange_of(turn: &Value) -> Option<Exchange> {
     let replies = items
         .iter()
         .filter(|item| item["type"] == "dynamicToolCall" && item["tool"] == "speak")
-        .filter_map(|item| item.pointer("/arguments/text").and_then(Value::as_str).map(str::to_owned))
+        .filter_map(|item| {
+            item.pointer("/arguments/text")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        })
         .collect();
-    let at = turn.get("startedAt").and_then(Value::as_i64).and_then(|seconds| DateTime::from_timestamp(seconds, 0));
+    let at = turn
+        .get("startedAt")
+        .and_then(Value::as_i64)
+        .and_then(|seconds| DateTime::from_timestamp(seconds, 0));
     (!said.is_empty()).then_some(Exchange { said, replies, at })
 }
 
@@ -1281,7 +1508,10 @@ fn save(path: &Path, saved: &Saved) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::write(path, serde_json::to_string_pretty(saved).map_err(std::io::Error::other)?)
+    std::fs::write(
+        path,
+        serde_json::to_string_pretty(saved).map_err(std::io::Error::other)?,
+    )
 }
 
 /// The app-server's answer to resuming a thread whose rollout is gone (deleted, or a different CODEX_HOME).
@@ -1329,7 +1559,11 @@ pub(crate) mod tests {
             let mut turns = 0;
             while let Ok(Some(line)) = lines.next_line().await {
                 let message: Value = serde_json::from_str(&line).unwrap();
-                let Some(method) = message.get("method").and_then(Value::as_str).map(str::to_owned) else {
+                let Some(method) = message
+                    .get("method")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+                else {
                     script.lock().unwrap().answers.push(message);
                     continue;
                 };
@@ -1342,19 +1576,28 @@ pub(crate) mod tests {
                     "initialize" => json!({"userAgent": "fake"}),
                     "account/read" => {
                         let logged_in = script.lock().unwrap().logged_in;
-                        let account = if logged_in { json!({"type": "chatgpt"}) } else { Value::Null };
+                        let account = if logged_in {
+                            json!({"type": "chatgpt"})
+                        } else {
+                            Value::Null
+                        };
                         json!({"account": account, "requiresOpenaiAuth": true})
                     }
                     "thread/start" => json!({"thread": {"id": "new-thread"}}),
                     "thread/resume" if busy_thread => {
                         let message = "thread old-thread already has an active writer";
-                        let error = json!({"id": id, "error": {"code": -32600, "message": message}});
-                        out.write_all(format!("{error}\n").as_bytes()).await.unwrap();
+                        let error =
+                            json!({"id": id, "error": {"code": -32600, "message": message}});
+                        out.write_all(format!("{error}\n").as_bytes())
+                            .await
+                            .unwrap();
                         continue;
                     }
                     "thread/resume" if lose_thread => {
                         let error = json!({"id": id, "error": {"code": -32600, "message": "no rollout found"}});
-                        out.write_all(format!("{error}\n").as_bytes()).await.unwrap();
+                        out.write_all(format!("{error}\n").as_bytes())
+                            .await
+                            .unwrap();
                         continue;
                     }
                     "thread/resume" => json!({"thread": {"id": message["params"]["threadId"]}}),
@@ -1374,17 +1617,33 @@ pub(crate) mod tests {
                         turns += 1;
                         let turn_id = format!("turn-{turns}");
                         let started = json!({"id": id, "result": {"turn": {"id": turn_id, "status": "inProgress"}}});
-                        out.write_all(format!("{started}\n").as_bytes()).await.unwrap();
+                        out.write_all(format!("{started}\n").as_bytes())
+                            .await
+                            .unwrap();
                         let requests = script.lock().unwrap().turn_requests.clone();
                         for (number, (request, params)) in requests.iter().enumerate() {
                             let request = json!({"id": format!("srv-{turns}-{number}"), "method": request, "params": params});
-                            out.write_all(format!("{request}\n").as_bytes()).await.unwrap();
+                            out.write_all(format!("{request}\n").as_bytes())
+                                .await
+                                .unwrap();
                         }
                         for _ in &requests {
-                            let Ok(Some(line)) = lines.next_line().await else { return };
-                            script.lock().unwrap().answers.push(serde_json::from_str(&line).unwrap());
+                            let Ok(Some(line)) = lines.next_line().await else {
+                                return;
+                            };
+                            script
+                                .lock()
+                                .unwrap()
+                                .answers
+                                .push(serde_json::from_str(&line).unwrap());
                         }
-                        if script.lock().unwrap().die_on_turn.take_if(|turn| *turn == turns).is_some() {
+                        if script
+                            .lock()
+                            .unwrap()
+                            .die_on_turn
+                            .take_if(|turn| *turn == turns)
+                            .is_some()
+                        {
                             return;
                         }
                         let hold = script.lock().unwrap().hold.clone();
@@ -1395,33 +1654,53 @@ pub(crate) mod tests {
                             "threadId": message["params"]["threadId"],
                             "turn": {"id": turn_id, "status": "completed", "items": []},
                         }});
-                        out.write_all(format!("{completed}\n").as_bytes()).await.unwrap();
+                        out.write_all(format!("{completed}\n").as_bytes())
+                            .await
+                            .unwrap();
                         continue;
                     }
                     _ => {
-                        let error = json!({"id": id, "error": {"code": -32601, "message": "unknown"}});
-                        out.write_all(format!("{error}\n").as_bytes()).await.unwrap();
+                        let error =
+                            json!({"id": id, "error": {"code": -32601, "message": "unknown"}});
+                        out.write_all(format!("{error}\n").as_bytes())
+                            .await
+                            .unwrap();
                         continue;
                     }
                 };
-                out.write_all(format!("{}\n", json!({"id": id, "result": result})).as_bytes()).await.unwrap();
+                out.write_all(format!("{}\n", json!({"id": id, "result": result})).as_bytes())
+                    .await
+                    .unwrap();
             }
         });
-        Pipes { reader: Box::new(daemon_read), writer: Box::new(daemon_write), child: None }
+        Pipes {
+            reader: Box::new(daemon_read),
+            writer: Box::new(daemon_write),
+            child: None,
+        }
     }
 
     pub(crate) fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("vibebuddy-resident-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("vibebuddy-resident-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
 
     /// A resident session on the fake app-server, whose user's Codex home is `user-codex/` in `dir`.
-    pub(crate) fn resident(dir: &Path, script: &Shared, activities: Arc<Mutex<ActivityTracker>>) -> Resident {
+    pub(crate) fn resident(
+        dir: &Path,
+        script: &Shared,
+        activities: Arc<Mutex<ActivityTracker>>,
+    ) -> Resident {
         let script = script.clone();
-        let mut resident =
-            Resident::new(true, dir, Launcher::Fake(Box::new(move || fake_server(script.clone()))), activities);
+        let mut resident = Resident::new(
+            true,
+            dir,
+            Launcher::Fake(Box::new(move || fake_server(script.clone()))),
+            activities,
+        );
         resident.user_codex_home = dir.join("user-codex");
         resident
     }
@@ -1432,15 +1711,27 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn wearing(character: &str) -> Wearing {
-        Wearing { character: Some(character.to_owned()), address: None }
+        Wearing {
+            character: Some(character.to_owned()),
+            address: None,
+        }
     }
 
     pub(crate) fn logged_in() -> Shared {
-        Arc::new(std::sync::Mutex::new(Script { logged_in: true, ..Script::default() }))
+        Arc::new(std::sync::Mutex::new(Script {
+            logged_in: true,
+            ..Script::default()
+        }))
     }
 
     fn methods(script: &Shared) -> Vec<String> {
-        script.lock().unwrap().received.iter().map(|message| message["method"].as_str().unwrap().to_owned()).collect()
+        script
+            .lock()
+            .unwrap()
+            .received
+            .iter()
+            .map(|message| message["method"].as_str().unwrap().to_owned())
+            .collect()
     }
 
     pub(crate) fn tool_call(tool: &str, arguments: Value) -> (String, Value) {
@@ -1456,9 +1747,21 @@ pub(crate) mod tests {
 
         let answer = resident.say("hello", &Wearing::default()).await.unwrap();
         assert_eq!(answer.thread_id, "new-thread");
-        assert_eq!(methods(&script), ["initialize", "initialized", "account/read", "thread/start", "turn/start"]);
+        assert_eq!(
+            methods(&script),
+            [
+                "initialize",
+                "initialized",
+                "account/read",
+                "thread/start",
+                "turn/start"
+            ]
+        );
         let received = script.lock().unwrap().received.clone();
-        assert_eq!(received[0]["params"]["capabilities"]["experimentalApi"], true);
+        assert_eq!(
+            received[0]["params"]["capabilities"]["experimentalApi"],
+            true
+        );
         assert_eq!(received[0]["params"]["clientInfo"]["name"], "vibebuddy");
         let start = &received[3]["params"];
         assert_eq!(start["cwd"], json!(dir.join("resident")));
@@ -1466,35 +1769,67 @@ pub(crate) mod tests {
         assert_eq!(start["approvalPolicy"], "on-request");
         let instructions = start["developerInstructions"].as_str().unwrap();
         assert!(instructions.contains("speak"));
-        assert!(instructions.contains("Never state a fact you have not seen in a tool result"), "{instructions}");
+        assert!(
+            instructions.contains("Never state a fact you have not seen in a tool result"),
+            "{instructions}"
+        );
         assert!(instructions.contains("not the weather, news, prices"));
         assert!(instructions.contains("search the web"));
         assert!(instructions.contains("`recently_ended`"));
-        let tools: Vec<&str> =
-            start["dynamicTools"].as_array().unwrap().iter().map(|tool| tool["name"].as_str().unwrap()).collect();
+        let tools: Vec<&str> = start["dynamicTools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|tool| tool["name"].as_str().unwrap())
+            .collect();
         assert_eq!(tools, ["speak", "list_activities", "search_memories"]);
         let listing = start["dynamicTools"][1]["description"].as_str().unwrap();
-        assert!(listing.contains("`recently_ended`") && listing.contains("`today`"), "{listing}");
+        assert!(
+            listing.contains("`recently_ended`") && listing.contains("`today`"),
+            "{listing}"
+        );
         assert_eq!(received[4]["params"]["threadId"], "new-thread");
         let input = received[4]["params"]["input"].as_array().unwrap();
         assert_eq!(input.len(), 2);
         let context = input[0]["text"].as_str().unwrap();
-        assert!(context.starts_with("<context>The user's local time: ") && context.contains("You are"), "{context}");
+        assert!(
+            context.starts_with("<context>The user's local time: ") && context.contains("You are"),
+            "{context}"
+        );
         assert_eq!(input[1], json!({"type": "text", "text": "hello"}));
         assert!(dir.join("resident").is_dir());
-        assert_eq!(load(&dir.join("resident.json")).thread_id.as_deref(), Some("new-thread"));
+        assert_eq!(
+            load(&dir.join("resident.json")).thread_id.as_deref(),
+            Some("new-thread")
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
     #[tokio::test]
     async fn a_later_start_resumes_the_saved_thread_and_a_lost_one_is_replaced() {
         let dir = temp_dir("resume");
-        let saved = Saved { thread_id: Some("old-thread".to_owned()), codex_version: None, persona: None };
+        let saved = Saved {
+            thread_id: Some("old-thread".to_owned()),
+            codex_version: None,
+            persona: None,
+        };
         save(&dir.join("resident.json"), &saved).unwrap();
         let script = logged_in();
-        let answer = resident(&dir, &script, Arc::default()).say("hi", &Wearing::default()).await.unwrap();
+        let answer = resident(&dir, &script, Arc::default())
+            .say("hi", &Wearing::default())
+            .await
+            .unwrap();
         assert_eq!(answer.thread_id, "old-thread");
-        assert_eq!(methods(&script), ["initialize", "initialized", "account/read", "thread/resume", "turn/start"]);
+        assert_eq!(
+            methods(&script),
+            [
+                "initialize",
+                "initialized",
+                "account/read",
+                "thread/resume",
+                "turn/start"
+            ]
+        );
         let resume = script.lock().unwrap().received[3]["params"].clone();
         assert_eq!(resume["threadId"], "old-thread");
         assert_eq!(resume["sandbox"], "read-only");
@@ -1502,23 +1837,45 @@ pub(crate) mod tests {
 
         let script = logged_in();
         script.lock().unwrap().lose_thread = true;
-        let answer = resident(&dir, &script, Arc::default()).say("hi", &Wearing::default()).await.unwrap();
+        let answer = resident(&dir, &script, Arc::default())
+            .say("hi", &Wearing::default())
+            .await
+            .unwrap();
         assert_eq!(answer.thread_id, "new-thread");
         assert_eq!(methods(&script)[3..5], ["thread/resume", "thread/start"]);
-        assert_eq!(load(&dir.join("resident.json")).thread_id.as_deref(), Some("new-thread"));
+        assert_eq!(
+            load(&dir.join("resident.json")).thread_id.as_deref(),
+            Some("new-thread")
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
     #[tokio::test]
     async fn a_thread_open_elsewhere_fails_the_command_and_is_never_replaced() {
         let dir = temp_dir("busy");
-        let saved = Saved { thread_id: Some("old-thread".to_owned()), codex_version: None, persona: None };
+        let saved = Saved {
+            thread_id: Some("old-thread".to_owned()),
+            codex_version: None,
+            persona: None,
+        };
         save(&dir.join("resident.json"), &saved).unwrap();
         let script = logged_in();
         script.lock().unwrap().busy_thread = true;
-        assert!(resident(&dir, &script, Arc::default()).say("hi", &Wearing::default()).await.is_err());
-        assert!(!methods(&script).contains(&"thread/start".to_owned()), "{:?}", methods(&script));
-        assert_eq!(load(&dir.join("resident.json")).thread_id.as_deref(), Some("old-thread"));
+        assert!(
+            resident(&dir, &script, Arc::default())
+                .say("hi", &Wearing::default())
+                .await
+                .is_err()
+        );
+        assert!(
+            !methods(&script).contains(&"thread/start".to_owned()),
+            "{:?}",
+            methods(&script)
+        );
+        assert_eq!(
+            load(&dir.join("resident.json")).thread_id.as_deref(),
+            Some("old-thread")
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -1526,9 +1883,15 @@ pub(crate) mod tests {
     async fn without_a_login_nothing_starts_and_no_login_flow_is_begun() {
         let dir = temp_dir("login");
         let script = Arc::new(std::sync::Mutex::new(Script::default()));
-        let error = resident(&dir, &script, Arc::default()).say("hi", &Wearing::default()).await.unwrap_err();
+        let error = resident(&dir, &script, Arc::default())
+            .say("hi", &Wearing::default())
+            .await
+            .unwrap_err();
         assert_eq!(error, ResidentError::NotLoggedIn);
-        assert_eq!(methods(&script), ["initialize", "initialized", "account/read"]);
+        assert_eq!(
+            methods(&script),
+            ["initialize", "initialized", "account/read"]
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -1536,9 +1899,15 @@ pub(crate) mod tests {
     async fn speak_becomes_the_reply_and_list_activities_reads_the_tracker() {
         let dir = temp_dir("tools");
         let mut tracker = ActivityTracker::default();
-        let id = ActivityId { session_id: "s".to_owned(), key: "s:t".to_owned() };
+        let id = ActivityId {
+            session_id: "s".to_owned(),
+            key: "s:t".to_owned(),
+        };
         tracker.observe(&id, "CX:REVIEW", ActivityStatus::Working);
-        let ended = ActivityId { session_id: "e".to_owned(), key: "e:t".to_owned() };
+        let ended = ActivityId {
+            session_id: "e".to_owned(),
+            key: "e:t".to_owned(),
+        };
         tracker.note_project(&ended, "VIBE-BUDDY");
         tracker.observe(&ended, "CC:DOCS", ActivityStatus::Working);
         tracker.finish(&ended, "CC:DOCS");
@@ -1549,11 +1918,19 @@ pub(crate) mod tests {
             tool_call("speak", json!({"text": ""})),
             tool_call("run_shell", json!({"command": "ls"})),
         ];
-        let answer = resident(&dir, &script, Arc::new(Mutex::new(tracker))).say("what's up?", &Wearing::default()).await.unwrap();
+        let answer = resident(&dir, &script, Arc::new(Mutex::new(tracker)))
+            .say("what's up?", &Wearing::default())
+            .await
+            .unwrap();
         assert_eq!(answer.replies, ["One task is running."]);
 
         let answers = script.lock().unwrap().answers.clone();
-        let text = |index: usize| answers[index]["result"]["contentItems"][0]["text"].as_str().unwrap().to_owned();
+        let text = |index: usize| {
+            answers[index]["result"]["contentItems"][0]["text"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        };
         assert_eq!(answers[0]["id"], "srv-1-0");
         assert_eq!(answers[0]["result"]["success"], true);
         let listed: Value = serde_json::from_str(&text(0)).unwrap();
@@ -1584,7 +1961,13 @@ pub(crate) mod tests {
         let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
         let turn = tokio::spawn({
             let resident = resident.clone();
-            async move { resident.say_streaming("hi", &Wearing::default(), &mut |reply| sender.send(reply.to_owned()).unwrap()).await }
+            async move {
+                resident
+                    .say_streaming("hi", &Wearing::default(), &mut |reply| {
+                        sender.send(reply.to_owned()).unwrap()
+                    })
+                    .await
+            }
         });
         assert_eq!(receiver.recv().await.as_deref(), Some("On it."));
         assert!(!turn.is_finished(), "the turn is still running");
@@ -1608,7 +1991,10 @@ pub(crate) mod tests {
         ]
         .map(|method| (method.to_owned(), json!({})))
         .to_vec();
-        resident(&dir, &script, Arc::default()).say("delete everything", &Wearing::default()).await.unwrap();
+        resident(&dir, &script, Arc::default())
+            .say("delete everything", &Wearing::default())
+            .await
+            .unwrap();
         let answers = script.lock().unwrap().answers.clone();
         assert_eq!(answers[0]["result"], json!({"decision": "decline"}));
         assert_eq!(answers[1]["result"], json!({"decision": "decline"}));
@@ -1626,7 +2012,10 @@ pub(crate) mod tests {
         let script = logged_in();
         script.lock().unwrap().die_on_turn = Some(1);
         let resident = resident(&dir, &script, Arc::default());
-        assert!(matches!(resident.say("one", &Wearing::default()).await, Err(ResidentError::Rpc(_))));
+        assert!(matches!(
+            resident.say("one", &Wearing::default()).await,
+            Err(ResidentError::Rpc(_))
+        ));
         let answer = resident.say("two", &Wearing::default()).await.unwrap();
         assert_eq!(answer.thread_id, "new-thread");
         assert_eq!(script.lock().unwrap().starts, 2);
@@ -1641,7 +2030,8 @@ pub(crate) mod tests {
         let script = logged_in();
         let resident = Arc::new(resident(&dir, &script, Arc::default()));
         let robot = Wearing::default();
-        let (first, second) = tokio::join!(resident.say("one", &robot), resident.say("two", &robot));
+        let (first, second) =
+            tokio::join!(resident.say("one", &robot), resident.say("two", &robot));
         assert!(first.is_ok() && second.is_ok());
         let turns: Vec<Value> = script
             .lock()
@@ -1661,8 +2051,16 @@ pub(crate) mod tests {
         let dir = temp_dir("off");
         let script = logged_in();
         let launch = script.clone();
-        let resident = Resident::new(false, &dir, Launcher::Fake(Box::new(move || fake_server(launch.clone()))), Arc::default());
-        assert_eq!(resident.say("hi", &Wearing::default()).await.unwrap_err(), ResidentError::Disabled);
+        let resident = Resident::new(
+            false,
+            &dir,
+            Launcher::Fake(Box::new(move || fake_server(launch.clone()))),
+            Arc::default(),
+        );
+        assert_eq!(
+            resident.say("hi", &Wearing::default()).await.unwrap_err(),
+            ResidentError::Disabled
+        );
         assert_eq!(script.lock().unwrap().starts, 0);
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -1673,10 +2071,19 @@ pub(crate) mod tests {
         let dir = temp_dir("home");
         std::fs::create_dir_all(dir.join("user-codex")).unwrap();
         std::fs::write(dir.join("user-codex/auth.json"), "{}").unwrap();
-        resident(&dir, &logged_in(), Arc::default()).say("hi", &Wearing::default()).await.unwrap();
+        resident(&dir, &logged_in(), Arc::default())
+            .say("hi", &Wearing::default())
+            .await
+            .unwrap();
         let home = dir.join(CODEX_HOME_DIR);
-        assert_eq!(std::fs::metadata(&home).unwrap().permissions().mode() & 0o777, 0o700);
-        assert_eq!(std::fs::read_link(home.join("auth.json")).unwrap(), dir.join("user-codex/auth.json"));
+        assert_eq!(
+            std::fs::metadata(&home).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        assert_eq!(
+            std::fs::read_link(home.join("auth.json")).unwrap(),
+            dir.join("user-codex/auth.json")
+        );
         // Nothing else is put there: no config.toml.
         assert_eq!(std::fs::read_dir(&home).unwrap().count(), 1);
         let _ = std::fs::remove_dir_all(dir);
@@ -1700,7 +2107,10 @@ pub(crate) mod tests {
         std::fs::write(&link, "{\"tokens\":\"stale\"}").unwrap();
         prepare_codex_home(&home, &user).unwrap();
         assert_eq!(std::fs::read_link(&link).unwrap(), user.join("auth.json"));
-        assert_eq!(std::fs::read_to_string(&link).unwrap(), "{\"tokens\":\"user\"}");
+        assert_eq!(
+            std::fs::read_to_string(&link).unwrap(),
+            "{\"tokens\":\"user\"}"
+        );
 
         std::fs::remove_file(&link).unwrap();
         std::os::unix::fs::symlink(dir.join("elsewhere.json"), &link).unwrap();
@@ -1708,10 +2118,22 @@ pub(crate) mod tests {
         assert_eq!(std::fs::read_link(&link).unwrap(), user.join("auth.json"));
 
         // A write through the link, as Codex refreshes tokens (truncate and rewrite in place), lands in the user's.
-        let mut file = std::fs::OpenOptions::new().write(true).truncate(true).open(&link).unwrap();
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(&link)
+            .unwrap();
         std::io::Write::write_all(&mut file, b"{}").unwrap();
-        assert_eq!(std::fs::read_to_string(user.join("auth.json")).unwrap(), "{}");
-        assert!(std::fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+        assert_eq!(
+            std::fs::read_to_string(user.join("auth.json")).unwrap(),
+            "{}"
+        );
+        assert!(
+            std::fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -1720,26 +2142,55 @@ pub(crate) mod tests {
         let dir = temp_dir("memories");
         let memories = dir.join("user-codex/memories");
         std::fs::create_dir_all(memories.join("rollout_summaries")).unwrap();
-        std::fs::write(memories.join("memory_summary.md"), "The user's cat is called Biscuit.\n").unwrap();
-        std::fs::write(memories.join("MEMORY.md"), "# Pets\nCat: Biscuit\nlikes boxes\n\n# Work\nRust daemon\n").unwrap();
-        std::fs::write(memories.join("rollout_summaries/a.md"), "nothing here\nbiscuit again\n").unwrap();
+        std::fs::write(
+            memories.join("memory_summary.md"),
+            "The user's cat is called Biscuit.\n",
+        )
+        .unwrap();
+        std::fs::write(
+            memories.join("MEMORY.md"),
+            "# Pets\nCat: Biscuit\nlikes boxes\n\n# Work\nRust daemon\n",
+        )
+        .unwrap();
+        std::fs::write(
+            memories.join("rollout_summaries/a.md"),
+            "nothing here\nbiscuit again\n",
+        )
+        .unwrap();
         let before: Vec<_> = walk(&memories);
         let script = logged_in();
         script.lock().unwrap().turn_requests = vec![
             tool_call("search_memories", json!({"query": "BISCUIT"})),
             tool_call("search_memories", json!({"query": "zebra"})),
         ];
-        resident(&dir, &script, Arc::default()).say("what's my cat called?", &Wearing::default()).await.unwrap();
+        resident(&dir, &script, Arc::default())
+            .say("what's my cat called?", &Wearing::default())
+            .await
+            .unwrap();
 
         let start = script.lock().unwrap().received[3]["params"].clone();
         let instructions = start["developerInstructions"].as_str().unwrap();
-        assert!(instructions.contains("<memory_summary>\nThe user's cat is called Biscuit.\n</memory_summary>"));
+        assert!(
+            instructions
+                .contains("<memory_summary>\nThe user's cat is called Biscuit.\n</memory_summary>")
+        );
         let answers = script.lock().unwrap().answers.clone();
-        let found = answers[0]["result"]["contentItems"][0]["text"].as_str().unwrap();
-        assert!(found.contains("MEMORY.md:1\n# Pets\nCat: Biscuit\nlikes boxes"), "{found}");
-        assert!(found.contains("rollout_summaries/a.md:1\nnothing here\nbiscuit again"), "{found}");
+        let found = answers[0]["result"]["contentItems"][0]["text"]
+            .as_str()
+            .unwrap();
+        assert!(
+            found.contains("MEMORY.md:1\n# Pets\nCat: Biscuit\nlikes boxes"),
+            "{found}"
+        );
+        assert!(
+            found.contains("rollout_summaries/a.md:1\nnothing here\nbiscuit again"),
+            "{found}"
+        );
         assert!(!found.contains("Rust daemon"));
-        assert_eq!(answers[1]["result"]["contentItems"][0]["text"], "no matches");
+        assert_eq!(
+            answers[1]["result"]["contentItems"][0]["text"],
+            "no matches"
+        );
         assert_eq!(walk(&memories), before, "the memories folder was changed");
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -1768,21 +2219,33 @@ pub(crate) mod tests {
         assert_eq!(memory_summary(&dir), None);
         std::fs::write(dir.join("memories/memory_summary.md"), "记".repeat(5_000)).unwrap();
         let summary = memory_summary(&dir).unwrap();
-        assert!(summary.len() <= MEMORY_SUMMARY_MAX_BYTES && summary.len() > MEMORY_SUMMARY_MAX_BYTES - 3);
+        assert!(
+            summary.len() <= MEMORY_SUMMARY_MAX_BYTES
+                && summary.len() > MEMORY_SUMMARY_MAX_BYTES - 3
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
     fn the_instructions_make_the_buddy_the_character_in_its_one_language() {
         let ada = instructions(&Persona::of(&wearing("ada")), None, Brain::Codex);
-        assert!(ada.contains("Right now you are Ada") && ada.contains("Londoner"), "{ada}");
+        assert!(
+            ada.contains("Right now you are Ada") && ada.contains("Londoner"),
+            "{ada}"
+        );
         assert!(ada.contains("always reply in English"));
         assert!(!ada.contains("in the language the user spoke"));
         let xiaohe = instructions(&Persona::of(&wearing("wanwanxiaohe")), None, Brain::Claude);
-        assert!(xiaohe.contains("Right now you are Xiaohe (小何)") && xiaohe.contains("Taiwan"), "{xiaohe}");
+        assert!(
+            xiaohe.contains("Right now you are Xiaohe (小何)") && xiaohe.contains("Taiwan"),
+            "{xiaohe}"
+        );
         assert!(xiaohe.contains("always reply in Chinese"));
         let robot = instructions(&robot(), None, Brain::Codex);
-        assert!(robot.contains("Right now you are VibeBuddy") && robot.contains("always reply in English"));
+        assert!(
+            robot.contains("Right now you are VibeBuddy")
+                && robot.contains("always reply in English")
+        );
         // Every rule is still there, whoever the buddy is.
         for text in [&ada, &xiaohe, &robot] {
             assert!(text.contains("Answer only by calling the `speak` tool"));
@@ -1790,11 +2253,26 @@ pub(crate) mod tests {
             assert!(text.contains("Never state a fact you have not seen"));
             assert!(text.contains("You do no work yourself"));
         }
-        assert!(!ada.contains("likes to be called"), "no form of address picked");
-        let boss = Wearing { character: Some("ada".to_owned()), address: Some("boss".to_owned()) };
-        assert!(instructions(&Persona::of(&boss), None, Brain::Codex).contains("likes to be called \"boss\""));
-        let laoban = Wearing { character: Some("wanwanxiaohe".to_owned()), address: Some("laoban".to_owned()) };
-        assert!(instructions(&Persona::of(&laoban), None, Brain::Codex).contains("likes to be called \"老板\""));
+        assert!(
+            !ada.contains("likes to be called"),
+            "no form of address picked"
+        );
+        let boss = Wearing {
+            character: Some("ada".to_owned()),
+            address: Some("boss".to_owned()),
+        };
+        assert!(
+            instructions(&Persona::of(&boss), None, Brain::Codex)
+                .contains("likes to be called \"boss\"")
+        );
+        let laoban = Wearing {
+            character: Some("wanwanxiaohe".to_owned()),
+            address: Some("laoban".to_owned()),
+        };
+        assert!(
+            instructions(&Persona::of(&laoban), None, Brain::Codex)
+                .contains("likes to be called \"老板\"")
+        );
     }
 
     #[tokio::test]
@@ -1804,38 +2282,88 @@ pub(crate) mod tests {
         let resident = resident(&dir, &script, Arc::default());
         let received = |method: &str| -> Vec<Value> {
             let script = script.lock().unwrap();
-            script.received.iter().filter(|message| message["method"] == method).map(|message| message["params"].clone()).collect()
+            script
+                .received
+                .iter()
+                .filter(|message| message["method"] == method)
+                .map(|message| message["params"].clone())
+                .collect()
         };
         // What follows the context every command starts with.
         let texts = |input: &Value| -> Vec<String> {
             let items = input["input"].as_array().unwrap();
-            assert!(items[0]["text"].as_str().unwrap().contains("The user's local time"));
-            items[1..].iter().map(|item| item["text"].as_str().unwrap().to_owned()).collect()
+            assert!(
+                items[0]["text"]
+                    .as_str()
+                    .unwrap()
+                    .contains("The user's local time")
+            );
+            items[1..]
+                .iter()
+                .map(|item| item["text"].as_str().unwrap().to_owned())
+                .collect()
         };
 
         resident.say("hi", &wearing("ada")).await.unwrap();
         resident.say("again", &wearing("ada")).await.unwrap();
-        assert_eq!(script.lock().unwrap().starts, 1, "the same Character keeps the running thread");
+        assert_eq!(
+            script.lock().unwrap().starts,
+            1,
+            "the same Character keeps the running thread"
+        );
         let start = &received("thread/start")[0];
-        assert!(start["developerInstructions"].as_str().unwrap().contains("Right now you are Ada"));
+        assert!(
+            start["developerInstructions"]
+                .as_str()
+                .unwrap()
+                .contains("Right now you are Ada")
+        );
 
-        resident.say("你好", &wearing("wanwanxiaohe")).await.unwrap();
-        assert_eq!(script.lock().unwrap().starts, 2, "a new Character starts the app-server again");
+        resident
+            .say("你好", &wearing("wanwanxiaohe"))
+            .await
+            .unwrap();
+        assert_eq!(
+            script.lock().unwrap().starts,
+            2,
+            "a new Character starts the app-server again"
+        );
         let resume = &received("thread/resume")[0];
-        assert_eq!(resume["threadId"], "new-thread", "the same thread, never a fork");
+        assert_eq!(
+            resume["threadId"], "new-thread",
+            "the same thread, never a fork"
+        );
         let instructions = resume["developerInstructions"].as_str().unwrap();
-        assert!(instructions.contains("Right now you are Xiaohe (小何)") && instructions.contains("always reply in Chinese"));
+        assert!(
+            instructions.contains("Right now you are Xiaohe (小何)")
+                && instructions.contains("always reply in Chinese")
+        );
         assert_eq!(received("thread/start").len(), 1, "never a new thread");
         let turns = received("turn/start");
-        assert_eq!(texts(&turns[0]), ["hi"], "the first command has nothing to switch from");
+        assert_eq!(
+            texts(&turns[0]),
+            ["hi"],
+            "the first command has nothing to switch from"
+        );
         assert_eq!(texts(&turns[1]), ["again"]);
         let switched = texts(&turns[2]);
-        assert!(switched[0].starts_with(CONTEXT_PREFIX) && switched[0].contains("from now on you are Xiaohe (小何)"), "{switched:?}");
+        assert!(
+            switched[0].starts_with(CONTEXT_PREFIX)
+                && switched[0].contains("from now on you are Xiaohe (小何)"),
+            "{switched:?}"
+        );
         assert_eq!(switched[1], "你好");
 
-        resident.say("还在吗", &wearing("wanwanxiaohe")).await.unwrap();
+        resident
+            .say("还在吗", &wearing("wanwanxiaohe"))
+            .await
+            .unwrap();
         assert_eq!(script.lock().unwrap().starts, 2);
-        assert_eq!(texts(&received("turn/start")[3]), ["还在吗"], "the note goes once");
+        assert_eq!(
+            texts(&received("turn/start")[3]),
+            ["还在吗"],
+            "the note goes once"
+        );
 
         // Whom the thread spoke as is kept, so a change while the daemon was down is noticed too.
         let restarted = self::resident(&dir, &script, Arc::default());
@@ -1856,7 +2384,11 @@ pub(crate) mod tests {
         ]});
         assert_eq!(
             exchange_of(&turn),
-            Some(Exchange { said: "what's up?".to_owned(), replies: vec!["All quiet.".to_owned()], at: None })
+            Some(Exchange {
+                said: "what's up?".to_owned(),
+                replies: vec!["All quiet.".to_owned()],
+                at: None
+            })
         );
     }
 
@@ -1865,19 +2397,34 @@ pub(crate) mod tests {
         let dir = temp_dir("history");
         let script = logged_in();
         let resident = resident(&dir, &script, Arc::default());
-        assert_eq!(resident.history(5).await.unwrap(), [], "no thread yet, so nothing is started");
+        assert_eq!(
+            resident.history(5).await.unwrap(),
+            [],
+            "no thread yet, so nothing is started"
+        );
         assert_eq!(script.lock().unwrap().starts, 0);
         resident.say("hi", &Wearing::default()).await.unwrap();
         let history = resident.history(2).await.unwrap();
         assert_eq!(
             history,
             [
-                Exchange { said: "what's up?".to_owned(), replies: vec!["One task.".to_owned(), "It's fine.".to_owned()], at: None },
-                Exchange { said: "and now?".to_owned(), replies: vec!["Still one.".to_owned()], at: DateTime::from_timestamp(1_761_700_000, 0) },
+                Exchange {
+                    said: "what's up?".to_owned(),
+                    replies: vec!["One task.".to_owned(), "It's fine.".to_owned()],
+                    at: None
+                },
+                Exchange {
+                    said: "and now?".to_owned(),
+                    replies: vec!["Still one.".to_owned()],
+                    at: DateTime::from_timestamp(1_761_700_000, 0)
+                },
             ]
         );
         let list = script.lock().unwrap().received.last().unwrap()["params"].clone();
-        assert_eq!(list, json!({"threadId": "new-thread", "limit": 2, "sortDirection": "desc", "itemsView": "full"}));
+        assert_eq!(
+            list,
+            json!({"threadId": "new-thread", "limit": 2, "sortDirection": "desc", "itemsView": "full"})
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -1893,13 +2440,20 @@ pub(crate) mod tests {
         assert!(resident.ready());
         assert!(watcher.has_changed().unwrap(), "watchers hear it come on");
         watcher.mark_unchanged();
-        assert_eq!(script.lock().unwrap().starts, 0, "the check starts no app-server");
+        assert_eq!(
+            script.lock().unwrap().starts,
+            0,
+            "the check starts no app-server"
+        );
 
         // A check younger than the TTL stands.
         *resident.fake_problem.lock().unwrap() = Some(Problem::CodexLoggedOut);
         assert!(resident.check_readiness().await.ready());
         tokio::time::advance(READINESS_TTL).await;
-        assert_eq!(resident.check_readiness().await.problem, Some(Problem::CodexLoggedOut));
+        assert_eq!(
+            resident.check_readiness().await.problem,
+            Some(Problem::CodexLoggedOut)
+        );
         assert!(!resident.ready());
         assert!(watcher.has_changed().unwrap(), "and go off");
         watcher.mark_unchanged();
@@ -1912,25 +2466,42 @@ pub(crate) mod tests {
         let logged_out = super::tests::resident(&dir, &script, Arc::default());
         assert!(logged_out.check_readiness().await.ready());
         let watcher = logged_out.watch_ready();
-        assert_eq!(logged_out.say("hi", &Wearing::default()).await.unwrap_err(), ResidentError::NotLoggedIn);
-        assert_eq!(logged_out.readiness().problem, Some(Problem::CodexLoggedOut));
+        assert_eq!(
+            logged_out.say("hi", &Wearing::default()).await.unwrap_err(),
+            ResidentError::NotLoggedIn
+        );
+        assert_eq!(
+            logged_out.readiness().problem,
+            Some(Problem::CodexLoggedOut)
+        );
         assert!(watcher.has_changed().unwrap());
 
         let off = Resident::new(false, &dir, Launcher::Codex, Arc::default());
-        assert!(!off.check_readiness().await.ready() && !off.ready(), "switched off, nothing is checked");
+        assert!(
+            !off.check_readiness().await.ready() && !off.ready(),
+            "switched off, nothing is checked"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
     #[tokio::test]
     async fn the_revision_moves_when_a_turn_ends_or_the_thread_changes_but_not_on_reads() {
         let dir = temp_dir("revision");
-        let saved = Saved { thread_id: Some("old-thread".to_owned()), codex_version: None, persona: None };
+        let saved = Saved {
+            thread_id: Some("old-thread".to_owned()),
+            codex_version: None,
+            persona: None,
+        };
         save(&dir.join("resident.json"), &saved).unwrap();
         let script = logged_in();
         let first = resident(&dir, &script, Arc::default());
         assert_eq!(first.revision(), 0);
         first.history(5).await.unwrap();
-        assert_eq!(first.revision(), 0, "resuming the same thread and reading it changes nothing");
+        assert_eq!(
+            first.revision(),
+            0,
+            "resuming the same thread and reading it changes nothing"
+        );
         first.say("hi", &Wearing::default()).await.unwrap();
         assert_eq!(first.revision(), 1);
         first.history(5).await.unwrap();
@@ -1949,16 +2520,26 @@ pub(crate) mod tests {
     #[test]
     fn codex_runs_in_the_resident_codex_home() {
         let command = codex_command(Path::new("/bin/codex"), Path::new("/state/resident-codex"));
-        let home = command.as_std().get_envs().find(|(name, _)| *name == "CODEX_HOME").and_then(|(_, value)| value);
+        let home = command
+            .as_std()
+            .get_envs()
+            .find(|(name, _)| *name == "CODEX_HOME")
+            .and_then(|(_, value)| value);
         assert_eq!(home, Some(std::ffi::OsStr::new("/state/resident-codex")));
     }
 
     #[test]
     fn the_app_server_starts_without_plugins_apps_built_in_tools_or_the_users_mcp_servers() {
-        let args = app_server_args(&tool_overrides(), &["node_repl".to_owned(), "computer-use".to_owned()]);
+        let args = app_server_args(
+            &tool_overrides(),
+            &["node_repl".to_owned(), "computer-use".to_owned()],
+        );
         assert_eq!(args.last().map(String::as_str), Some("app-server"));
-        let overrides: Vec<&str> =
-            args.chunks(2).filter(|pair| pair[0] == "-c").map(|pair| pair[1].as_str()).collect();
+        let overrides: Vec<&str> = args
+            .chunks(2)
+            .filter(|pair| pair[0] == "-c")
+            .map(|pair| pair[1].as_str())
+            .collect();
         for expected in [
             "features.plugins=false",
             "features.apps=false",
@@ -1987,59 +2568,138 @@ pub(crate) mod tests {
     #[test]
     fn the_brain_setting_decides_readiness_and_auto_prefers_a_ready_codex() {
         let now = Some(tokio::time::Instant::now());
-        let codex_ready = Readiness { checked: now, problem: None, brain: None };
-        let logged_out = Readiness { checked: now, problem: Some(Problem::CodexLoggedOut), brain: None };
-        let missing = Readiness { checked: now, problem: Some(Problem::CodexMissing), brain: None };
+        let codex_ready = Readiness {
+            checked: now,
+            problem: None,
+            brain: None,
+        };
+        let logged_out = Readiness {
+            checked: now,
+            problem: Some(Problem::CodexLoggedOut),
+            brain: None,
+        };
+        let missing = Readiness {
+            checked: now,
+            problem: Some(Problem::CodexMissing),
+            brain: None,
+        };
         let unchecked = Readiness::default();
         let brain = |readiness: Readiness| readiness.ready().then_some(readiness.brain).flatten();
         let problem = |readiness: Readiness| readiness.problem;
 
         // auto: Codex when ready, else Claude Code when it is there with a key.
-        assert_eq!(brain(decide(BrainChoice::Auto, codex_ready, true, true)), Some(Brain::Codex));
-        assert_eq!(brain(decide(BrainChoice::Auto, logged_out, true, true)), Some(Brain::Claude));
-        assert_eq!(brain(decide(BrainChoice::Auto, unchecked, true, true)), Some(Brain::Claude));
-        assert!(!decide(BrainChoice::Auto, unchecked, true, false).ready(), "nothing known yet");
-        assert_eq!(decide(BrainChoice::Auto, unchecked, true, false).problem, None);
+        assert_eq!(
+            brain(decide(BrainChoice::Auto, codex_ready, true, true)),
+            Some(Brain::Codex)
+        );
+        assert_eq!(
+            brain(decide(BrainChoice::Auto, logged_out, true, true)),
+            Some(Brain::Claude)
+        );
+        assert_eq!(
+            brain(decide(BrainChoice::Auto, unchecked, true, true)),
+            Some(Brain::Claude)
+        );
+        assert!(
+            !decide(BrainChoice::Auto, unchecked, true, false).ready(),
+            "nothing known yet"
+        );
+        assert_eq!(
+            decide(BrainChoice::Auto, unchecked, true, false).problem,
+            None
+        );
         // Not ready: without a key it is Codex's problem; with one, Claude Code's.
-        assert_eq!(problem(decide(BrainChoice::Auto, missing, true, false)), Some(Problem::CodexMissing));
-        assert_eq!(problem(decide(BrainChoice::Auto, logged_out, true, false)), Some(Problem::CodexLoggedOut));
-        assert_eq!(problem(decide(BrainChoice::Auto, logged_out, false, true)), Some(Problem::ClaudeMissing));
-        assert_eq!(decide(BrainChoice::Auto, logged_out, false, true).brain, None);
+        assert_eq!(
+            problem(decide(BrainChoice::Auto, missing, true, false)),
+            Some(Problem::CodexMissing)
+        );
+        assert_eq!(
+            problem(decide(BrainChoice::Auto, logged_out, true, false)),
+            Some(Problem::CodexLoggedOut)
+        );
+        assert_eq!(
+            problem(decide(BrainChoice::Auto, logged_out, false, true)),
+            Some(Problem::ClaudeMissing)
+        );
+        assert_eq!(
+            decide(BrainChoice::Auto, logged_out, false, true).brain,
+            None
+        );
 
         // codex and claude stick to their brain.
-        assert_eq!(brain(decide(BrainChoice::Codex, codex_ready, true, true)), Some(Brain::Codex));
-        assert_eq!(problem(decide(BrainChoice::Codex, logged_out, true, true)), Some(Problem::CodexLoggedOut));
-        assert_eq!(brain(decide(BrainChoice::Claude, codex_ready, true, true)), Some(Brain::Claude));
-        assert_eq!(problem(decide(BrainChoice::Claude, codex_ready, false, true)), Some(Problem::ClaudeMissing));
-        assert_eq!(problem(decide(BrainChoice::Claude, codex_ready, true, false)), Some(Problem::AnthropicKeyMissing));
+        assert_eq!(
+            brain(decide(BrainChoice::Codex, codex_ready, true, true)),
+            Some(Brain::Codex)
+        );
+        assert_eq!(
+            problem(decide(BrainChoice::Codex, logged_out, true, true)),
+            Some(Problem::CodexLoggedOut)
+        );
+        assert_eq!(
+            brain(decide(BrainChoice::Claude, codex_ready, true, true)),
+            Some(Brain::Claude)
+        );
+        assert_eq!(
+            problem(decide(BrainChoice::Claude, codex_ready, false, true)),
+            Some(Problem::ClaudeMissing)
+        );
+        assert_eq!(
+            problem(decide(BrainChoice::Claude, codex_ready, true, false)),
+            Some(Problem::AnthropicKeyMissing)
+        );
     }
 
     #[tokio::test]
-    async fn the_key_and_brain_are_kept_in_a_private_file_and_switching_brains_moves_the_revision() {
+    async fn the_key_and_brain_are_kept_in_a_private_file_and_switching_brains_moves_the_revision()
+    {
         use std::os::unix::fs::PermissionsExt;
         let dir = temp_dir("settings");
         let file = dir.join("config").join(SETTINGS_FILE);
         let script = Arc::new(std::sync::Mutex::new(Script::default()));
         let claude = crate::resident_claude::tests::script();
         let resident = resident(&dir, &script, Arc::default())
-            .with_claude(crate::resident_claude::tests::brain(&dir, &claude, Arc::default()))
+            .with_claude(crate::resident_claude::tests::brain(
+                &dir,
+                &claude,
+                Arc::default(),
+            ))
             .with_settings_file(file.clone());
         *resident.fake_problem.lock().unwrap() = Some(Problem::CodexLoggedOut);
-        assert_eq!(resident.check_readiness().await.problem, Some(Problem::CodexLoggedOut));
+        assert_eq!(
+            resident.check_readiness().await.problem,
+            Some(Problem::CodexLoggedOut)
+        );
         assert_eq!(resident.brain(), Brain::Codex);
 
-        resident.set_anthropic_key(Some("  sk-ant-secret \n".to_owned())).await.unwrap();
+        resident
+            .set_anthropic_key(Some("  sk-ant-secret \n".to_owned()))
+            .await
+            .unwrap();
         assert!(resident.ready() && resident.anthropic_key_set());
-        assert_eq!(resident.brain(), Brain::Claude, "auto falls back to Claude Code with a key");
-        assert_eq!(std::fs::metadata(&file).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            resident.brain(),
+            Brain::Claude,
+            "auto falls back to Claude Code with a key"
+        );
+        assert_eq!(
+            std::fs::metadata(&file).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
         let stored: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
-        assert_eq!(stored, json!({"brain": "auto", "anthropic_api_key": "sk-ant-secret"}));
+        assert_eq!(
+            stored,
+            json!({"brain": "auto", "anthropic_api_key": "sk-ant-secret"})
+        );
 
         // The voice command goes to Claude Code, with the stored key, and its session is the one reported.
         let answer = resident.say("hi", &Wearing::default()).await.unwrap();
         assert_eq!(Some(answer.thread_id.clone()), resident.thread_id());
         let launches = claude.lock().unwrap().launches.clone();
-        assert!(launches[0].1.contains(&("ANTHROPIC_API_KEY".to_owned(), "sk-ant-secret".to_owned())));
+        assert!(
+            launches[0]
+                .1
+                .contains(&("ANTHROPIC_API_KEY".to_owned(), "sk-ant-secret".to_owned()))
+        );
         assert_eq!(script.lock().unwrap().starts, 0, "Codex wasn't started");
 
         // Codex comes back: auto goes back to it, and the history to show is another one.
@@ -2052,14 +2712,25 @@ pub(crate) mod tests {
         resident.set_brain(BrainChoice::Claude).await.unwrap();
         assert_eq!(resident.brain(), Brain::Claude);
         resident.set_anthropic_key(None).await.unwrap();
-        assert_eq!(resident.readiness().problem, Some(Problem::AnthropicKeyMissing));
+        assert_eq!(
+            resident.readiness().problem,
+            Some(Problem::AnthropicKeyMissing)
+        );
         assert!(!resident.ready());
-        assert_eq!(resident.say("hi", &Wearing::default()).await.unwrap_err(), ResidentError::NoAnthropicKey);
+        assert_eq!(
+            resident.say("hi", &Wearing::default()).await.unwrap_err(),
+            ResidentError::NoAnthropicKey
+        );
         let stored: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
-        assert_eq!(stored, json!({"brain": "claude"}), "the key is gone from the file");
+        assert_eq!(
+            stored,
+            json!({"brain": "claude"}),
+            "the key is gone from the file"
+        );
 
         // Read back at the next start.
-        let again = Resident::new(true, &dir, Launcher::Codex, Arc::default()).with_settings_file(file);
+        let again =
+            Resident::new(true, &dir, Launcher::Codex, Arc::default()).with_settings_file(file);
         assert_eq!(again.brain_setting(), BrainChoice::Claude);
         assert!(!again.anthropic_key_set());
         let _ = std::fs::remove_dir_all(dir);
@@ -2069,24 +2740,37 @@ pub(crate) mod tests {
     async fn the_claude_history_and_hooks_are_the_claude_sessions() {
         let dir = temp_dir("claude-hooks");
         let claude = crate::resident_claude::tests::script();
-        let resident = resident(&dir, &logged_in(), Arc::default())
-            .with_claude(crate::resident_claude::tests::brain(&dir, &claude, Arc::default()));
-        resident.set_anthropic_key(Some("key".to_owned())).await.unwrap();
+        let resident = resident(&dir, &logged_in(), Arc::default()).with_claude(
+            crate::resident_claude::tests::brain(&dir, &claude, Arc::default()),
+        );
+        resident
+            .set_anthropic_key(Some("key".to_owned()))
+            .await
+            .unwrap();
         resident.set_brain(BrainChoice::Claude).await.unwrap();
         assert_eq!(resident.history(5).await.unwrap(), [], "no session yet");
         resident.say("hi", &Wearing::default()).await.unwrap();
         let session = resident.thread_id().unwrap();
         assert!(resident.owns_claude_hook(&session, None));
-        assert!(resident.owns_claude_hook("other", Some(&dir.join("resident").display().to_string())));
+        assert!(
+            resident.owns_claude_hook("other", Some(&dir.join("resident").display().to_string()))
+        );
         assert!(!resident.owns_claude_hook("other", Some("/work/vibe-buddy")));
-        assert!(!resident.owns_hook(&session, None, None), "a Claude session id isn't a Codex thread");
+        assert!(
+            !resident.owns_hook(&session, None, None),
+            "a Claude session id isn't a Codex thread"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
     fn hooks_from_the_resident_thread_or_its_directory_are_recognised() {
         let dir = temp_dir("hooks");
-        let saved = Saved { thread_id: Some("resident-thread".to_owned()), codex_version: None, persona: None };
+        let saved = Saved {
+            thread_id: Some("resident-thread".to_owned()),
+            codex_version: None,
+            persona: None,
+        };
         save(&dir.join("resident.json"), &saved).unwrap();
         let resident = Resident::new(false, &dir, Launcher::Codex, Arc::default());
         let cwd = dir.join("resident").display().to_string();

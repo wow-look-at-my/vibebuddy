@@ -66,7 +66,13 @@ impl AgentIcon {
         for (index, &color) in self.pixels().iter().enumerate() {
             if color != 0 {
                 let index = index as i32;
-                canvas.fill_rect(x + index % SIZE * scale, y + index / SIZE * scale, scale, scale, color);
+                canvas.fill_rect(
+                    x + index % SIZE * scale,
+                    y + index / SIZE * scale,
+                    scale,
+                    scale,
+                    color,
+                );
             }
         }
     }
@@ -80,13 +86,15 @@ impl AgentIcon {
                 let (mut red, mut green, mut blue, mut cover) = (0, 0, 0, 0);
                 // Screen pixel t spans [t·16, (t+1)·16) and icon pixel s spans [s·size, (s+1)·size), in 1/(16·size) units.
                 for sy in ty * SIZE / size..=((ty + 1) * SIZE - 1) / size {
-                    let height = ((sy + 1) * size).min((ty + 1) * SIZE) - (sy * size).max(ty * SIZE);
+                    let height =
+                        ((sy + 1) * size).min((ty + 1) * SIZE) - (sy * size).max(ty * SIZE);
                     for sx in tx * SIZE / size..=((tx + 1) * SIZE - 1) / size {
                         let color = i32::from(pixels[(sy * SIZE + sx) as usize]);
                         if color == 0 {
                             continue;
                         }
-                        let weight = height * (((sx + 1) * size).min((tx + 1) * SIZE) - (sx * size).max(tx * SIZE));
+                        let weight = height
+                            * (((sx + 1) * size).min((tx + 1) * SIZE) - (sx * size).max(tx * SIZE));
                         red += (color >> 11 & 0x1F) * weight;
                         green += (color >> 5 & 0x3F) * weight;
                         blue += (color & 0x1F) * weight;
@@ -94,8 +102,14 @@ impl AgentIcon {
                     }
                 }
                 if cover > 0 {
-                    let color = ((red / cover) << 11 | (green / cover) << 5 | (blue / cover)) as u16;
-                    canvas.blend(x + tx, y + ty, color, ((cover * 15 + SIZE * SIZE / 2) / (SIZE * SIZE)) as u8);
+                    let color =
+                        ((red / cover) << 11 | (green / cover) << 5 | (blue / cover)) as u16;
+                    canvas.blend(
+                        x + tx,
+                        y + ty,
+                        color,
+                        ((cover * 15 + SIZE * SIZE / 2) / (SIZE * SIZE)) as u8,
+                    );
                 }
             }
         }
@@ -117,7 +131,10 @@ mod tests {
 
     #[test]
     fn agents_map_to_their_icons_and_prefixes() {
-        assert_eq!(AgentIcon::for_agent("claude-code").map(AgentIcon::prefix), Some(&b"CC:"[..]));
+        assert_eq!(
+            AgentIcon::for_agent("claude-code").map(AgentIcon::prefix),
+            Some(&b"CC:"[..])
+        );
         assert_eq!(AgentIcon::for_agent("github-actions"), Some(AgentIcon::Ci));
         assert_eq!(AgentIcon::for_agent("unknown"), None);
     }

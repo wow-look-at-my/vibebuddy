@@ -24,7 +24,11 @@ fn crc32(data: &[u8]) -> u32 {
     for &byte in data {
         crc ^= byte as u32;
         for _ in 0..8 {
-            crc = if crc & 1 != 0 { 0xEDB8_8320 ^ (crc >> 1) } else { crc >> 1 };
+            crc = if crc & 1 != 0 {
+                0xEDB8_8320 ^ (crc >> 1)
+            } else {
+                crc >> 1
+            };
         }
     }
     !crc
@@ -47,8 +51,14 @@ impl Pack {
         if data.len() <= HEADER_BYTES || &data[..4] != b"VBCP" || data[52] != 1 {
             return None;
         }
-        let id_bytes: Vec<u8> = data[16..48].iter().copied().take_while(|&byte| byte != 0).collect();
-        let id = String::from_utf8(id_bytes).ok().filter(|id| !id.is_empty())?;
+        let id_bytes: Vec<u8> = data[16..48]
+            .iter()
+            .copied()
+            .take_while(|&byte| byte != 0)
+            .collect();
+        let id = String::from_utf8(id_bytes)
+            .ok()
+            .filter(|id| !id.is_empty())?;
         let mut pools = Vec::new();
         for occasion in 0..data[53] as usize {
             let first = u16_at(data, 56 + occasion * 4);
@@ -57,14 +67,18 @@ impl Pack {
             for line in first..first + count {
                 let offset = u32_at(data, 128 + line * 8);
                 let samples = u32_at(data, 132 + line * 8);
-                lines.push((data.get(offset..offset + samples.div_ceil(2))?.to_vec(), samples as u32));
+                lines.push((
+                    data.get(offset..offset + samples.div_ceil(2))?.to_vec(),
+                    samples as u32,
+                ));
             }
             pools.push(lines);
         }
         let look = (u32_at(data, 4) == 2 && u32_at(data, 1012) > 0)
             .then(|| {
                 let offset = u32_at(data, 1008);
-                data.get(offset..offset + u32_at(data, 1012)).map(<[u8]>::to_vec)
+                data.get(offset..offset + u32_at(data, 1012))
+                    .map(<[u8]>::to_vec)
             })
             .flatten();
         Some(Pack { id, pools, look })
@@ -74,7 +88,11 @@ impl Pack {
     pub fn build(&self) -> Option<Vec<u8>> {
         let id = self.id.as_bytes();
         let lines: usize = self.pools.iter().map(Vec::len).sum();
-        let limit = if self.look.is_some() { (1008 - 128) / 8 } else { (1020 - 128) / 8 };
+        let limit = if self.look.is_some() {
+            (1008 - 128) / 8
+        } else {
+            (1020 - 128) / 8
+        };
         if id.is_empty() || id.len() > 31 || lines > limit || self.pools.len() > (128 - 56) / 4 {
             return None;
         }
@@ -83,10 +101,13 @@ impl Pack {
         let mut line = 0;
         for (occasion, pool) in self.pools.iter().enumerate() {
             let first = if pool.is_empty() { 0 } else { line };
-            head[56 + occasion * 4..58 + occasion * 4].copy_from_slice(&(first as u16).to_le_bytes());
-            head[58 + occasion * 4..60 + occasion * 4].copy_from_slice(&(pool.len() as u16).to_le_bytes());
+            head[56 + occasion * 4..58 + occasion * 4]
+                .copy_from_slice(&(first as u16).to_le_bytes());
+            head[58 + occasion * 4..60 + occasion * 4]
+                .copy_from_slice(&(pool.len() as u16).to_le_bytes());
             for (audio, samples) in pool {
-                head[128 + line * 8..132 + line * 8].copy_from_slice(&((HEADER_BYTES + payload.len()) as u32).to_le_bytes());
+                head[128 + line * 8..132 + line * 8]
+                    .copy_from_slice(&((HEADER_BYTES + payload.len()) as u32).to_le_bytes());
                 head[132 + line * 8..136 + line * 8].copy_from_slice(&samples.to_le_bytes());
                 payload.extend_from_slice(audio);
                 line += 1;
@@ -94,7 +115,8 @@ impl Pack {
         }
         if let Some(look) = &self.look {
             payload.resize(payload.len().next_multiple_of(4), 0);
-            head[1008..1012].copy_from_slice(&((HEADER_BYTES + payload.len()) as u32).to_le_bytes());
+            head[1008..1012]
+                .copy_from_slice(&((HEADER_BYTES + payload.len()) as u32).to_le_bytes());
             head[1012..1016].copy_from_slice(&(look.len() as u32).to_le_bytes());
             payload.extend_from_slice(look);
         }
@@ -135,12 +157,22 @@ impl Pack {
 /// A made Character as the box gets it: the daemon's pack of its lines (`pack.bin`, no look), with the lines of a form
 /// of address (`address/<form>.bin`) in place of the plain ones, wearing `look`. The pack always carries the made
 /// Character's `id`, which the daemon gives a spoken reply its voice by. None if `pack` isn't a Character pack.
-pub fn made(pack: &[u8], variant: Option<&[u8]>, look: Option<Vec<u8>>, id: &str) -> Option<Vec<u8>> {
+pub fn made(
+    pack: &[u8],
+    variant: Option<&[u8]>,
+    look: Option<Vec<u8>>,
+    id: &str,
+) -> Option<Vec<u8>> {
     let mut made = Pack::parse(pack)?;
     if let Some(variant) = variant.and_then(Pack::parse) {
         made = made.with_address(&variant);
     }
-    Pack { id: id.to_owned(), look, ..made }.build()
+    Pack {
+        id: id.to_owned(),
+        look,
+        ..made
+    }
+    .build()
 }
 
 /// An image as plain pixels: RGBA, 8 bits each, row by row.
@@ -162,16 +194,25 @@ impl Image {
 /// magenta background) has its background flood-filled away from the edges, so white inside the figure stays.
 fn opaque_mask(image: &Image) -> Vec<bool> {
     let count = image.width * image.height;
-    let mut opaque: Vec<bool> = (0..count).map(|index| image.pixels[index * 4 + 3] >= 128).collect();
+    let mut opaque: Vec<bool> = (0..count)
+        .map(|index| image.pixels[index * 4 + 3] >= 128)
+        .collect();
     if opaque.iter().any(|&pixel| !pixel) {
         return opaque;
     }
     let background = |index: usize| {
-        let [r, g, b] = [image.pixels[index * 4], image.pixels[index * 4 + 1], image.pixels[index * 4 + 2]];
+        let [r, g, b] = [
+            image.pixels[index * 4],
+            image.pixels[index * 4 + 1],
+            image.pixels[index * 4 + 2],
+        ];
         r.min(g).min(b) > 225 || (r > 230 && g < 30 && b > 230)
     };
     let (w, h) = (image.width, image.height);
-    let mut stack: Vec<usize> = (0..w).flat_map(|x| [x, (h - 1) * w + x]).chain((0..h).flat_map(|y| [y * w, y * w + w - 1])).collect();
+    let mut stack: Vec<usize> = (0..w)
+        .flat_map(|x| [x, (h - 1) * w + x])
+        .chain((0..h).flat_map(|y| [y * w, y * w + w - 1]))
+        .collect();
     while let Some(index) = stack.pop() {
         if !opaque[index] || !background(index) {
             continue;
@@ -210,7 +251,12 @@ fn bounding_box(image: &Image, opaque: &[bool]) -> Option<(usize, usize, usize, 
 
 /// Shrinks the figure into a cell: each cell pixel averages the opaque source pixels under it, and is
 /// kept only where the figure covers most of it, so there is no halo.
-fn cell(image: &Image, opaque: &[bool], (left, top, right, bottom): (usize, usize, usize, usize), scale: f64) -> Vec<Option<[u8; 3]>> {
+fn cell(
+    image: &Image,
+    opaque: &[bool],
+    (left, top, right, bottom): (usize, usize, usize, usize),
+    scale: f64,
+) -> Vec<Option<[u8; 3]>> {
     let (source_w, source_h) = (right - left, bottom - top);
     let w = ((source_w as f64 * scale).round() as usize).clamp(1, LOOK_WIDTH);
     let h = ((source_h as f64 * scale).round() as usize).clamp(1, LOOK_HEIGHT);
@@ -235,7 +281,8 @@ fn cell(image: &Image, opaque: &[bool], (left, top, right, bottom): (usize, usiz
                 }
             }
             if covered * 100 >= (x1 - x0) * (y1 - y0) * 55 {
-                out[(cell_top + cy) * LOOK_WIDTH + cell_left + cx] = Some(sum.map(|total| (total / covered) as u8));
+                out[(cell_top + cy) * LOOK_WIDTH + cell_left + cx] =
+                    Some(sum.map(|total| (total / covered) as u8));
             }
         }
     }
@@ -255,11 +302,15 @@ fn palette(colors: &[[u8; 3]], size: usize) -> Vec<[u8; 3]> {
                     let values = colors.iter().map(|color| color[channel]);
                     values.clone().max().unwrap() - values.min().unwrap()
                 };
-                let channel = (0..3).max_by_key(|&channel| (range(channel), std::cmp::Reverse(channel))).unwrap();
+                let channel = (0..3)
+                    .max_by_key(|&channel| (range(channel), std::cmp::Reverse(channel)))
+                    .unwrap();
                 (index, channel, range(channel))
             })
             .max_by_key(|&(index, _, range)| (range, std::cmp::Reverse(index)));
-        let Some((index, channel, _)) = widest else { break };
+        let Some((index, channel, _)) = widest else {
+            break;
+        };
         let mut sorted = boxes[index].clone();
         sorted.sort_by_key(|color| color[channel]);
         let upper = sorted.split_off(sorted.len() / 2);
@@ -271,7 +322,13 @@ fn palette(colors: &[[u8; 3]], size: usize) -> Vec<[u8; 3]> {
         .filter(|colors| !colors.is_empty())
         .map(|colors| {
             let n = colors.len();
-            [0, 1, 2].map(|channel| (colors.iter().map(|color| color[channel] as usize).sum::<usize>() / n) as u8)
+            [0, 1, 2].map(|channel| {
+                (colors
+                    .iter()
+                    .map(|color| color[channel] as usize)
+                    .sum::<usize>()
+                    / n) as u8
+            })
         })
         .collect()
 }
@@ -283,7 +340,11 @@ fn rgb565([r, g, b]: [u8; 3]) -> u16 {
 /// The figures in an image: split along blank rows, then each band along blank columns, wherever the gap is wide
 /// enough not to be a gap inside one figure. A split that leaves a part less than half the tallest one's height (a
 /// loose sparkle, a tail tip) is no sheet: the whole is one figure.
-fn figure_boxes(image: &Image, opaque: &[bool], whole: (usize, usize, usize, usize)) -> Vec<(usize, usize, usize, usize)> {
+fn figure_boxes(
+    image: &Image,
+    opaque: &[bool],
+    whole: (usize, usize, usize, usize),
+) -> Vec<(usize, usize, usize, usize)> {
     let w = image.width;
     let (left, top, right, bottom) = whole;
     let gap = ((right - left).max(bottom - top) / 40).max(2);
@@ -299,14 +360,23 @@ fn figure_boxes(image: &Image, opaque: &[bool], whole: (usize, usize, usize, usi
         out
     };
     let mut parts = Vec::new();
-    for (band_top, band_bottom) in runs(top, bottom, &|y| (left..right).any(|x| opaque[y * w + x])) {
-        for (column_left, column_right) in runs(left, right, &|x| (band_top..band_bottom).any(|y| opaque[y * w + x])) {
-            let rows = runs(band_top, band_bottom, &|y| (column_left..column_right).any(|x| opaque[y * w + x]));
+    for (band_top, band_bottom) in runs(top, bottom, &|y| (left..right).any(|x| opaque[y * w + x]))
+    {
+        for (column_left, column_right) in runs(left, right, &|x| {
+            (band_top..band_bottom).any(|y| opaque[y * w + x])
+        }) {
+            let rows = runs(band_top, band_bottom, &|y| {
+                (column_left..column_right).any(|x| opaque[y * w + x])
+            });
             parts.push((column_left, rows[0].0, column_right, rows[rows.len() - 1].1));
         }
     }
     let tallest = parts.iter().map(|part| part.3 - part.1).max().unwrap_or(0);
-    if parts.len() > 1 && parts.iter().all(|part| (part.3 - part.1) * 2 >= tallest) { parts } else { vec![whole] }
+    if parts.len() > 1 && parts.iter().all(|part| (part.3 - part.1) * 2 >= tallest) {
+        parts
+    } else {
+        vec![whole]
+    }
 }
 
 /// One figure per frame, in the order normal, eyes closed, happy, sad. An image can hold one figure or a sheet of
@@ -321,22 +391,42 @@ pub fn build_look(images: &[Image]) -> Option<Vec<u8>> {
     let mut figures = Vec::new();
     for (index, (image, mask)) in images.iter().zip(&masks).enumerate() {
         let whole = bounding_box(image, mask)?;
-        figures.extend(figure_boxes(image, mask, whole).into_iter().map(|figure| (index, figure)));
+        figures.extend(
+            figure_boxes(image, mask, whole)
+                .into_iter()
+                .map(|figure| (index, figure)),
+        );
     }
-    let frames: Vec<(usize, (usize, usize, usize, usize))> = (0..4).map(|frame| figures[if frame < figures.len() { frame } else { 0 }]).collect();
+    let frames: Vec<(usize, (usize, usize, usize, usize))> = (0..4)
+        .map(|frame| figures[if frame < figures.len() { frame } else { 0 }])
+        .collect();
     let (_, top, _, bottom) = frames[0].1;
     let scale = FIGURE_HEIGHT as f64 / (bottom - top) as f64;
-    let cells: Vec<Vec<Option<[u8; 3]>>> = frames.iter().map(|&(index, figure)| cell(&images[index], &masks[index], figure, scale)).collect();
+    let cells: Vec<Vec<Option<[u8; 3]>>> = frames
+        .iter()
+        .map(|&(index, figure)| cell(&images[index], &masks[index], figure, scale))
+        .collect();
     let opaque: Vec<[u8; 3]> = cells.iter().flatten().filter_map(|pixel| *pixel).collect();
     let colors = palette(&opaque, LOOK_COLORS - 1);
     let nearest = |color: [u8; 3]| {
-        let distance = |entry: &[u8; 3]| (0..3).map(|c| (color[c] as i32 - entry[c] as i32).pow(2)).sum::<i32>();
-        (0..colors.len()).min_by_key(|&index| distance(&colors[index])).unwrap() as u8 + 1
+        let distance = |entry: &[u8; 3]| {
+            (0..3)
+                .map(|c| (color[c] as i32 - entry[c] as i32).pow(2))
+                .sum::<i32>()
+        };
+        (0..colors.len())
+            .min_by_key(|&index| distance(&colors[index]))
+            .unwrap() as u8
+            + 1
     };
     let mut out = b"LOOK".to_vec();
     out.extend_from_slice(&[LOOK_WIDTH as u8, LOOK_HEIGHT as u8, 4, 0]);
     for entry in 0..LOOK_COLORS {
-        let color = if entry == 0 { 0 } else { colors.get(entry - 1).map_or(0, |&color| rgb565(color)) };
+        let color = if entry == 0 {
+            0
+        } else {
+            colors.get(entry - 1).map_or(0, |&color| rgb565(color))
+        };
         out.extend_from_slice(&color.to_le_bytes());
     }
     for cell in &cells {
@@ -354,7 +444,11 @@ pub fn look_frames(look: &[u8]) -> Option<Vec<Image>> {
     let palette: Vec<[u8; 3]> = (0..LOOK_COLORS)
         .map(|index| {
             let entry = u16_at(look, 8 + index * 2);
-            [((entry >> 11) * 255 / 31) as u8, (((entry >> 5) & 0x3F) * 255 / 63) as u8, ((entry & 0x1F) * 255 / 31) as u8]
+            [
+                ((entry >> 11) * 255 / 31) as u8,
+                (((entry >> 5) & 0x3F) * 255 / 63) as u8,
+                ((entry & 0x1F) * 255 / 31) as u8,
+            ]
         })
         .collect();
     let frames = (0..4)
@@ -368,7 +462,11 @@ pub fn look_frames(look: &[u8]) -> Option<Vec<Image>> {
                     pixels[at * 4..at * 4 + 4].copy_from_slice(&[r, g, b, 255]);
                 }
             }
-            Image { width: LOOK_WIDTH, height: LOOK_HEIGHT, pixels }
+            Image {
+                width: LOOK_WIDTH,
+                height: LOOK_HEIGHT,
+                pixels,
+            }
         })
         .collect();
     Some(frames)
@@ -380,7 +478,12 @@ mod tests {
     use std::path::PathBuf;
 
     fn shipped(path: &str) -> Option<Vec<u8>> {
-        std::fs::read(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../characters").join(path)).ok()
+        std::fs::read(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../characters")
+                .join(path),
+        )
+        .ok()
     }
 
     #[test]
@@ -400,8 +503,16 @@ mod tests {
         let variant = Pack::parse(&shipped("wanwanxiaohe/address/ge.bin").unwrap()).unwrap();
         let addressed = base.clone().with_address(&variant);
         for (occasion, (pool, lines)) in addressed.pools.iter().zip(&variant.pools).enumerate() {
-            assert_eq!(&pool[..lines.len()], &lines[..], "occasion {occasion}: the variant's lines come first");
-            assert_eq!(&pool[lines.len()..], &base.pools[occasion][lines.len()..], "occasion {occasion}: the rest stay");
+            assert_eq!(
+                &pool[..lines.len()],
+                &lines[..],
+                "occasion {occasion}: the variant's lines come first"
+            );
+            assert_eq!(
+                &pool[lines.len()..],
+                &base.pools[occasion][lines.len()..],
+                "occasion {occasion}: the rest stay"
+            );
         }
         assert_eq!(addressed.look, base.look);
         let rebuilt = Pack::parse(&addressed.build().unwrap()).unwrap();
@@ -415,10 +526,18 @@ mod tests {
             for x in 40..60 {
                 let at = (y * 100 + x) * 4;
                 let eye = y == 30 && (x == 45 || x == 54);
-                pixels[at..at + 3].copy_from_slice(if eye { &[255, 255, 255] } else { &[250, 120, 20] });
+                pixels[at..at + 3].copy_from_slice(if eye {
+                    &[255, 255, 255]
+                } else {
+                    &[250, 120, 20]
+                });
             }
         }
-        Image { width: 100, height: 100, pixels }
+        Image {
+            width: 100,
+            height: 100,
+            pixels,
+        }
     }
 
     #[test]
@@ -430,9 +549,16 @@ mod tests {
         let alpha = |x: usize, y: usize| frames[0].pixels[(y * LOOK_WIDTH + x) * 4 + 3];
         assert_eq!(alpha(0, 0), 0, "the background is gone");
         assert_eq!(alpha(24, 40), 255, "the figure is there");
-        assert_eq!(alpha(24, 3), 0, "60 tall in a 64-tall cell: the top rows are empty");
+        assert_eq!(
+            alpha(24, 3),
+            0,
+            "60 tall in a 64-tall cell: the top rows are empty"
+        );
         assert_eq!(alpha(24, 63), 255, "bottom-aligned");
-        assert_eq!(frames[3], frames[0], "a single drawing stands in for all four");
+        assert_eq!(
+            frames[3], frames[0],
+            "a single drawing stands in for all four"
+        );
     }
 
     /// A white 200 × 200 image with solid blocks: left, top, width, height, color.
@@ -445,7 +571,11 @@ mod tests {
                 }
             }
         }
-        Image { width: 200, height: 200, pixels }
+        Image {
+            width: 200,
+            height: 200,
+            pixels,
+        }
     }
 
     #[test]
@@ -458,14 +588,28 @@ mod tests {
         ]);
         let frames = look_frames(&build_look(&[four]).unwrap()).unwrap();
         let middle = |frame: usize| &frames[frame].pixels[(40 * LOOK_WIDTH + 24) * 4..][..4];
-        assert!(middle(0)[0] > 200 && middle(1)[1] > 150 && middle(2)[2] > 200 && middle(3)[0] > 200 && middle(3)[1] > 150);
+        assert!(
+            middle(0)[0] > 200
+                && middle(1)[1] > 150
+                && middle(2)[2] > 200
+                && middle(3)[0] > 200
+                && middle(3)[1] > 150
+        );
         let alpha = |y: usize| frames[0].pixels[(y * LOOK_WIDTH + 24) * 4 + 3];
-        assert_eq!((alpha(3), alpha(4)), (0, 255), "each figure of a sheet is drawn full height");
+        assert_eq!(
+            (alpha(3), alpha(4)),
+            (0, 255),
+            "each figure of a sheet is drawn full height"
+        );
     }
 
     #[test]
     fn a_loose_speck_doesnt_make_a_sheet() {
-        let look = build_look(&[sheet(&[(40, 20, 20, 160, [250, 20, 20]), (150, 30, 4, 4, [250, 20, 20])])]).unwrap();
+        let look = build_look(&[sheet(&[
+            (40, 20, 20, 160, [250, 20, 20]),
+            (150, 30, 4, 4, [250, 20, 20]),
+        ])])
+        .unwrap();
         let frames = look_frames(&look).unwrap();
         assert_eq!(frames[1], frames[0]);
     }
@@ -474,18 +618,35 @@ mod tests {
     #[test]
     #[ignore]
     fn sheet_from_files() {
-        let images: Vec<Image> = std::env::var("VIBEBUDDY_SHEET").unwrap().split(',').map(|path| {
-            let decoded = image::open(path).unwrap().to_rgba8();
-            Image { width: decoded.width() as usize, height: decoded.height() as usize, pixels: decoded.into_raw() }
-        }).collect();
+        let images: Vec<Image> = std::env::var("VIBEBUDDY_SHEET")
+            .unwrap()
+            .split(',')
+            .map(|path| {
+                let decoded = image::open(path).unwrap().to_rgba8();
+                Image {
+                    width: decoded.width() as usize,
+                    height: decoded.height() as usize,
+                    pixels: decoded.into_raw(),
+                }
+            })
+            .collect();
         let masks: Vec<Vec<bool>> = images.iter().map(opaque_mask).collect();
         for (image, mask) in images.iter().zip(&masks) {
-            println!("{:?}", figure_boxes(image, mask, bounding_box(image, mask).unwrap()));
+            println!(
+                "{:?}",
+                figure_boxes(image, mask, bounding_box(image, mask).unwrap())
+            );
         }
         let frames = look_frames(&build_look(&images).unwrap()).unwrap();
         for (index, frame) in frames.iter().enumerate() {
-            let out = format!("{}/../target/sheet-frame-{index}.png", env!("CARGO_MANIFEST_DIR"));
-            image::RgbaImage::from_raw(LOOK_WIDTH as u32, LOOK_HEIGHT as u32, frame.pixels.clone()).unwrap().save(&out).unwrap();
+            let out = format!(
+                "{}/../target/sheet-frame-{index}.png",
+                env!("CARGO_MANIFEST_DIR")
+            );
+            image::RgbaImage::from_raw(LOOK_WIDTH as u32, LOOK_HEIGHT as u32, frame.pixels.clone())
+                .unwrap()
+                .save(&out)
+                .unwrap();
             println!("wrote {out}");
         }
     }
@@ -504,16 +665,45 @@ mod tests {
     #[test]
     fn a_made_character_keeps_its_id_and_wears_the_look() {
         let id = "night-owl-1a2b3c4d";
-        let lines = Pack { id: id.to_owned(), pools: vec![vec![(vec![1, 2], 4), (vec![3], 2)], vec![(vec![4], 2)], vec![]], look: None };
-        let variant = Pack { id: id.to_owned(), pools: vec![vec![(vec![9, 9], 3)], vec![], vec![]], look: None };
+        let lines = Pack {
+            id: id.to_owned(),
+            pools: vec![
+                vec![(vec![1, 2], 4), (vec![3], 2)],
+                vec![(vec![4], 2)],
+                vec![],
+            ],
+            look: None,
+        };
+        let variant = Pack {
+            id: id.to_owned(),
+            pools: vec![vec![(vec![9, 9], 3)], vec![], vec![]],
+            look: None,
+        };
         let (pack, variant) = (lines.build().unwrap(), variant.build().unwrap());
         let look = build_look(&[drawing()]).unwrap();
-        let written = Pack::parse(&made(&pack, Some(&variant), Some(look.clone()), id).unwrap()).unwrap();
-        assert_eq!((written.id.as_str(), written.look.as_deref()), (id, Some(&look[..])));
-        assert_eq!(written.pools[0], [(vec![9, 9], 3), (vec![3], 2)], "the form of address takes the plain line's place");
+        let written =
+            Pack::parse(&made(&pack, Some(&variant), Some(look.clone()), id).unwrap()).unwrap();
+        assert_eq!(
+            (written.id.as_str(), written.look.as_deref()),
+            (id, Some(&look[..]))
+        );
+        assert_eq!(
+            written.pools[0],
+            [(vec![9, 9], 3), (vec![3], 2)],
+            "the form of address takes the plain line's place"
+        );
         assert_eq!(written.pools[1], lines.pools[1]);
-        assert_eq!(made(&pack, None, None, id).as_deref(), Some(&pack[..]), "no look, no form: the daemon's pack as it is");
-        assert_eq!(Pack::parse(&made(&pack, None, None, "other-00000000").unwrap()).unwrap().id, "other-00000000");
+        assert_eq!(
+            made(&pack, None, None, id).as_deref(),
+            Some(&pack[..]),
+            "no look, no form: the daemon's pack as it is"
+        );
+        assert_eq!(
+            Pack::parse(&made(&pack, None, None, "other-00000000").unwrap())
+                .unwrap()
+                .id,
+            "other-00000000"
+        );
         assert_eq!(made(b"not a pack", None, None, id), None);
     }
 

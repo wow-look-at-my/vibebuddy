@@ -58,14 +58,19 @@ fn main() {
     // Setting up the agents where there is no app to do it, and the Linux app's Agents tab:
     // `install|uninstall [agent]`, `status`, and `plan install|uninstall <agent>` (the change, unwritten).
     let setup = match agent.as_str() {
-        "install" | "uninstall" => Some(install::run(agent == "install", std::env::args().nth(2).as_deref())),
+        "install" | "uninstall" => Some(install::run(
+            agent == "install",
+            std::env::args().nth(2).as_deref(),
+        )),
         "status" => Some(install::status().map(|json| println!("{json}"))),
-        "plan" => Some(match (std::env::args().nth(2).as_deref(), std::env::args().nth(3)) {
-            (Some(action @ ("install" | "uninstall")), Some(target)) => {
-                install::preview(action == "install", &target).map(|json| println!("{json}"))
-            }
-            _ => Err("usage: vibebuddy-hook plan install|uninstall <agent>".to_owned()),
-        }),
+        "plan" => Some(
+            match (std::env::args().nth(2).as_deref(), std::env::args().nth(3)) {
+                (Some(action @ ("install" | "uninstall")), Some(target)) => {
+                    install::preview(action == "install", &target).map(|json| println!("{json}"))
+                }
+                _ => Err("usage: vibebuddy-hook plan install|uninstall <agent>".to_owned()),
+            },
+        ),
         _ => None,
     };
     if let Some(result) = setup {
@@ -79,11 +84,19 @@ fn main() {
     // the Mac app to show and write. The hook path defaults to this binary.
     if agent == "agent-file" {
         let mut args = std::env::args().skip(2);
-        let Some(target) = args.next().as_deref().and_then(cli_agents::Agent::from_argument) else {
+        let Some(target) = args
+            .next()
+            .as_deref()
+            .and_then(cli_agents::Agent::from_argument)
+        else {
             eprintln!("usage: vibebuddy-hook agent-file opencode|copilot|pi [hook path]");
             std::process::exit(2);
         };
-        let hook = args.next().or_else(|| std::env::current_exe().ok().map(|path| path.display().to_string()));
+        let hook = args.next().or_else(|| {
+            std::env::current_exe()
+                .ok()
+                .map(|path| path.display().to_string())
+        });
         print!("{}", target.file_contents(&hook.unwrap_or_default()));
         return;
     }
@@ -115,14 +128,23 @@ fn main() {
                 None => return,
             }
         }
-        "copilot" => match std::env::args().nth(2).and_then(|event| cli_agents::copilot_payload(&event, &source)) {
+        "copilot" => match std::env::args()
+            .nth(2)
+            .and_then(|event| cli_agents::copilot_payload(&event, &source))
+        {
             Some(payload) => (cli_agents::ENDPOINT, payload),
             None => return,
         },
         _ => {
-            eprintln!("usage: vibebuddy-hook codex|claude|opencode|copilot|pi <event>  (reads the hook payload from stdin)");
-            eprintln!("       vibebuddy-hook agent-file opencode|copilot|pi [hook path]  (prints the file VibeBuddy owns there)");
-            eprintln!("       vibebuddy-hook install|uninstall  (adds or removes the hooks, where there is no app)");
+            eprintln!(
+                "usage: vibebuddy-hook codex|claude|opencode|copilot|pi <event>  (reads the hook payload from stdin)"
+            );
+            eprintln!(
+                "       vibebuddy-hook agent-file opencode|copilot|pi [hook path]  (prints the file VibeBuddy owns there)"
+            );
+            eprintln!(
+                "       vibebuddy-hook install|uninstall  (adds or removes the hooks, where there is no app)"
+            );
             return;
         }
     };

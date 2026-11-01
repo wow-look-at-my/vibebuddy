@@ -47,7 +47,10 @@ pub fn find_partition(flash: &mut dyn Flash, label: &str) -> Option<Region> {
             return None;
         }
         let name = &entry[12..28];
-        let name_end = name.iter().position(|&byte| byte == 0).unwrap_or(name.len());
+        let name_end = name
+            .iter()
+            .position(|&byte| byte == 0)
+            .unwrap_or(name.len());
         if &name[..name_end] == label.as_bytes() {
             return Some(Region {
                 offset: u32::from_le_bytes([entry[4], entry[5], entry[6], entry[7]]),
@@ -89,7 +92,11 @@ fn encode(settings: &Settings, sequence: u32) -> [u8; RECORD_BYTES as usize] {
         settings.tally.completed,
         settings.tally.focus_s,
         settings.volume,
-        if settings.screens == Screens::Korekore { SCREENS_KOREKORE } else { 0 },
+        if settings.screens == Screens::Korekore {
+            SCREENS_KOREKORE
+        } else {
+            0
+        },
     ];
     for (index, word) in words.iter().enumerate() {
         record[index * 4..index * 4 + 4].copy_from_slice(&word.to_le_bytes());
@@ -100,20 +107,51 @@ fn encode(settings: &Settings, sequence: u32) -> [u8; RECORD_BYTES as usize] {
 }
 
 fn decode(record: &[u8; RECORD_BYTES as usize]) -> Option<(u32, Settings)> {
-    let word = |index: usize| u32::from_le_bytes([record[index * 4], record[index * 4 + 1], record[index * 4 + 2], record[index * 4 + 3]]);
+    let word = |index: usize| {
+        u32::from_le_bytes([
+            record[index * 4],
+            record[index * 4 + 1],
+            record[index * 4 + 2],
+            record[index * 4 + 3],
+        ])
+    };
     if word(0) != RECORD_MAGIC || word(7) != crc32(0, &record[..28]) {
         return None;
     }
-    let tally = Tally { day: word(2), completed: word(3), focus_s: word(4) };
-    let screens = if word(6) == SCREENS_KOREKORE { Screens::Korekore } else { Screens::Robot };
-    Some((word(1), Settings { tally, volume: word(5), screens }))
+    let tally = Tally {
+        day: word(2),
+        completed: word(3),
+        focus_s: word(4),
+    };
+    let screens = if word(6) == SCREENS_KOREKORE {
+        Screens::Korekore
+    } else {
+        Screens::Robot
+    };
+    Some((
+        word(1),
+        Settings {
+            tally,
+            volume: word(5),
+            screens,
+        },
+    ))
 }
 
 impl SettingsStore {
     /// Scans the region, returning the store and the latest settings found (None if there are none).
-    pub fn open(flash: &mut dyn Flash, region: Region) -> Result<(Self, Option<Settings>), FlashError> {
-        let region = Region { offset: region.offset, size: region.size / SECTOR_BYTES * SECTOR_BYTES };
-        let mut store = Self { region, latest: None };
+    pub fn open(
+        flash: &mut dyn Flash,
+        region: Region,
+    ) -> Result<(Self, Option<Settings>), FlashError> {
+        let region = Region {
+            offset: region.offset,
+            size: region.size / SECTOR_BYTES * SECTOR_BYTES,
+        };
+        let mut store = Self {
+            region,
+            latest: None,
+        };
         let mut found = None;
         let mut record = [0u8; RECORD_BYTES as usize];
         for slot in 0..store.slot_count() {
@@ -186,14 +224,20 @@ pub(crate) mod tests {
 
     impl MemoryFlash {
         pub(crate) fn new(size: usize) -> Self {
-            Self { bytes: vec![0xFF; size], erases: Vec::new() }
+            Self {
+                bytes: vec![0xFF; size],
+                erases: Vec::new(),
+            }
         }
     }
 
     impl Flash for MemoryFlash {
         fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), FlashError> {
             let start = offset as usize;
-            let source = self.bytes.get(start..start + bytes.len()).ok_or(FlashError)?;
+            let source = self
+                .bytes
+                .get(start..start + bytes.len())
+                .ok_or(FlashError)?;
             bytes.copy_from_slice(source);
             Ok(())
         }
@@ -202,7 +246,10 @@ pub(crate) mod tests {
             assert_eq!(offset % 4, 0, "write offset not aligned");
             assert_eq!(bytes.len() % 4, 0, "write length not aligned");
             let start = offset as usize;
-            let target = self.bytes.get_mut(start..start + bytes.len()).ok_or(FlashError)?;
+            let target = self
+                .bytes
+                .get_mut(start..start + bytes.len())
+                .ok_or(FlashError)?;
             for (cell, &byte) in target.iter_mut().zip(bytes) {
                 *cell &= byte;
             }
@@ -212,25 +259,45 @@ pub(crate) mod tests {
         fn erase(&mut self, from: u32, to: u32) -> Result<(), FlashError> {
             assert_eq!(from % SECTOR_BYTES, 0);
             assert_eq!(to % SECTOR_BYTES, 0);
-            self.bytes.get_mut(from as usize..to as usize).ok_or(FlashError)?.fill(0xFF);
+            self.bytes
+                .get_mut(from as usize..to as usize)
+                .ok_or(FlashError)?
+                .fill(0xFF);
             self.erases.push((from, to));
             Ok(())
         }
     }
 
-    const NVS: Region = Region { offset: 0x9000, size: 0x6000 };
+    const NVS: Region = Region {
+        offset: 0x9000,
+        size: 0x6000,
+    };
 
     fn settings(completed: u32) -> Settings {
-        Settings { tally: Tally { day: 20260926, completed, focus_s: completed * 1500 }, volume: 65, screens: Screens::Robot }
+        Settings {
+            tally: Tally {
+                day: 20260926,
+                completed,
+                focus_s: completed * 1500,
+            },
+            volume: 65,
+            screens: Screens::Robot,
+        }
     }
 
     #[test]
     fn the_screens_choice_is_kept_and_older_records_read_as_the_robot() {
         let mut flash = MemoryFlash::new(0x10000);
         let (mut store, _) = SettingsStore::open(&mut flash, NVS).unwrap();
-        let korekore = Settings { screens: Screens::Korekore, ..settings(3) };
+        let korekore = Settings {
+            screens: Screens::Korekore,
+            ..settings(3)
+        };
         store.save(&mut flash, &korekore).unwrap();
-        assert_eq!(SettingsStore::open(&mut flash, NVS).unwrap().1, Some(korekore));
+        assert_eq!(
+            SettingsStore::open(&mut flash, NVS).unwrap().1,
+            Some(korekore)
+        );
         // A record from before the choice: word 6 still erased, the CRC over it as written.
         let mut old = encode(&settings(4), 9);
         old[24..28].fill(0xFF);
@@ -303,7 +370,13 @@ pub(crate) mod tests {
         entry(1, "phy_init", 0xF000, 0x1000);
         entry(2, "factory", 0x10000, 0x400000);
         entry(3, "voices", 0x410000, 0x200000);
-        assert_eq!(find_partition(&mut flash, "voices"), Some(Region { offset: 0x410000, size: 0x200000 }));
+        assert_eq!(
+            find_partition(&mut flash, "voices"),
+            Some(Region {
+                offset: 0x410000,
+                size: 0x200000
+            })
+        );
         assert_eq!(find_partition(&mut flash, "nvs"), Some(NVS));
         assert_eq!(find_partition(&mut flash, "missing"), None);
     }

@@ -61,12 +61,19 @@ pub enum PairError {
 impl Link {
     /// A box with a new key and nobody paired.
     pub fn new(entropy: [u8; 32]) -> Self {
-        Self { seed: entropy, paired: Vec::new(), wifi: None, relay: None }
+        Self {
+            seed: entropy,
+            paired: Vec::new(),
+            wifi: None,
+            relay: None,
+        }
     }
 
     /// The box's public key, which is also its id on the Relay.
     pub fn public_key(&self) -> [u8; 32] {
-        SigningKey::from_bytes(&self.seed).verifying_key().to_bytes()
+        SigningKey::from_bytes(&self.seed)
+            .verifying_key()
+            .to_bytes()
     }
 
     /// Signs with the box's key.
@@ -118,7 +125,9 @@ impl Link {
         }
         // The network, then the Relay, are an optional tail, so a record written before either existed
         // still reads. An empty network name means none: no network has one.
-        let (ssid, password) = self.wifi.as_ref().map_or(("", ""), |wifi| (wifi.ssid.as_str(), wifi.password.as_str()));
+        let (ssid, password) = self.wifi.as_ref().map_or(("", ""), |wifi| {
+            (wifi.ssid.as_str(), wifi.password.as_str())
+        });
         let mut fields = alloc::vec![ssid, password];
         if let Some(relay) = &self.relay {
             fields.push(relay);
@@ -141,7 +150,10 @@ impl Link {
             let key: [u8; 32] = payload.get(at..at + 32)?.try_into().ok()?;
             let length = *payload.get(at + 32)? as usize;
             let name = core::str::from_utf8(payload.get(at + 33..at + 33 + length)?).ok()?;
-            paired.push(Paired { key, name: String::from(name) });
+            paired.push(Paired {
+                key,
+                name: String::from(name),
+            });
             at += 33 + length;
         }
         let mut field = || -> Option<String> {
@@ -155,7 +167,12 @@ impl Link {
             _ => None,
         };
         let relay = field().filter(|relay| !relay.is_empty());
-        Some(Self { seed, paired, wifi, relay })
+        Some(Self {
+            seed,
+            paired,
+            wifi,
+            relay,
+        })
     }
 }
 
@@ -179,7 +196,10 @@ pub struct LinkStore {
 impl LinkStore {
     /// Reads both sectors, returning the store and the latest link found (None on a box that has never had one).
     pub fn open(flash: &mut dyn Flash, region: Region) -> Result<(Self, Option<Link>), FlashError> {
-        let mut store = Self { region, latest: None };
+        let mut store = Self {
+            region,
+            latest: None,
+        };
         let mut found = None;
         if region.size < 2 * SECTOR_BYTES {
             return Err(FlashError);
@@ -188,18 +208,26 @@ impl LinkStore {
             let offset = region.offset + sector * SECTOR_BYTES;
             let mut header = [0u8; HEADER_BYTES];
             flash.read(offset, &mut header)?;
-            let word = |index: usize| u32::from_le_bytes(header[index * 4..index * 4 + 4].try_into().unwrap());
+            let word = |index: usize| {
+                u32::from_le_bytes(header[index * 4..index * 4 + 4].try_into().unwrap())
+            };
             let length = word(2) as usize;
             if word(0) != MAGIC || HEADER_BYTES + length + 4 > SECTOR_BYTES as usize {
                 continue;
             }
             let mut record = alloc::vec![0u8; (HEADER_BYTES + length + 4).div_ceil(4) * 4];
             flash.read(offset, &mut record)?;
-            let crc = u32::from_le_bytes(record[HEADER_BYTES + length..HEADER_BYTES + length + 4].try_into().unwrap());
+            let crc = u32::from_le_bytes(
+                record[HEADER_BYTES + length..HEADER_BYTES + length + 4]
+                    .try_into()
+                    .unwrap(),
+            );
             if crc != crc32(0, &record[..HEADER_BYTES + length]) {
                 continue;
             }
-            let Some(link) = Link::decode(&record[HEADER_BYTES..HEADER_BYTES + length]) else { continue };
+            let Some(link) = Link::decode(&record[HEADER_BYTES..HEADER_BYTES + length]) else {
+                continue;
+            };
             let sequence = word(1);
             let newer = match store.latest {
                 None => true,
@@ -240,7 +268,9 @@ pub fn encode(bytes: &[u8]) -> String {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
-        let bits = chunk.iter().enumerate().fold(0u32, |acc, (index, &byte)| acc | u32::from(byte) << (16 - 8 * index));
+        let bits = chunk.iter().enumerate().fold(0u32, |acc, (index, &byte)| {
+            acc | u32::from(byte) << (16 - 8 * index)
+        });
         for index in 0..=chunk.len() {
             out.push(ALPHABET[(bits >> (18 - 6 * index) & 63) as usize] as char);
         }
@@ -287,7 +317,9 @@ pub fn decode_key(text: &str) -> Option<[u8; 32]> {
 
 /// An Ed25519 public key as the X25519 key Noise uses (ADR-0015); None if it isn't a valid key.
 pub fn noise_public(key: &[u8; 32]) -> Option<[u8; 32]> {
-    VerifyingKey::from_bytes(key).ok().map(|key| key.to_montgomery().to_bytes())
+    VerifyingKey::from_bytes(key)
+        .ok()
+        .map(|key| key.to_montgomery().to_bytes())
 }
 
 /// Decodes canonical unpadded base64url of any length, in one pass: sealed lines are several KB.
@@ -324,7 +356,10 @@ pub fn decode_vec(text: &str) -> Option<Vec<u8>> {
 
 /// Checks `signature` by `key` over `message`.
 pub fn verify(key: &[u8; 32], message: &[u8], signature: &[u8; 64]) -> bool {
-    VerifyingKey::from_bytes(key).is_ok_and(|key| key.verify_strict(message, &Signature::from_bytes(signature)).is_ok())
+    VerifyingKey::from_bytes(key).is_ok_and(|key| {
+        key.verify_strict(message, &Signature::from_bytes(signature))
+            .is_ok()
+    })
 }
 
 #[cfg(test)]
@@ -332,7 +367,10 @@ mod tests {
     use super::*;
     use crate::storage::tests::MemoryFlash;
 
-    const REGION: Region = Region { offset: 0x2000, size: 0x2000 };
+    const REGION: Region = Region {
+        offset: 0x2000,
+        size: 0x2000,
+    };
 
     fn flash() -> MemoryFlash {
         MemoryFlash::new(0x4000)
@@ -343,9 +381,15 @@ mod tests {
         let key: [u8; 32] = core::array::from_fn(|index| (index * 37 + 5) as u8);
         let text = encode_key(&key);
         assert_eq!(text.len(), 43);
-        assert!(text.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_'));
+        assert!(
+            text.bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        );
         assert_eq!(decode_key(&text), Some(key));
-        assert_eq!(encode_key(&[0; 32]), "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+        assert_eq!(
+            encode_key(&[0; 32]),
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        );
     }
 
     #[test]
@@ -375,7 +419,10 @@ mod tests {
         assert_eq!(decode_key("short"), None);
         assert_eq!(decode_key(&"+".repeat(43)), None);
         // Nonzero spare bits in the last character.
-        assert_eq!(decode_key("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB"), None);
+        assert_eq!(
+            decode_key("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB"),
+            None
+        );
     }
 
     #[test]
@@ -383,7 +430,12 @@ mod tests {
         // RFC 8032 test 1.
         let mut seed = [0u8; 32];
         for (index, byte) in seed.iter_mut().enumerate() {
-            *byte = u8::from_str_radix(&"9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"[index * 2..index * 2 + 2], 16).unwrap();
+            *byte = u8::from_str_radix(
+                &"9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+                    [index * 2..index * 2 + 2],
+                16,
+            )
+            .unwrap();
         }
         let public = Link::new(seed).public_key();
         assert_eq!(public[..4], [0xd7, 0x5a, 0x98, 0x01]);
@@ -428,7 +480,10 @@ mod tests {
         store.save(&mut flash, &link).unwrap();
         link.pair([9; 32], "second").unwrap();
         store.save(&mut flash, &link).unwrap();
-        assert_eq!(flash.erases, [(0x2000, 0x3000), (0x3000, 0x4000), (0x2000, 0x3000)]);
+        assert_eq!(
+            flash.erases,
+            [(0x2000, 0x3000), (0x3000, 0x4000), (0x2000, 0x3000)]
+        );
 
         let (_, found) = LinkStore::open(&mut flash, REGION).unwrap();
         assert_eq!(found, Some(link));
@@ -440,7 +495,10 @@ mod tests {
         let (mut store, _) = LinkStore::open(&mut flash, REGION).unwrap();
         let mut link = Link::new([7; 32]);
         link.pair([8; 32], "a").unwrap();
-        link.wifi = Some(Wifi { ssid: String::from("Home 5G"), password: String::from("secret pass") });
+        link.wifi = Some(Wifi {
+            ssid: String::from("Home 5G"),
+            password: String::from("secret pass"),
+        });
         store.save(&mut flash, &link).unwrap();
         let (_, found) = LinkStore::open(&mut flash, REGION).unwrap();
         assert_eq!(found, Some(link));
@@ -453,8 +511,14 @@ mod tests {
         let mut link = Link::new([7; 32]);
         link.relay = Some(String::from("wss://relay-staging.korekore.ai"));
         store.save(&mut flash, &link).unwrap();
-        assert_eq!(LinkStore::open(&mut flash, REGION).unwrap().1, Some(link.clone()));
-        link.wifi = Some(Wifi { ssid: String::from("Home"), password: String::new() });
+        assert_eq!(
+            LinkStore::open(&mut flash, REGION).unwrap().1,
+            Some(link.clone())
+        );
+        link.wifi = Some(Wifi {
+            ssid: String::from("Home"),
+            password: String::new(),
+        });
         store.save(&mut flash, &link).unwrap();
         assert_eq!(LinkStore::open(&mut flash, REGION).unwrap().1, Some(link));
     }
@@ -469,7 +533,13 @@ mod tests {
             payload.extend_from_slice(field.as_bytes());
         }
         let link = Link::decode(&payload).unwrap();
-        assert_eq!(link.wifi, Some(Wifi { ssid: String::from("Home"), password: String::from("pass") }));
+        assert_eq!(
+            link.wifi,
+            Some(Wifi {
+                ssid: String::from("Home"),
+                password: String::from("pass")
+            })
+        );
         assert_eq!(link.relay, None);
         assert_eq!(Link::decode(&payload[..33]).unwrap().wifi, None);
     }

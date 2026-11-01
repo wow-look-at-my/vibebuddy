@@ -26,9 +26,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::State;
-use chrono::DateTime;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
+use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, Lines};
@@ -58,8 +58,20 @@ const MCP_SERVER: &str = "vibebuddy";
 const WEB_SEARCH: &str = "WebSearch";
 /// Built-in tools denied by name on top of `--tools`, so a Claude Code that changes what `--tools` covers still
 /// gives the session none of them.
-const DENIED_TOOLS: [&str; 12] =
-    ["Bash", "Edit", "Write", "Read", "NotebookEdit", "WebFetch", "Glob", "Grep", "Agent", "Task", "Skill", "BashOutput"];
+const DENIED_TOOLS: [&str; 12] = [
+    "Bash",
+    "Edit",
+    "Write",
+    "Read",
+    "NotebookEdit",
+    "WebFetch",
+    "Glob",
+    "Grep",
+    "Agent",
+    "Task",
+    "Skill",
+    "BashOutput",
+];
 /// How long one voice command may take, from writing it to the `result` line; then the process is stopped.
 const TURN_TIMEOUT: Duration = Duration::from_secs(120);
 /// What the `system/init` line must report as the credential in use.
@@ -127,7 +139,11 @@ pub struct ClaudeBrain {
 }
 
 impl ClaudeBrain {
-    pub fn new(state_dir: &Path, launcher: Launcher, activities: Arc<Mutex<ActivityTracker>>) -> Self {
+    pub fn new(
+        state_dir: &Path,
+        launcher: Launcher,
+        activities: Arc<Mutex<ActivityTracker>>,
+    ) -> Self {
         let state_file = state_dir.join(STATE_FILE);
         let saved: Saved = std::fs::read_to_string(&state_file)
             .ok()
@@ -138,7 +154,11 @@ impl ClaudeBrain {
             config_dir: state_dir.join(CONFIG_DIR),
             state_file,
             launcher,
-            mcp: Arc::new(McpState { token: random_hex(32), activities, speak: std::sync::Mutex::new(None) }),
+            mcp: Arc::new(McpState {
+                token: random_hex(32),
+                activities,
+                speak: std::sync::Mutex::new(None),
+            }),
             mcp_url: OnceCell::new(),
             process: Mutex::new(None),
             session_id: std::sync::Mutex::new(saved.session_id),
@@ -210,7 +230,10 @@ impl ClaudeBrain {
             .and_then(|text| serde_json::from_str(&text).ok())
             .unwrap_or_default();
         saved.persona = Some(id.to_owned());
-        if let Err(error) = write_private(&self.state_file, &serde_json::to_string_pretty(&saved).unwrap_or_default()) {
+        if let Err(error) = write_private(
+            &self.state_file,
+            &serde_json::to_string_pretty(&saved).unwrap_or_default(),
+        ) {
             warn!(%error, "failed to save the resident Claude session's Character");
         }
     }
@@ -218,7 +241,10 @@ impl ClaudeBrain {
     /// The last `limit` voice commands and their spoken replies, oldest first, read from the session's transcript
     /// (the daemon keeps no record of its own). Empty while there is no session yet.
     pub fn history(&self, limit: usize) -> Vec<Exchange> {
-        let Some(path) = self.session_id().and_then(|id| transcript(&self.config_dir, &id)) else {
+        let Some(path) = self
+            .session_id()
+            .and_then(|id| transcript(&self.config_dir, &id))
+        else {
             return Vec::new();
         };
         let exchanges = exchanges_of(&std::fs::read_to_string(path).unwrap_or_default());
@@ -242,8 +268,13 @@ impl ClaudeBrain {
             info!("the Anthropic API key changed; starting the resident Claude session again");
             *slot = None;
         }
-        if slot.as_ref().is_some_and(|process| process.instructions != instructions) {
-            info!("the instructions changed (a new Character); resuming the resident Claude session with them");
+        if slot
+            .as_ref()
+            .is_some_and(|process| process.instructions != instructions)
+        {
+            info!(
+                "the instructions changed (a new Character); resuming the resident Claude session with them"
+            );
             *slot = None;
         }
         if slot.is_none() {
@@ -253,13 +284,24 @@ impl ClaudeBrain {
     }
 
     async fn start(&self, key: &str, instructions: &str) -> Result<Process, ResidentError> {
-        let failed = |what: &str, error: std::io::Error| ResidentError::Rpc(format!("cannot {what}: {error}"));
-        prepare_config_dir(&self.config_dir).map_err(|error| failed("prepare the Claude config dir", error))?;
-        std::fs::create_dir_all(&self.dir).map_err(|error| failed("create the resident directory", error))?;
-        let url = self.mcp_url.get_or_try_init(|| serve_mcp(self.mcp.clone())).await.map_err(|error| failed("start the MCP server", error))?;
+        let failed = |what: &str, error: std::io::Error| {
+            ResidentError::Rpc(format!("cannot {what}: {error}"))
+        };
+        prepare_config_dir(&self.config_dir)
+            .map_err(|error| failed("prepare the Claude config dir", error))?;
+        std::fs::create_dir_all(&self.dir)
+            .map_err(|error| failed("create the resident directory", error))?;
+        let url = self
+            .mcp_url
+            .get_or_try_init(|| serve_mcp(self.mcp.clone()))
+            .await
+            .map_err(|error| failed("start the MCP server", error))?;
         let mcp_config = self.config_dir.join("mcp.json");
-        write_private(&mcp_config, &mcp_config_json(url, &self.mcp.token).to_string())
-            .map_err(|error| failed("write the MCP config", error))?;
+        write_private(
+            &mcp_config,
+            &mcp_config_json(url, &self.mcp.token).to_string(),
+        )
+        .map_err(|error| failed("write the MCP config", error))?;
         // One session for good: resumed while its transcript is there, else a new one.
         let saved = self.session_id();
         let session = match &saved {
@@ -284,8 +326,15 @@ impl ClaudeBrain {
         let id = session.id().to_owned();
         *self.session_id.lock().expect("session id lock") = Some(id.clone());
         let spoke_as = self.spoke_as.lock().expect("spoke as lock").clone();
-        let saved = Saved { session_id: Some(id.clone()), claude_version: version, persona: spoke_as };
-        if let Err(error) = write_private(&self.state_file, &serde_json::to_string_pretty(&saved).unwrap_or_default()) {
+        let saved = Saved {
+            session_id: Some(id.clone()),
+            claude_version: version,
+            persona: spoke_as,
+        };
+        if let Err(error) = write_private(
+            &self.state_file,
+            &serde_json::to_string_pretty(&saved).unwrap_or_default(),
+        ) {
             warn!(%error, "failed to save the resident Claude session id");
         }
         info!(session = %id, resumed = matches!(session, Session::Resume(_)), "resident Claude session started");
@@ -321,12 +370,23 @@ async fn run_turn(
     text: &str,
     on_reply: &mut (dyn FnMut(&str) + Send),
 ) -> Result<(), ResidentError> {
-    let line = format!("{}\n", user_message(text, persona, note, &chrono::Local::now(), local_time_zone().as_deref()));
+    let line = format!(
+        "{}\n",
+        user_message(
+            text,
+            persona,
+            note,
+            &chrono::Local::now(),
+            local_time_zone().as_deref()
+        )
+    );
     let written = async {
         process.writer.write_all(line.as_bytes()).await?;
         process.writer.flush().await
     };
-    written.await.map_err(|error| ResidentError::Rpc(format!("claude is gone: {error}")))?;
+    written
+        .await
+        .map_err(|error| ResidentError::Rpc(format!("claude is gone: {error}")))?;
     let deadline = tokio::time::Instant::now() + TURN_TIMEOUT;
     loop {
         tokio::select! {
@@ -380,7 +440,8 @@ pub(crate) fn local_time_zone() -> Option<String> {
     }
     let target = std::fs::read_link("/etc/localtime").ok()?;
     let path = target.to_string_lossy();
-    path.split_once("zoneinfo/").map(|(_, zone)| zone.to_owned())
+    path.split_once("zoneinfo/")
+        .map(|(_, zone)| zone.to_owned())
 }
 
 /// A voice command as a stream-json user message: the [`command_context`] first, then a `note` (the Character
@@ -393,8 +454,12 @@ fn user_message(
     time_zone: Option<&str>,
 ) -> Value {
     let context = command_context(persona, now, time_zone);
-    let content: Vec<Value> =
-        [context.as_str()].into_iter().chain(note).chain([text]).map(|text| json!({"type": "text", "text": text})).collect();
+    let content: Vec<Value> = [context.as_str()]
+        .into_iter()
+        .chain(note)
+        .chain([text])
+        .map(|text| json!({"type": "text", "text": text}))
+        .collect();
     json!({"type": "user", "message": {"role": "user", "content": content}})
 }
 
@@ -403,8 +468,14 @@ fn user_message(
 /// place; Codex's own clock tool answers in UTC. The reminder is there because with only the instructions saying
 /// so, Haiku answered a Chinese question in Chinese as an English Character, carried by the user's language and the
 /// session's earlier replies.
-pub(crate) fn command_context(persona: &Persona, now: &chrono::DateTime<chrono::Local>, time_zone: Option<&str>) -> String {
-    let zone = time_zone.map(|zone| format!(", time zone {zone}")).unwrap_or_default();
+pub(crate) fn command_context(
+    persona: &Persona,
+    now: &chrono::DateTime<chrono::Local>,
+    time_zone: Option<&str>,
+) -> String {
+    let zone = time_zone
+        .map(|zone| format!(", time zone {zone}"))
+        .unwrap_or_default();
     let Persona { name, language, .. } = persona;
     format!(
         "{CONTEXT_PREFIX}The user's local time: {}{zone}. You are {name}: answer in {language} only, whatever language \
@@ -416,7 +487,12 @@ pub(crate) fn command_context(persona: &Persona, now: &chrono::DateTime<chrono::
 /// The arguments for `claude`; see the module docs for why each is there.
 fn claude_args(mcp_config: &Path, session: &Session, instructions: &str) -> Vec<String> {
     let allowed: Vec<String> = std::iter::once(WEB_SEARCH.to_owned())
-        .chain(mcp_tools().iter().map(|tool| format!("mcp__{MCP_SERVER}__{}", tool["name"].as_str().unwrap_or_default())))
+        .chain(mcp_tools().iter().map(|tool| {
+            format!(
+                "mcp__{MCP_SERVER}__{}",
+                tool["name"].as_str().unwrap_or_default()
+            )
+        }))
         .collect();
     let mut args: Vec<String> = [
         "-p",
@@ -444,7 +520,10 @@ fn claude_args(mcp_config: &Path, session: &Session, instructions: &str) -> Vec<
     args.extend(["--allowedTools".to_owned(), allowed.join(",")]);
     args.extend(["--disallowedTools".to_owned(), DENIED_TOOLS.join(",")]);
     args.extend(["--mcp-config".to_owned(), mcp_config.display().to_string()]);
-    args.extend(["--settings".to_owned(), json!({"disableAllHooks": true}).to_string()]);
+    args.extend([
+        "--settings".to_owned(),
+        json!({"disableAllHooks": true}).to_string(),
+    ]);
     // Replaces Claude Code's coding-assistant prompt: the buddy isn't one, and a short prompt is a faster turn.
     args.extend(["--system-prompt".to_owned(), instructions.to_owned()]);
     match session {
@@ -458,7 +537,10 @@ fn claude_args(mcp_config: &Path, session: &Session, instructions: &str) -> Vec<
 /// first (see [`spawn_claude`]).
 fn child_env(config_dir: &Path, key: &str, base_url: Option<String>) -> Vec<(String, String)> {
     let mut env = vec![
-        ("CLAUDE_CONFIG_DIR".to_owned(), config_dir.display().to_string()),
+        (
+            "CLAUDE_CONFIG_DIR".to_owned(),
+            config_dir.display().to_string(),
+        ),
         ("ANTHROPIC_API_KEY".to_owned(), key.to_owned()),
         // No memory files written into the config dir for a session that has its own way to remember.
         ("CLAUDE_CODE_DISABLE_AUTO_MEMORY".to_owned(), "1".to_owned()),
@@ -477,7 +559,10 @@ fn withheld(name: &str) -> bool {
     name.starts_with("CLAUDE") || name.starts_with("ANTHROPIC")
 }
 
-async fn spawn_claude(launch: &Launch, cwd: &Path) -> Result<(Pipes, Option<String>), ResidentError> {
+async fn spawn_claude(
+    launch: &Launch,
+    cwd: &Path,
+) -> Result<(Pipes, Option<String>), ResidentError> {
     let program = find_claude().ok_or(ResidentError::NoClaude)?;
     let command = |args: &[String]| {
         let mut command = tokio::process::Command::new(&program);
@@ -486,7 +571,10 @@ async fn spawn_claude(launch: &Launch, cwd: &Path) -> Result<(Pipes, Option<Stri
                 command.env_remove(&name);
             }
         }
-        command.envs(launch.env.iter().map(|(name, value)| (name, value))).args(args).current_dir(cwd);
+        command
+            .envs(launch.env.iter().map(|(name, value)| (name, value)))
+            .args(args)
+            .current_dir(cwd);
         command
     };
     let version = command(&["--version".to_owned()])
@@ -510,7 +598,9 @@ async fn spawn_claude(launch: &Launch, cwd: &Path) -> Result<(Pipes, Option<Stri
         .stderr(std::process::Stdio::piped())
         .kill_on_drop(true)
         .spawn()
-        .map_err(|error| ResidentError::Rpc(format!("cannot start {}: {error}", program.display())))?;
+        .map_err(|error| {
+            ResidentError::Rpc(format!("cannot start {}: {error}", program.display()))
+        })?;
     info!(program = %program.display(), "started claude for the resident session");
     // A refused flag or a crash is only on stderr; it carries no credentials.
     if let Some(stderr) = child.stderr.take() {
@@ -524,7 +614,14 @@ async fn spawn_claude(launch: &Launch, cwd: &Path) -> Result<(Pipes, Option<Stri
     }
     let reader = child.stdout.take().expect("stdout is piped");
     let writer = child.stdin.take().expect("stdin is piped");
-    Ok((Pipes { reader: Box::new(reader), writer: Box::new(writer), child: Some(child) }, version))
+    Ok((
+        Pipes {
+            reader: Box::new(reader),
+            writer: Box::new(writer),
+            child: Some(child),
+        },
+        version,
+    ))
 }
 
 /// `VIBEBUDDY_CLAUDE`, else `claude` on PATH, else where installers put it: the daemon may run with launchd's bare
@@ -535,10 +632,19 @@ pub fn find_claude() -> Option<PathBuf> {
     }
     let home = std::env::var_os("HOME").map(PathBuf::from);
     std::env::var_os("PATH")
-        .map(|path| std::env::split_paths(&path).map(|dir| dir.join("claude")).collect::<Vec<_>>())
+        .map(|path| {
+            std::env::split_paths(&path)
+                .map(|dir| dir.join("claude"))
+                .collect::<Vec<_>>()
+        })
         .unwrap_or_default()
         .into_iter()
-        .chain(home.iter().flat_map(|home| [home.join(".local/bin/claude"), home.join(".claude/local/claude")]))
+        .chain(home.iter().flat_map(|home| {
+            [
+                home.join(".local/bin/claude"),
+                home.join(".claude/local/claude"),
+            ]
+        }))
         .chain(["/opt/homebrew/bin/claude", "/usr/local/bin/claude"].map(PathBuf::from))
         .find(|path| path.is_file())
 }
@@ -557,7 +663,12 @@ pub(crate) fn write_private(path: &Path, text: &str) -> std::io::Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     let temporary = path.with_extension("tmp");
-    let mut file = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&temporary)?;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&temporary)?;
     // A file left from before with wider permissions keeps them through `open`.
     file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
     file.write_all(text.as_bytes())?;
@@ -585,9 +696,17 @@ fn exchanges_of(transcript: &str) -> Vec<Exchange> {
     let mut entries: Vec<Value> = transcript
         .lines()
         .filter_map(|line| serde_json::from_str::<Value>(line).ok())
-        .filter(|entry| matches!(entry["type"].as_str(), Some("user" | "assistant")) && entry["isSidechain"] != true)
+        .filter(|entry| {
+            matches!(entry["type"].as_str(), Some("user" | "assistant"))
+                && entry["isSidechain"] != true
+        })
         .collect();
-    entries.sort_by(|a, b| a["timestamp"].as_str().unwrap_or_default().cmp(b["timestamp"].as_str().unwrap_or_default()));
+    entries.sort_by(|a, b| {
+        a["timestamp"]
+            .as_str()
+            .unwrap_or_default()
+            .cmp(b["timestamp"].as_str().unwrap_or_default())
+    });
     let mut exchanges: Vec<Exchange> = Vec::new();
     for entry in entries {
         let content = &entry["message"]["content"];
@@ -607,8 +726,15 @@ fn exchanges_of(transcript: &str) -> Vec<Exchange> {
                 _ => String::new(),
             };
             if !said.is_empty() {
-                let at = entry["timestamp"].as_str().and_then(|time| DateTime::parse_from_rfc3339(time).ok()).map(|time| time.to_utc());
-                exchanges.push(Exchange { said, replies: Vec::new(), at });
+                let at = entry["timestamp"]
+                    .as_str()
+                    .and_then(|time| DateTime::parse_from_rfc3339(time).ok())
+                    .map(|time| time.to_utc());
+                exchanges.push(Exchange {
+                    said,
+                    replies: Vec::new(),
+                    at,
+                });
             }
         } else if let (Some(exchange), Some(blocks)) = (exchanges.last_mut(), content.as_array()) {
             exchange.replies.extend(
@@ -638,7 +764,14 @@ fn mcp_tools() -> Vec<Value> {
 async fn serve_mcp(state: Arc<McpState>) -> std::io::Result<String> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let url = format!("http://{}/mcp", listener.local_addr()?);
-    let router = axum::Router::new().route("/mcp", axum::routing::post(post_mcp).get(no_stream).delete(no_stream)).with_state(state);
+    let router = axum::Router::new()
+        .route(
+            "/mcp",
+            axum::routing::post(post_mcp)
+                .get(no_stream)
+                .delete(no_stream),
+        )
+        .with_state(state);
     tokio::spawn(async move {
         if let Err(error) = axum::serve(listener, router).await {
             warn!(%error, "the resident session's MCP server stopped");
@@ -654,7 +787,11 @@ async fn no_stream() -> StatusCode {
 }
 
 /// MCP's Streamable HTTP transport, the JSON-response form: one JSON-RPC message per POST.
-async fn post_mcp(State(state): State<Arc<McpState>>, headers: HeaderMap, body: String) -> axum::response::Response {
+async fn post_mcp(
+    State(state): State<Arc<McpState>>,
+    headers: HeaderMap,
+    body: String,
+) -> axum::response::Response {
     let authorized = headers
         .get(axum::http::header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
@@ -671,14 +808,26 @@ async fn post_mcp(State(state): State<Arc<McpState>>, headers: HeaderMap, body: 
         // A notification (`notifications/initialized` and the like) needs no answer.
         return StatusCode::ACCEPTED.into_response();
     };
-    let answer = match mcp_result(&state, message["method"].as_str().unwrap_or_default(), &message["params"]).await {
+    let answer = match mcp_result(
+        &state,
+        message["method"].as_str().unwrap_or_default(),
+        &message["params"],
+    )
+    .await
+    {
         Ok(result) => json!({"jsonrpc": "2.0", "id": id, "result": result}),
-        Err((code, text)) => json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": text}}),
+        Err((code, text)) => {
+            json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": text}})
+        }
     };
     axum::Json(answer).into_response()
 }
 
-async fn mcp_result(state: &McpState, method: &str, params: &Value) -> Result<Value, (i64, String)> {
+async fn mcp_result(
+    state: &McpState,
+    method: &str,
+    params: &Value,
+) -> Result<Value, (i64, String)> {
     match method {
         "initialize" => {
             let version = params["protocolVersion"].as_str().unwrap_or("2025-06-18");
@@ -693,15 +842,23 @@ async fn mcp_result(state: &McpState, method: &str, params: &Value) -> Result<Va
         "tools/call" => {
             let tool = params["name"].as_str().unwrap_or_default();
             if tool == "search_memories" {
-                return Ok(json!({"content": [{"type": "text", "text": "unknown tool search_memories"}], "isError": true}));
+                return Ok(
+                    json!({"content": [{"type": "text", "text": "unknown tool search_memories"}], "isError": true}),
+                );
             }
             let speak = state.speak.lock().expect("speak lock").clone();
-            let (success, text) = run_tool(tool, &params["arguments"], &state.activities, None, &mut |reply| match &speak {
-                Some(turn) => {
-                    let _ = turn.send(reply.to_owned());
-                }
-                None => warn!("the resident Claude session spoke outside a turn; dropped"),
-            })
+            let (success, text) = run_tool(
+                tool,
+                &params["arguments"],
+                &state.activities,
+                None,
+                &mut |reply| match &speak {
+                    Some(turn) => {
+                        let _ = turn.send(reply.to_owned());
+                    }
+                    None => warn!("the resident Claude session spoke outside a turn; dropped"),
+                },
+            )
             .await;
             Ok(json!({"content": [{"type": "text", "text": text}], "isError": !success}))
         }
@@ -711,7 +868,11 @@ async fn mcp_result(state: &McpState, method: &str, params: &Value) -> Result<Va
 
 /// Compares two secrets in time that doesn't depend on where they differ.
 fn same(a: &[u8], b: &[u8]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).fold(0u8, |difference, (x, y)| difference | (x ^ y)) == 0
+    a.len() == b.len()
+        && a.iter()
+            .zip(b)
+            .fold(0u8, |difference, (x, y)| difference | (x ^ y))
+            == 0
 }
 
 fn random_hex(bytes: usize) -> String {
@@ -727,7 +888,14 @@ fn new_session_id() -> String {
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
     let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
-    format!("{}-{}-{}-{}-{}", &hex[..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..])
+    format!(
+        "{}-{}-{}-{}-{}",
+        &hex[..8],
+        &hex[8..12],
+        &hex[12..16],
+        &hex[16..20],
+        &hex[20..]
+    )
 }
 
 #[cfg(test)]
@@ -742,14 +910,37 @@ pub(crate) mod tests {
     #[test]
     fn a_voice_command_carries_the_local_time_and_time_zone_as_context() {
         let now = chrono::Local::now();
-        let message = user_message("今天天气怎么样", &Persona::of(&crate::resident::tests::wearing("ada")), None, &now, Some("Asia/Singapore"));
+        let message = user_message(
+            "今天天气怎么样",
+            &Persona::of(&crate::resident::tests::wearing("ada")),
+            None,
+            &now,
+            Some("Asia/Singapore"),
+        );
         let content = message["message"]["content"].as_array().unwrap();
         let context = content[0]["text"].as_str().unwrap();
-        assert!(context.starts_with(CONTEXT_PREFIX) && context.contains("time zone Asia/Singapore"), "{context}");
-        assert!(context.contains("You are Ada: answer in English only"), "{context}");
+        assert!(
+            context.starts_with(CONTEXT_PREFIX) && context.contains("time zone Asia/Singapore"),
+            "{context}"
+        );
+        assert!(
+            context.contains("You are Ada: answer in English only"),
+            "{context}"
+        );
         assert_eq!(content[1]["text"], "今天天气怎么样");
-        let without = user_message("hi", &Persona::of(&crate::resident::tests::wearing("ada")), None, &now, None);
-        assert!(!without["message"]["content"][0]["text"].as_str().unwrap().contains("time zone"));
+        let without = user_message(
+            "hi",
+            &Persona::of(&crate::resident::tests::wearing("ada")),
+            None,
+            &now,
+            None,
+        );
+        assert!(
+            !without["message"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("time zone")
+        );
     }
     use crate::activity::{ActivityId, ActivityStatus};
     use crate::resident::tests::temp_dir;
@@ -792,23 +983,42 @@ pub(crate) mod tests {
     }
 
     /// A Claude brain on the fake `claude`, in `state_dir`.
-    pub(crate) fn brain(state_dir: &Path, script: &Shared, activities: Arc<Mutex<ActivityTracker>>) -> ClaudeBrain {
+    pub(crate) fn brain(
+        state_dir: &Path,
+        script: &Shared,
+        activities: Arc<Mutex<ActivityTracker>>,
+    ) -> ClaudeBrain {
         let script = script.clone();
-        ClaudeBrain::new(state_dir, Launcher::Fake(Box::new(move |launch| fake_claude(script.clone(), launch))), activities)
+        ClaudeBrain::new(
+            state_dir,
+            Launcher::Fake(Box::new(move |launch| fake_claude(script.clone(), launch))),
+            activities,
+        )
     }
 
     fn argument(args: &[String], flag: &str) -> Option<String> {
-        args.iter().position(|arg| arg == flag).and_then(|index| args.get(index + 1)).cloned()
+        args.iter()
+            .position(|arg| arg == flag)
+            .and_then(|index| args.get(index + 1))
+            .cloned()
     }
 
     /// Posts one JSON-RPC message to the MCP server named in the MCP config file, as Claude Code does.
-    pub(crate) async fn post_to_mcp(config: &Path, token: Option<&str>, message: Value) -> (u16, Value) {
-        let config: Value = serde_json::from_str(&std::fs::read_to_string(config).unwrap()).unwrap();
+    pub(crate) async fn post_to_mcp(
+        config: &Path,
+        token: Option<&str>,
+        message: Value,
+    ) -> (u16, Value) {
+        let config: Value =
+            serde_json::from_str(&std::fs::read_to_string(config).unwrap()).unwrap();
         let server = &config["mcpServers"][MCP_SERVER];
         let url = server["url"].as_str().unwrap().to_owned();
         let authorization = match token {
             Some(token) => format!("Bearer {token}"),
-            None => server["headers"]["Authorization"].as_str().unwrap().to_owned(),
+            None => server["headers"]["Authorization"]
+                .as_str()
+                .unwrap()
+                .to_owned(),
         };
         tokio::task::spawn_blocking(move || {
             let mut response = crate::speech::agent(Duration::from_secs(5))
@@ -826,7 +1036,11 @@ pub(crate) mod tests {
     }
 
     fn fake_claude(script: Shared, launch: &Launch) -> Pipes {
-        script.lock().unwrap().launches.push((launch.args.clone(), launch.env.clone()));
+        script
+            .lock()
+            .unwrap()
+            .launches
+            .push((launch.args.clone(), launch.env.clone()));
         let mcp_config = PathBuf::from(argument(&launch.args, "--mcp-config").unwrap());
         let (daemon_side, fake_side) = tokio::io::duplex(1 << 16);
         let (daemon_read, daemon_write) = tokio::io::split(daemon_side);
@@ -834,12 +1048,19 @@ pub(crate) mod tests {
             let (fake_read, mut out) = tokio::io::split(fake_side);
             let mut lines = BufReader::new(fake_read).lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                script.lock().unwrap().received.push(serde_json::from_str(&line).unwrap());
+                script
+                    .lock()
+                    .unwrap()
+                    .received
+                    .push(serde_json::from_str(&line).unwrap());
                 let steps = script.lock().unwrap().turns.pop_front();
-                let steps = steps.unwrap_or_else(|| vec![Step::Init(API_KEY_SOURCE), Step::Result(false, "")]);
+                let steps = steps
+                    .unwrap_or_else(|| vec![Step::Init(API_KEY_SOURCE), Step::Result(false, "")]);
                 for (number, step) in steps.into_iter().enumerate() {
                     let line = match step {
-                        Step::Init(source) => json!({"type": "system", "subtype": "init", "apiKeySource": source, "tools": [WEB_SEARCH]}),
+                        Step::Init(source) => {
+                            json!({"type": "system", "subtype": "init", "apiKeySource": source, "tools": [WEB_SEARCH]})
+                        }
                         Step::Call(tool, arguments) => {
                             let name = format!("mcp__{MCP_SERVER}__{tool}");
                             let call = json!({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": number, "name": name, "input": arguments}]}});
@@ -863,7 +1084,11 @@ pub(crate) mod tests {
                 }
             }
         });
-        Pipes { reader: Box::new(daemon_read), writer: Box::new(daemon_write), child: None }
+        Pipes {
+            reader: Box::new(daemon_read),
+            writer: Box::new(daemon_write),
+            child: None,
+        }
     }
 
     fn launches(script: &Shared) -> Vec<Launched> {
@@ -872,7 +1097,15 @@ pub(crate) mod tests {
 
     async fn say(brain: &ClaudeBrain, key: &str, text: &str) -> Result<Vec<String>, ResidentError> {
         let mut replies = Vec::new();
-        brain.say_streaming(key, "You are the buddy of VibeBuddy.", &robot(), text, &mut |reply| replies.push(reply.to_owned())).await?;
+        brain
+            .say_streaming(
+                key,
+                "You are the buddy of VibeBuddy.",
+                &robot(),
+                text,
+                &mut |reply| replies.push(reply.to_owned()),
+            )
+            .await?;
         Ok(replies)
     }
 
@@ -886,53 +1119,118 @@ pub(crate) mod tests {
 
         let (args, env) = launches(&script).remove(0);
         let flags = |name: &str| args.iter().any(|arg| arg == name);
-        for flag in ["-p", "--verbose", "--strict-mcp-config", "--disable-slash-commands"] {
+        for flag in [
+            "-p",
+            "--verbose",
+            "--strict-mcp-config",
+            "--disable-slash-commands",
+        ] {
             assert!(flags(flag), "missing {flag}: {args:?}");
         }
         assert!(!flags("--bare"), "bare mode takes WebSearch away");
-        assert_eq!(argument(&args, "--input-format").as_deref(), Some("stream-json"));
-        assert_eq!(argument(&args, "--output-format").as_deref(), Some("stream-json"));
-        assert_eq!(argument(&args, "--model").as_deref(), Some("claude-haiku-4-5"));
+        assert_eq!(
+            argument(&args, "--input-format").as_deref(),
+            Some("stream-json")
+        );
+        assert_eq!(
+            argument(&args, "--output-format").as_deref(),
+            Some("stream-json")
+        );
+        assert_eq!(
+            argument(&args, "--model").as_deref(),
+            Some("claude-haiku-4-5")
+        );
         assert_eq!(argument(&args, "--tools").as_deref(), Some("WebSearch"));
-        assert_eq!(argument(&args, "--permission-mode").as_deref(), Some("dontAsk"));
-        assert_eq!(argument(&args, "--permission-prompts").as_deref(), Some("none"));
-        assert_eq!(argument(&args, "--system-prompt-snapshot").as_deref(), Some("off"));
+        assert_eq!(
+            argument(&args, "--permission-mode").as_deref(),
+            Some("dontAsk")
+        );
+        assert_eq!(
+            argument(&args, "--permission-prompts").as_deref(),
+            Some("none")
+        );
+        assert_eq!(
+            argument(&args, "--system-prompt-snapshot").as_deref(),
+            Some("off")
+        );
         assert_eq!(
             argument(&args, "--allowedTools").as_deref(),
             Some("WebSearch,mcp__vibebuddy__speak,mcp__vibebuddy__list_activities")
         );
         let denied = argument(&args, "--disallowedTools").unwrap();
         for tool in ["Bash", "Edit", "Write", "Read", "WebFetch"] {
-            assert!(denied.split(',').any(|denied| denied == tool), "{tool} isn't denied: {denied}");
+            assert!(
+                denied.split(',').any(|denied| denied == tool),
+                "{tool} isn't denied: {denied}"
+            );
         }
-        assert_eq!(argument(&args, "--settings").as_deref(), Some(r#"{"disableAllHooks":true}"#));
-        assert_eq!(argument(&args, "--system-prompt").as_deref(), Some("You are the buddy of VibeBuddy."));
+        assert_eq!(
+            argument(&args, "--settings").as_deref(),
+            Some(r#"{"disableAllHooks":true}"#)
+        );
+        assert_eq!(
+            argument(&args, "--system-prompt").as_deref(),
+            Some("You are the buddy of VibeBuddy.")
+        );
         let session = argument(&args, "--session-id").unwrap();
         assert_eq!(session.len(), 36);
         assert_eq!(&session[14..15], "4", "a version 4 UUID");
         assert!(!flags("--resume"));
 
-        let variable = |name: &str| env.iter().find(|(key, _)| key == name).map(|(_, value)| value.clone());
+        let variable = |name: &str| {
+            env.iter()
+                .find(|(key, _)| key == name)
+                .map(|(_, value)| value.clone())
+        };
         let config_dir = dir.join("resident-claude");
-        assert_eq!(variable("CLAUDE_CONFIG_DIR"), Some(config_dir.display().to_string()));
-        assert_eq!(variable("ANTHROPIC_API_KEY").as_deref(), Some("sk-ant-test"));
+        assert_eq!(
+            variable("CLAUDE_CONFIG_DIR"),
+            Some(config_dir.display().to_string())
+        );
+        assert_eq!(
+            variable("ANTHROPIC_API_KEY").as_deref(),
+            Some("sk-ant-test")
+        );
         assert_eq!(variable("ANTHROPIC_BASE_URL"), None);
-        assert_eq!(std::fs::metadata(&config_dir).unwrap().permissions().mode() & 0o777, 0o700);
+        assert_eq!(
+            std::fs::metadata(&config_dir).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
         let mcp_config = PathBuf::from(argument(&args, "--mcp-config").unwrap());
         assert_eq!(mcp_config, config_dir.join("mcp.json"));
-        assert_eq!(std::fs::metadata(&mcp_config).unwrap().permissions().mode() & 0o777, 0o600);
-        let config: Value = serde_json::from_str(&std::fs::read_to_string(&mcp_config).unwrap()).unwrap();
+        assert_eq!(
+            std::fs::metadata(&mcp_config).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        let config: Value =
+            serde_json::from_str(&std::fs::read_to_string(&mcp_config).unwrap()).unwrap();
         assert_eq!(config["mcpServers"]["vibebuddy"]["type"], "http");
-        assert!(config["mcpServers"]["vibebuddy"]["url"].as_str().unwrap().starts_with("http://127.0.0.1:"));
-        assert!(!std::fs::read_to_string(&mcp_config).unwrap().contains("sk-ant-test"), "the key stays out of files");
+        assert!(
+            config["mcpServers"]["vibebuddy"]["url"]
+                .as_str()
+                .unwrap()
+                .starts_with("http://127.0.0.1:")
+        );
+        assert!(
+            !std::fs::read_to_string(&mcp_config)
+                .unwrap()
+                .contains("sk-ant-test"),
+            "the key stays out of files"
+        );
 
         // The voice command goes in as a user message, after a context block with the local time.
         let line = script.lock().unwrap().received[0].clone();
         assert_eq!(line["type"], "user");
         let content = line["message"]["content"].as_array().unwrap();
-        assert!(content[0]["text"].as_str().unwrap().starts_with("<context>The user's local time: "));
+        assert!(
+            content[0]["text"]
+                .as_str()
+                .unwrap()
+                .starts_with("<context>The user's local time: ")
+        );
         assert_eq!(content[1], json!({"type": "text", "text": "hello"}));
-        let saved: Value = serde_json::from_str(&std::fs::read_to_string(dir.join(STATE_FILE)).unwrap()).unwrap();
+        let saved: Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join(STATE_FILE)).unwrap()).unwrap();
         assert_eq!(saved["session_id"], session.as_str());
         assert_eq!(brain.session_id().as_deref(), Some(session.as_str()));
 
@@ -960,17 +1258,28 @@ pub(crate) mod tests {
         let turn = tokio::spawn({
             let brain = brain.clone();
             async move {
-                brain.say_streaming("key", "instructions", &robot(), "hi", &mut |reply| sender.send(reply.to_owned()).unwrap()).await
+                brain
+                    .say_streaming("key", "instructions", &robot(), "hi", &mut |reply| {
+                        sender.send(reply.to_owned()).unwrap()
+                    })
+                    .await
             }
         });
         assert_eq!(receiver.recv().await.as_deref(), Some("On it."));
         assert!(!turn.is_finished(), "the turn is still running");
         hold.notify_one();
         assert_eq!(turn.await.unwrap().unwrap(), brain.session_id().unwrap());
-        assert_eq!(receiver.recv().await.as_deref(), Some("Done."), "said just before the result, still heard");
+        assert_eq!(
+            receiver.recv().await.as_deref(),
+            Some("Done."),
+            "said just before the result, still heard"
+        );
         let answers = script.lock().unwrap().answers.clone();
         assert_eq!(answers[0].0, 200);
-        assert_eq!(answers[0].1["result"], json!({"content": [{"type": "text", "text": "spoken"}], "isError": false}));
+        assert_eq!(
+            answers[0].1["result"],
+            json!({"content": [{"type": "text", "text": "spoken"}], "isError": false})
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -978,7 +1287,10 @@ pub(crate) mod tests {
     async fn list_activities_reads_the_tracker_and_other_tools_are_refused() {
         let dir = temp_dir("claude-tools");
         let mut tracker = ActivityTracker::default();
-        let id = ActivityId { session_id: "s".to_owned(), key: "s:t".to_owned() };
+        let id = ActivityId {
+            session_id: "s".to_owned(),
+            key: "s:t".to_owned(),
+        };
         tracker.observe(&id, "CX:REVIEW", ActivityStatus::Working);
         let script = script();
         script.lock().unwrap().turns.push_back(vec![
@@ -990,16 +1302,30 @@ pub(crate) mod tests {
             Step::Result(false, ""),
         ]);
         let brain = brain(&dir, &script, Arc::new(Mutex::new(tracker)));
-        assert_eq!(say(&brain, "key", "what's up?").await.unwrap(), Vec::<String>::new());
+        assert_eq!(
+            say(&brain, "key", "what's up?").await.unwrap(),
+            Vec::<String>::new()
+        );
         let answers = script.lock().unwrap().answers.clone();
-        let text = |index: usize| answers[index].1["result"]["content"][0]["text"].as_str().unwrap().to_owned();
+        let text = |index: usize| {
+            answers[index].1["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        };
         let listed: Value = serde_json::from_str(&text(0)).unwrap();
         assert_eq!(listed["activities"][0]["title"], "CX:REVIEW");
         assert!(listed["recently_ended"].is_array() && listed["today"].is_object());
-        assert_eq!(answers[1].1["result"]["isError"], true, "Codex memories aren't Claude's");
+        assert_eq!(
+            answers[1].1["result"]["isError"], true,
+            "Codex memories aren't Claude's"
+        );
         assert_eq!(answers[2].1["result"]["isError"], true);
         assert_eq!(text(2), "unknown tool run_shell");
-        assert_eq!(answers[3].1["result"]["isError"], true, "an empty reply isn't spoken");
+        assert_eq!(
+            answers[3].1["result"]["isError"], true,
+            "an empty reply isn't spoken"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -1010,20 +1336,45 @@ pub(crate) mod tests {
         say(&brain, "key", "hi").await.unwrap();
         let config = dir.join("resident-claude/mcp.json");
 
-        let (status, _) = post_to_mcp(&config, Some("wrong"), json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})).await;
+        let (status, _) = post_to_mcp(
+            &config,
+            Some("wrong"),
+            json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}),
+        )
+        .await;
         assert_eq!(status, 401);
         let initialize = json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "claude-code", "version": "2"}}});
         let (status, answer) = post_to_mcp(&config, None, initialize).await;
         assert_eq!(status, 200);
         assert_eq!(answer["result"]["protocolVersion"], "2025-06-18");
         assert_eq!(answer["result"]["capabilities"], json!({"tools": {}}));
-        let (status, _) = post_to_mcp(&config, None, json!({"jsonrpc": "2.0", "method": "notifications/initialized"})).await;
+        let (status, _) = post_to_mcp(
+            &config,
+            None,
+            json!({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+        )
+        .await;
         assert_eq!(status, 202);
-        let (_, listed) = post_to_mcp(&config, None, json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})).await;
-        let names: Vec<&str> = listed["result"]["tools"].as_array().unwrap().iter().map(|tool| tool["name"].as_str().unwrap()).collect();
+        let (_, listed) = post_to_mcp(
+            &config,
+            None,
+            json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
+        )
+        .await;
+        let names: Vec<&str> = listed["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|tool| tool["name"].as_str().unwrap())
+            .collect();
         assert_eq!(names, ["speak", "list_activities"]);
         assert!(listed["result"]["tools"][0]["inputSchema"]["properties"]["text"].is_object());
-        let (_, unknown) = post_to_mcp(&config, None, json!({"jsonrpc": "2.0", "id": 3, "method": "resources/list"})).await;
+        let (_, unknown) = post_to_mcp(
+            &config,
+            None,
+            json!({"jsonrpc": "2.0", "id": 3, "method": "resources/list"}),
+        )
+        .await;
         assert_eq!(unknown["error"]["code"], -32601);
         // Outside a turn a spoken reply has nowhere to go; it is answered but dropped.
         let speak = json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "speak", "arguments": {"text": "Hi."}}});
@@ -1036,7 +1387,9 @@ pub(crate) mod tests {
     async fn a_later_start_resumes_the_session_and_one_whose_transcript_is_gone_is_replaced() {
         let dir = temp_dir("claude-resume");
         let first = script();
-        say(&brain(&dir, &first, Arc::default()), "key", "hi").await.unwrap();
+        say(&brain(&dir, &first, Arc::default()), "key", "hi")
+            .await
+            .unwrap();
         let session = argument(&launches(&first)[0].0, "--session-id").unwrap();
 
         // Claude Code wrote the transcript under the working directory's project folder.
@@ -1045,10 +1398,17 @@ pub(crate) mod tests {
         std::fs::write(project.join(format!("{session}.jsonl")), "").unwrap();
         let second = script();
         let restarted = brain(&dir, &second, Arc::default());
-        assert_eq!(restarted.session_id().as_deref(), Some(session.as_str()), "read back from the state file");
+        assert_eq!(
+            restarted.session_id().as_deref(),
+            Some(session.as_str()),
+            "read back from the state file"
+        );
         say(&restarted, "key", "hi").await.unwrap();
         let args = &launches(&second)[0].0;
-        assert_eq!(argument(args, "--resume").as_deref(), Some(session.as_str()));
+        assert_eq!(
+            argument(args, "--resume").as_deref(),
+            Some(session.as_str())
+        );
         assert!(!args.iter().any(|arg| arg == "--session-id"));
 
         std::fs::remove_dir_all(dir.join("resident-claude/projects")).unwrap();
@@ -1068,13 +1428,21 @@ pub(crate) mod tests {
         let brain = brain(&dir, &script, Arc::default());
         async fn say_as(brain: &ClaudeBrain, character: &str, text: &str) {
             let persona = Persona::of(&crate::resident::tests::wearing(character));
-            let instructions = crate::resident::instructions(&persona, None, crate::resident::Brain::Claude);
-            brain.say_streaming("key", &instructions, &persona, text, &mut |_| {}).await.unwrap();
+            let instructions =
+                crate::resident::instructions(&persona, None, crate::resident::Brain::Claude);
+            brain
+                .say_streaming("key", &instructions, &persona, text, &mut |_| {})
+                .await
+                .unwrap();
         }
         let texts = |script: &Shared, index: usize| -> Vec<String> {
             let message = script.lock().unwrap().received[index].clone();
             let content = message["message"]["content"].as_array().unwrap().clone();
-            content.iter().skip(1).map(|block| block["text"].as_str().unwrap().to_owned()).collect()
+            content
+                .iter()
+                .skip(1)
+                .map(|block| block["text"].as_str().unwrap().to_owned())
+                .collect()
         };
 
         say_as(&brain, "ada", "hi").await;
@@ -1083,24 +1451,48 @@ pub(crate) mod tests {
         std::fs::create_dir_all(&project).unwrap();
         std::fs::write(project.join(format!("{session}.jsonl")), "").unwrap();
         say_as(&brain, "ada", "again").await;
-        assert_eq!(launches(&script).len(), 1, "the same Character keeps the process");
-        assert_eq!(texts(&script, 0), ["hi"], "the first command has nothing to switch from");
+        assert_eq!(
+            launches(&script).len(),
+            1,
+            "the same Character keeps the process"
+        );
+        assert_eq!(
+            texts(&script, 0),
+            ["hi"],
+            "the first command has nothing to switch from"
+        );
 
         say_as(&brain, "wanwanxiaohe", "你好").await;
         let launched = launches(&script);
         assert_eq!(launched.len(), 2, "--system-prompt is per process");
-        assert_eq!(argument(&launched[1].0, "--resume").as_deref(), Some(session.as_str()), "the same session, never a fork");
+        assert_eq!(
+            argument(&launched[1].0, "--resume").as_deref(),
+            Some(session.as_str()),
+            "the same session, never a fork"
+        );
         let prompt = argument(&launched[1].0, "--system-prompt").unwrap();
-        assert!(prompt.contains("Right now you are Xiaohe (小何)") && prompt.contains("always reply in Chinese"), "{prompt}");
+        assert!(
+            prompt.contains("Right now you are Xiaohe (小何)")
+                && prompt.contains("always reply in Chinese"),
+            "{prompt}"
+        );
         let switched = texts(&script, 2);
-        assert!(switched[0].starts_with(CONTEXT_PREFIX) && switched[0].contains("from now on you are Xiaohe (小何)"), "{switched:?}");
+        assert!(
+            switched[0].starts_with(CONTEXT_PREFIX)
+                && switched[0].contains("from now on you are Xiaohe (小何)"),
+            "{switched:?}"
+        );
         assert_eq!(switched[1], "你好");
 
         say_as(&brain, "wanwanxiaohe", "还在吗").await;
         assert_eq!(launches(&script).len(), 2);
         assert_eq!(texts(&script, 3), ["还在吗"], "the note goes once");
         // Whom the session spoke as is kept across a restart.
-        assert!(std::fs::read_to_string(dir.join(STATE_FILE)).unwrap().contains("\"wanwanxiaohe\""));
+        assert!(
+            std::fs::read_to_string(dir.join(STATE_FILE))
+                .unwrap()
+                .contains("\"wanwanxiaohe\"")
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -1108,12 +1500,23 @@ pub(crate) mod tests {
     async fn a_credential_other_than_the_api_key_stops_the_process() {
         let dir = temp_dir("claude-oauth");
         let script = script();
-        script.lock().unwrap().turns.push_back(vec![Step::Init("none"), Step::Result(false, "")]);
+        script
+            .lock()
+            .unwrap()
+            .turns
+            .push_back(vec![Step::Init("none"), Step::Result(false, "")]);
         let brain = brain(&dir, &script, Arc::default());
         let error = say(&brain, "key", "hi").await.unwrap_err();
-        assert!(matches!(&error, ResidentError::Rpc(message) if message.contains("not the Anthropic API key")), "{error}");
+        assert!(
+            matches!(&error, ResidentError::Rpc(message) if message.contains("not the Anthropic API key")),
+            "{error}"
+        );
         say(&brain, "key", "hi").await.unwrap();
-        assert_eq!(launches(&script).len(), 2, "the refused process was dropped");
+        assert_eq!(
+            launches(&script).len(),
+            2,
+            "the refused process was dropped"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -1122,16 +1525,33 @@ pub(crate) mod tests {
         let dir = temp_dir("claude-errors");
         let script = script();
         script.lock().unwrap().turns.extend([
-            vec![Step::Init(API_KEY_SOURCE), Step::Result(true, "Invalid API key · Fix external API key")],
+            vec![
+                Step::Init(API_KEY_SOURCE),
+                Step::Result(true, "Invalid API key · Fix external API key"),
+            ],
             vec![Step::Exit],
         ]);
         let brain = brain(&dir, &script, Arc::default());
         let error = say(&brain, "key", "one").await.unwrap_err();
-        assert_eq!(error, ResidentError::TurnEnded("Invalid API key · Fix external API key".to_owned()));
-        assert!(matches!(say(&brain, "key", "two").await, Err(ResidentError::Rpc(_))));
-        assert_eq!(launches(&script).len(), 1, "an error result leaves the process running");
+        assert_eq!(
+            error,
+            ResidentError::TurnEnded("Invalid API key · Fix external API key".to_owned())
+        );
+        assert!(matches!(
+            say(&brain, "key", "two").await,
+            Err(ResidentError::Rpc(_))
+        ));
+        assert_eq!(
+            launches(&script).len(),
+            1,
+            "an error result leaves the process running"
+        );
         say(&brain, "key", "three").await.unwrap();
-        assert_eq!(launches(&script).len(), 2, "a process that died is started again");
+        assert_eq!(
+            launches(&script).len(),
+            2,
+            "a process that died is started again"
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -1144,7 +1564,13 @@ pub(crate) mod tests {
         say(&brain, "new", "hi").await.unwrap();
         let keys: Vec<String> = launches(&script)
             .iter()
-            .map(|(_, env)| env.iter().find(|(name, _)| name == "ANTHROPIC_API_KEY").unwrap().1.clone())
+            .map(|(_, env)| {
+                env.iter()
+                    .find(|(name, _)| name == "ANTHROPIC_API_KEY")
+                    .unwrap()
+                    .1
+                    .clone()
+            })
             .collect();
         assert_eq!(keys, ["old", "new"]);
         brain.stop().await;
@@ -1158,9 +1584,16 @@ pub(crate) mod tests {
         let dir = temp_dir("claude-timeout");
         let script = script();
         script.lock().unwrap().hold = Some(Arc::new(tokio::sync::Notify::new()));
-        script.lock().unwrap().turns.push_back(vec![Step::Init(API_KEY_SOURCE), Step::Hold]);
+        script
+            .lock()
+            .unwrap()
+            .turns
+            .push_back(vec![Step::Init(API_KEY_SOURCE), Step::Hold]);
         let brain = brain(&dir, &script, Arc::default());
-        assert_eq!(say(&brain, "key", "hi").await.unwrap_err(), ResidentError::Timeout);
+        assert_eq!(
+            say(&brain, "key", "hi").await.unwrap_err(),
+            ResidentError::Timeout
+        );
         say(&brain, "key", "hi").await.unwrap();
         assert_eq!(launches(&script).len(), 2);
         let _ = std::fs::remove_dir_all(dir);
@@ -1203,7 +1636,11 @@ pub(crate) mod tests {
                     replies: vec!["One task.".to_owned(), "It's fine.".to_owned()],
                     at: Some(at("2026-10-14T07:00:01Z")),
                 },
-                Exchange { said: "and now?".to_owned(), replies: vec!["Still one.".to_owned()], at: Some(at("2026-10-14T07:01:00Z")) },
+                Exchange {
+                    said: "and now?".to_owned(),
+                    replies: vec!["Still one.".to_owned()],
+                    at: Some(at("2026-10-14T07:01:00Z"))
+                },
             ]
         );
 
@@ -1216,23 +1653,47 @@ pub(crate) mod tests {
         std::fs::write(project.join("abc.jsonl"), &transcript).unwrap();
         assert_eq!(
             brain.history(1),
-            [Exchange { said: "and now?".to_owned(), replies: vec!["Still one.".to_owned()], at: Some(at("2026-10-14T07:01:00Z")) }]
+            [Exchange {
+                said: "and now?".to_owned(),
+                replies: vec!["Still one.".to_owned()],
+                at: Some(at("2026-10-14T07:01:00Z"))
+            }]
         );
         let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
     fn the_child_gets_none_of_the_daemons_claude_or_anthropic_variables() {
-        for name in ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_USE_BEDROCK", "CLAUDECODE", "ANTHROPIC_PROFILE", "CLAUDE_CONFIG_DIR"] {
+        for name in [
+            "CLAUDE_CODE_OAUTH_TOKEN",
+            "ANTHROPIC_AUTH_TOKEN",
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_BASE_URL",
+            "CLAUDE_CODE_USE_BEDROCK",
+            "CLAUDECODE",
+            "ANTHROPIC_PROFILE",
+            "CLAUDE_CONFIG_DIR",
+        ] {
             assert!(withheld(name), "{name}");
         }
         for name in ["HOME", "PATH", "LANG", "VIBEBUDDY_CLAUDE_BASE_URL"] {
             assert!(!withheld(name), "{name}");
         }
-        let env = child_env(Path::new("/state/resident-claude"), "sk", Some("http://127.0.0.1:9".to_owned()));
-        assert!(env.contains(&("ANTHROPIC_BASE_URL".to_owned(), "http://127.0.0.1:9".to_owned())));
+        let env = child_env(
+            Path::new("/state/resident-claude"),
+            "sk",
+            Some("http://127.0.0.1:9".to_owned()),
+        );
+        assert!(env.contains(&(
+            "ANTHROPIC_BASE_URL".to_owned(),
+            "http://127.0.0.1:9".to_owned()
+        )));
         assert!(env.contains(&("CLAUDE_CODE_DISABLE_AUTO_MEMORY".to_owned(), "1".to_owned())));
-        assert!(!child_env(Path::new("/s"), "sk", Some(String::new())).iter().any(|(name, _)| name == "ANTHROPIC_BASE_URL"));
+        assert!(
+            !child_env(Path::new("/s"), "sk", Some(String::new()))
+                .iter()
+                .any(|(name, _)| name == "ANTHROPIC_BASE_URL")
+        );
     }
 
     #[test]
@@ -1244,7 +1705,10 @@ pub(crate) mod tests {
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
         write_private(&path, "new").unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "new");
-        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
         assert!(!path.with_extension("tmp").exists());
         let _ = std::fs::remove_dir_all(dir);
     }

@@ -56,7 +56,11 @@ pub fn row(index: usize, row: usize) -> u16 {
     let bitmap = &TABLE[2 + count() * 2 + index * GLYPH_BYTES..][..GLYPH_BYTES];
     let at = row * 3 / 2;
     let (first, second) = (bitmap[at] as u16, bitmap[at + 1] as u16);
-    if row.is_multiple_of(2) { first << 4 | second >> 4 } else { (first & 0x0f) << 8 | second }
+    if row.is_multiple_of(2) {
+        first << 4 | second >> 4
+    } else {
+        (first & 0x0f) << 8 | second
+    }
 }
 
 /// A wide glyph's pixel size at a text scale: one pixel up to scale 3, so Chinese stays 12 px next to both
@@ -87,7 +91,11 @@ fn gap(glyph: Glyph, scale: i32) -> i32 {
 
 /// The glyphs of UTF-8 text, each with its length in bytes; stops at NUL like the 5×7 drawing does.
 pub fn glyphs(text: &[u8]) -> Glyphs<'_> {
-    Glyphs { text, at: 0, previous_alphanumeric: false }
+    Glyphs {
+        text,
+        at: 0,
+        previous_alphanumeric: false,
+    }
 }
 
 pub struct Glyphs<'a> {
@@ -113,16 +121,26 @@ impl Iterator for Glyphs<'_> {
                 0xf0..=0xf4 => 4,
                 _ => 0,
             };
-            let character = self.text.get(self.at..self.at + length).and_then(|bytes| core::str::from_utf8(bytes).ok()?.chars().next());
+            let character = self
+                .text
+                .get(self.at..self.at + length)
+                .and_then(|bytes| core::str::from_utf8(bytes).ok()?.chars().next());
             match character {
                 Some(character) => {
-                    let next_alphanumeric = self.text.get(self.at + length).is_some_and(u8::is_ascii_alphanumeric);
+                    let next_alphanumeric = self
+                        .text
+                        .get(self.at + length)
+                        .is_some_and(u8::is_ascii_alphanumeric);
                     (self.wide(character, next_alphanumeric), length)
                 }
                 None => {
                     // One box for a broken sequence, not one per byte.
                     let mut length = 1;
-                    while self.text.get(self.at + length).is_some_and(|&byte| byte & 0xc0 == 0x80) {
+                    while self
+                        .text
+                        .get(self.at + length)
+                        .is_some_and(|&byte| byte & 0xc0 == 0x80)
+                    {
                         length += 1;
                     }
                     (Glyph::Missing, length)
@@ -139,7 +157,9 @@ impl Glyphs<'_> {
     fn wide(&self, character: char, next_alphanumeric: bool) -> Glyph {
         // Curly single quotes against English letters are apostrophes ("it’s"): the ASCII one fits there,
         // a full-width quote would leave a gap.
-        if matches!(character, '\u{2018}' | '\u{2019}') && (self.previous_alphanumeric || next_alphanumeric) {
+        if matches!(character, '\u{2018}' | '\u{2019}')
+            && (self.previous_alphanumeric || next_alphanumeric)
+        {
             return Glyph::Ascii(b'\'');
         }
         lookup(character).map_or(Glyph::Missing, Glyph::Wide)
@@ -178,8 +198,27 @@ pub fn has_wide(text: &[u8]) -> bool {
 
 /// Punctuation that must not start a row: rather than move it down alone, it hangs past the row's end.
 fn closing(text: &[u8]) -> bool {
-    core::str::from_utf8(text)
-        .is_ok_and(|text| matches!(text, "，" | "。" | "、" | "；" | "：" | "！" | "？" | "）" | "》" | "〉" | "」" | "』" | "】" | "〕" | "”" | "’" | "…"))
+    core::str::from_utf8(text).is_ok_and(|text| {
+        matches!(
+            text,
+            "，" | "。"
+                | "、"
+                | "；"
+                | "："
+                | "！"
+                | "？"
+                | "）"
+                | "》"
+                | "〉"
+                | "」"
+                | "』"
+                | "】"
+                | "〕"
+                | "”"
+                | "’"
+                | "…"
+        )
+    })
 }
 
 /// Wraps text to rows of at most `max_width` pixels at `scale`. Breaks at spaces, and between any two
@@ -251,7 +290,10 @@ mod tests {
     use alloc::vec;
 
     fn rows(text: &str, max_width: i32, scale: i32) -> Vec<String> {
-        wrap(text, max_width, scale).into_iter().map(|row| String::from_utf8(row).unwrap()).collect()
+        wrap(text, max_width, scale)
+            .into_iter()
+            .map(|row| String::from_utf8(row).unwrap())
+            .collect()
     }
 
     #[test]
@@ -259,7 +301,8 @@ mod tests {
         assert!(count() > 3500);
         assert_eq!(TABLE.len(), 2 + count() * (2 + GLYPH_BYTES));
         assert!((1..count()).all(|index| codepoint(index - 1) < codepoint(index)));
-        for character in "你好世界的一了是我龟鼠，。、！？：；“”‘’（）《》…—".chars() {
+        for character in "你好世界的一了是我龟鼠，。、！？：；“”‘’（）《》…—".chars()
+        {
             assert!(lookup(character).is_some(), "{character}");
         }
         // Level two and beyond, and other scripts, are not in it.
@@ -272,7 +315,10 @@ mod tests {
     fn a_glyph_keeps_its_spacing_row_and_column_blank() {
         let index = lookup('国').unwrap();
         assert_eq!(row(index, 0), 0, "the top row is the line spacing");
-        assert!((0..12).all(|line| row(index, line) & 1 == 0), "the right column is the character spacing");
+        assert!(
+            (0..12).all(|line| row(index, line) & 1 == 0),
+            "the right column is the character spacing"
+        );
         assert!((1..12).filter(|&line| row(index, line) != 0).count() >= 9);
         // 一 is a single stroke across the middle.
         let one = lookup('一').unwrap();
@@ -282,28 +328,59 @@ mod tests {
     #[test]
     fn utf8_turns_into_glyphs_with_their_byte_lengths() {
         let found: Vec<(Glyph, usize)> = glyphs("a你\u{1F600}".as_bytes()).collect();
-        assert_eq!(found, [(Glyph::Ascii(b'a'), 1), (Glyph::Wide(lookup('你').unwrap()), 3), (Glyph::Missing, 4)]);
+        assert_eq!(
+            found,
+            [
+                (Glyph::Ascii(b'a'), 1),
+                (Glyph::Wide(lookup('你').unwrap()), 3),
+                (Glyph::Missing, 4)
+            ]
+        );
         // A broken sequence is one box; NUL ends the text.
-        assert_eq!(glyphs(&[0xe4, 0xbd, b'x', 0, b'y']).collect::<Vec<_>>(), [(Glyph::Missing, 2), (Glyph::Ascii(b'x'), 1)]);
+        assert_eq!(
+            glyphs(&[0xe4, 0xbd, b'x', 0, b'y']).collect::<Vec<_>>(),
+            [(Glyph::Missing, 2), (Glyph::Ascii(b'x'), 1)]
+        );
         assert_eq!(glyphs(&[0xff]).collect::<Vec<_>>(), [(Glyph::Missing, 1)]);
     }
 
     #[test]
     fn curly_quotes_by_english_letters_are_apostrophes() {
-        assert_eq!(glyphs("it’s".as_bytes()).nth(2), Some((Glyph::Ascii(b'\''), 3)));
-        assert_eq!(glyphs("‘ok".as_bytes()).next(), Some((Glyph::Ascii(b'\''), 3)));
-        assert_eq!(glyphs("说‘好’".as_bytes()).nth(1), Some((Glyph::Wide(lookup('‘').unwrap()), 3)));
+        assert_eq!(
+            glyphs("it’s".as_bytes()).nth(2),
+            Some((Glyph::Ascii(b'\''), 3))
+        );
+        assert_eq!(
+            glyphs("‘ok".as_bytes()).next(),
+            Some((Glyph::Ascii(b'\''), 3))
+        );
+        assert_eq!(
+            glyphs("说‘好’".as_bytes()).nth(1),
+            Some((Glyph::Wide(lookup('‘').unwrap()), 3))
+        );
     }
 
     #[test]
     fn mixed_text_measures_each_font_by_its_own_advance() {
         assert_eq!(width(b"", 1), 0);
-        assert_eq!(width(b"ABC", 1), 17, "the 5x7 font: 6 px a character, less the last gap");
+        assert_eq!(
+            width(b"ABC", 1),
+            17,
+            "the 5x7 font: 6 px a character, less the last gap"
+        );
         assert_eq!(width(b"ABC", 2), 34);
         assert_eq!(width("你好".as_bytes(), 1), 23);
-        assert_eq!(width("你好".as_bytes(), 2), 23, "12 px next to large ASCII too");
+        assert_eq!(
+            width("你好".as_bytes(), 2),
+            23,
+            "12 px next to large ASCII too"
+        );
         assert_eq!(width("OK了".as_bytes(), 1), 12 + 11);
-        assert_eq!(width("\u{1F600}".as_bytes(), 1), 11, "a missing character is as wide as a Chinese one");
+        assert_eq!(
+            width("\u{1F600}".as_bytes(), 1),
+            11,
+            "a missing character is as wide as a Chinese one"
+        );
         assert_eq!(fit("你好吗".as_bytes(), 1, 30), 6);
         assert_eq!(fit("你好吗".as_bytes(), 1, 35), 9);
         assert_eq!(fit(b"ABCDE", 1, 17), 3);
@@ -325,12 +402,19 @@ mod tests {
     #[test]
     fn chinese_breaks_between_any_two_characters_but_keeps_words_whole() {
         // Four characters to a row: 4 * 12 - 1.
-        assert_eq!(rows("一二三四五六七八九", 47, 1), ["一二三四", "五六七八", "九"]);
+        assert_eq!(
+            rows("一二三四五六七八九", 47, 1),
+            ["一二三四", "五六七八", "九"]
+        );
         assert_eq!(rows("打开Codex看看", 47, 1), ["打开", "Codex看", "看"]);
         assert_eq!(rows("你好 world", 47, 1), ["你好", "world"]);
         // Closing punctuation hangs past the end rather than starting a row.
         assert_eq!(rows("一二三四。五", 47, 1), ["一二三四。", "五"]);
-        assert_eq!(rows("一二三四 。", 47, 1), ["一二三四", "。"], "unless a space stands before it");
+        assert_eq!(
+            rows("一二三四 。", 47, 1),
+            ["一二三四", "。"],
+            "unless a space stands before it"
+        );
         // A missing character still takes a cell and wraps like one.
         assert_eq!(rows("一二三\u{1F600}四", 47, 1), ["一二三\u{1F600}", "四"]);
     }

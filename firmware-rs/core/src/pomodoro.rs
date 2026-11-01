@@ -87,7 +87,17 @@ impl Default for Pomodoro {
 
 impl Pomodoro {
     pub const fn new() -> Self {
-        Self { phase: Phase::Focus, run: Run::Pending, deadline_ms: 0, remaining_ms: 0, tally: Tally { day: 0, completed: 0, focus_s: 0 } }
+        Self {
+            phase: Phase::Focus,
+            run: Run::Pending,
+            deadline_ms: 0,
+            remaining_ms: 0,
+            tally: Tally {
+                day: 0,
+                completed: 0,
+                focus_s: 0,
+            },
+        }
     }
 
     /// Compares by signed difference so it stays correct when the millisecond count wraps.
@@ -171,7 +181,11 @@ impl Pomodoro {
         }
         // New day: reset. The first time we hear a date the record is empty anyway, so
         // resetting is harmless; if a restart restored yesterday's record, it resets here.
-        self.tally = Tally { day, completed: 0, focus_s: 0 };
+        self.tally = Tally {
+            day,
+            completed: 0,
+            focus_s: 0,
+        };
         true
     }
 
@@ -312,11 +326,22 @@ mod tests {
 
         // A new day resets; the same date doesn't.
         assert!(pomodoro.set_day(20260916));
-        assert_eq!(pomodoro.tally(), Tally { day: 20260916, completed: 0, focus_s: 0 });
+        assert_eq!(
+            pomodoro.tally(),
+            Tally {
+                day: 20260916,
+                completed: 0,
+                focus_s: 0
+            }
+        );
 
         // After a restart yesterday's record is restored, and it resets only when a heartbeat brings today's date.
         let mut pomodoro = Pomodoro::new();
-        pomodoro.restore_tally(Tally { day: 20260916, completed: 3, focus_s: 4500 });
+        pomodoro.restore_tally(Tally {
+            day: 20260916,
+            completed: 3,
+            focus_s: 4500,
+        });
         let view = pomodoro.view(0);
         assert_eq!(view.completed, 3);
         assert_eq!(view.focus_s, 4500);
@@ -335,6 +360,9 @@ mod tests {
         assert_eq!(wrapped, 3999);
         assert_eq!(pomodoro.view(wrapped).remaining_ms, FOCUS_MS - 5000);
         assert_eq!(pomodoro.tick(wrapped), Transition::Nothing);
-        assert_eq!(pomodoro.tick(start.wrapping_add(FOCUS_MS)), Transition::FocusEnded);
+        assert_eq!(
+            pomodoro.tick(start.wrapping_add(FOCUS_MS)),
+            Transition::FocusEnded
+        );
     }
 }

@@ -84,20 +84,43 @@ impl Plan {
 
     /// "This month: 12,300 of 100,000 characters · renews 24 Nov", on the Paid plan only.
     pub fn month_line(&self) -> Option<String> {
-        let (Some(used), Some(limit), Some(end)) = (self.characters, self.characters_limit, self.period_end.as_deref()) else { return None };
-        let end = chrono::DateTime::parse_from_rfc3339(end).ok()?.with_timezone(&chrono::Local);
-        let renews = if crate::i18n::is_chinese() { end.format("%-m月%-d日") } else { end.format("%-d %b") }.to_string();
-        self.paid().then(|| tr("This month: %@ of %@ characters · renews %@", &[&grouped(used), &grouped(limit), &renews]))
+        let (Some(used), Some(limit), Some(end)) = (
+            self.characters,
+            self.characters_limit,
+            self.period_end.as_deref(),
+        ) else {
+            return None;
+        };
+        let end = chrono::DateTime::parse_from_rfc3339(end)
+            .ok()?
+            .with_timezone(&chrono::Local);
+        let renews = if crate::i18n::is_chinese() {
+            end.format("%-m月%-d日")
+        } else {
+            end.format("%-d %b")
+        }
+        .to_string();
+        self.paid().then(|| {
+            tr(
+                "This month: %@ of %@ characters · renews %@",
+                &[&grouped(used), &grouped(limit), &renews],
+            )
+        })
     }
 }
 
 /// When refused voice comes back: the next 00:00 UTC after `now`, when the service's day starts over, as `HH:MM`
 /// (24 hours) in `zone`, the same time the box shows.
-pub fn voice_comes_back<Zone: chrono::TimeZone>(now: chrono::DateTime<chrono::Utc>, zone: &Zone) -> String
+pub fn voice_comes_back<Zone: chrono::TimeZone>(
+    now: chrono::DateTime<chrono::Utc>,
+    zone: &Zone,
+) -> String
 where
     Zone::Offset: std::fmt::Display,
 {
-    let midnight = (now.date_naive() + chrono::Days::new(1)).and_time(chrono::NaiveTime::MIN).and_utc();
+    let midnight = (now.date_naive() + chrono::Days::new(1))
+        .and_time(chrono::NaiveTime::MIN)
+        .and_utc();
     midnight.with_timezone(zone).format("%H:%M").to_string()
 }
 
@@ -167,14 +190,20 @@ pub struct FirmwareOffer {
 impl FirmwareOffer {
     /// Release notes in the UI's language, English otherwise.
     pub fn notes(&self, chinese: bool) -> Option<&str> {
-        chinese.then(|| self.notes.get("zh-Hans")).flatten().or_else(|| self.notes.get("en")).map(String::as_str)
+        chinese
+            .then(|| self.notes.get("zh-Hans"))
+            .flatten()
+            .or_else(|| self.notes.get("en"))
+            .map(String::as_str)
     }
 }
 
 impl Updates {
     /// An update is offered only for a box that runs something older, and only once the firmware is on disk.
     pub fn firmware_update_available(&self) -> bool {
-        self.firmware.as_ref().is_some_and(|offer| offer.newer_than_box && offer.directory.is_some())
+        self.firmware
+            .as_ref()
+            .is_some_and(|offer| offer.newer_than_box && offer.directory.is_some())
     }
 
     /// The images to flash, once downloaded.
@@ -227,7 +256,11 @@ pub struct DaemonInfo {
 impl DaemonInfo {
     /// What the settings window shows: the revision, or the whole build line from an older daemon.
     pub fn short_build(&self) -> &str {
-        if self.revision.is_empty() { &self.build } else { &self.revision }
+        if self.revision.is_empty() {
+            &self.build
+        } else {
+            &self.revision
+        }
     }
 }
 
@@ -333,7 +366,10 @@ impl Device {
         Some(match self.relay_refused.as_deref()? {
             "signed_out" => tr("Sign in to use the Relay.", &[]),
             "plan" => tr("The Relay needs the Paid plan.", &[]),
-            _ => tr("The Relay can't check the account right now. VibeBuddy tries again later.", &[]),
+            _ => tr(
+                "The Relay can't check the account right now. VibeBuddy tries again later.",
+                &[],
+            ),
         })
     }
 }
@@ -371,7 +407,12 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Self { voice: None, notify_link: true, check_updates: None, relay: true }
+        Self {
+            voice: None,
+            notify_link: true,
+            check_updates: None,
+            relay: true,
+        }
     }
 }
 
@@ -421,7 +462,11 @@ impl MenuState {
         };
         let today = &status.today;
         Self {
-            icon: if device.connected { Icon::Online } else { Icon::Offline },
+            icon: if device.connected {
+                Icon::Online
+            } else {
+                Icon::Offline
+            },
             device_line,
             mode_line: tr("Mode: %@", &[&mode]),
             today_line: tr(
@@ -458,7 +503,10 @@ mod tests {
 
     #[test]
     fn the_box_screens_parse() {
-        let device: Device = serde_json::from_str(r#"{"connected": true, "port": null, "bridge": false, "screens": "korekore"}"#).expect("device");
+        let device: Device = serde_json::from_str(
+            r#"{"connected": true, "port": null, "bridge": false, "screens": "korekore"}"#,
+        )
+        .expect("device");
         assert_eq!(device.screens.as_deref(), Some("korekore"));
     }
 
@@ -467,7 +515,10 @@ mod tests {
         let status: Status = serde_json::from_str(LIVE).expect("status");
         assert!(status.device.connected);
         assert_eq!(status.device.volume, Some(40));
-        assert_eq!(status.device.screens, None, "firmware that predates the choice says nothing");
+        assert_eq!(
+            status.device.screens, None,
+            "firmware that predates the choice says nothing"
+        );
         assert_eq!(status.today.busy_seconds, 2217);
         assert!(status.config.notify_link);
     }
@@ -475,7 +526,11 @@ mod tests {
     #[test]
     fn the_settings_window_shows_the_revision_alone() {
         let status: Status = serde_json::from_str(LIVE).expect("status");
-        assert_eq!(status.daemon.short_build(), "v0.2.2 2026-10-01 13:23", "an older daemon has no revision");
+        assert_eq!(
+            status.daemon.short_build(),
+            "v0.2.2 2026-10-01 13:23",
+            "an older daemon has no revision"
+        );
         let newer: DaemonInfo = serde_json::from_str(
             r#"{"build": "0.4.0 v0.4.0-19-gcb7f43c 2026-10-09 17:28", "revision": "v0.4.0-19-gcb7f43c"}"#,
         )
@@ -486,9 +541,15 @@ mod tests {
     #[test]
     fn the_firmware_label_leads_with_the_version() {
         let mut status: Status = serde_json::from_str(LIVE).expect("status");
-        assert_eq!(status.device.firmware_label().as_deref(), Some("v0.2.1-38-ga0bffc7 2026-09-30 16:29"));
+        assert_eq!(
+            status.device.firmware_label().as_deref(),
+            Some("v0.2.1-38-ga0bffc7 2026-09-30 16:29")
+        );
         status.device.firmware_version = Some("0.2.2".to_owned());
-        assert_eq!(status.device.firmware_label().as_deref(), Some("0.2.2 · v0.2.1-38-ga0bffc7 2026-09-30 16:29"));
+        assert_eq!(
+            status.device.firmware_label().as_deref(),
+            Some("0.2.2 · v0.2.1-38-ga0bffc7 2026-09-30 16:29")
+        );
     }
 
     #[test]
@@ -507,7 +568,10 @@ mod tests {
         assert_eq!(MenuState::derive(None).icon, Icon::DaemonDown);
         let offline = Status::default();
         assert_eq!(MenuState::derive(Some(&offline)).icon, Icon::Offline);
-        assert_eq!(MenuState::derive(Some(&offline)).device_line, "Box not found");
+        assert_eq!(
+            MenuState::derive(Some(&offline)).device_line,
+            "Box not found"
+        );
     }
 
     #[test]
@@ -528,7 +592,10 @@ mod tests {
         )
         .expect("updates");
         assert!(updates.firmware_update_available());
-        assert_eq!(updates.firmware_directory(), Some(std::path::Path::new("/state/updates/firmware/0.4.0")));
+        assert_eq!(
+            updates.firmware_directory(),
+            Some(std::path::Path::new("/state/updates/firmware/0.4.0"))
+        );
         let offer = updates.firmware.clone().unwrap();
         assert_eq!(offer.notes(true), Some("- 修复"));
         assert_eq!(offer.notes(false), Some("- Fix"));
@@ -543,8 +610,12 @@ mod tests {
 
     #[test]
     fn the_relays_refusal_is_explained() {
-        let device: Device = serde_json::from_str(r#"{"connected":false,"relay_refused":"plan"}"#).expect("device");
-        assert_eq!(device.relay_refusal().as_deref(), Plan::SHOWN.then_some("The Relay needs the Paid plan."));
+        let device: Device =
+            serde_json::from_str(r#"{"connected":false,"relay_refused":"plan"}"#).expect("device");
+        assert_eq!(
+            device.relay_refusal().as_deref(),
+            Plan::SHOWN.then_some("The Relay needs the Paid plan.")
+        );
         assert_eq!(Device::default().relay_refusal(), None);
     }
 
@@ -558,33 +629,73 @@ mod tests {
         )
         .expect("account");
         assert!(account.available && account.signed_in);
-        assert_eq!((account.github_id, account.github_login.as_deref(), account.email), (Some(60097), Some("octocat"), None));
+        assert_eq!(
+            (
+                account.github_id,
+                account.github_login.as_deref(),
+                account.email
+            ),
+            (Some(60097), Some("octocat"), None)
+        );
         let used: Account = serde_json::from_str(r#"{"signed_in":true,"today":{"day":"2026-10-24","commands":7,"commands_limit":100},"refused":"global_cap"}"#).expect("account");
-        assert_eq!(used.today, Some(Usage { day: "2026-10-24".to_owned(), commands: 7, commands_limit: 100 }));
+        assert_eq!(
+            used.today,
+            Some(Usage {
+                day: "2026-10-24".to_owned(),
+                commands: 7,
+                commands_limit: 100
+            })
+        );
         assert_eq!(used.refused.as_deref(), Some("global_cap"));
         assert_eq!(used.plan, None);
     }
 
     #[test]
     fn refused_voice_comes_back_at_the_next_midnight_utc_in_local_time() {
-        let at = |text: &str| chrono::DateTime::parse_from_rfc3339(text).unwrap().with_timezone(&chrono::Utc);
+        let at = |text: &str| {
+            chrono::DateTime::parse_from_rfc3339(text)
+                .unwrap()
+                .with_timezone(&chrono::Utc)
+        };
         let zone = |hours: i32| chrono::FixedOffset::east_opt(hours * 3600).unwrap();
-        assert_eq!(voice_comes_back(at("2026-10-27T15:59:00Z"), &zone(8)), "08:00");
-        assert_eq!(voice_comes_back(at("2026-10-27T15:59:00Z"), &zone(-5)), "19:00");
-        assert_eq!(voice_comes_back(at("2026-12-31T23:59:59Z"), &chrono::Utc), "00:00");
+        assert_eq!(
+            voice_comes_back(at("2026-10-27T15:59:00Z"), &zone(8)),
+            "08:00"
+        );
+        assert_eq!(
+            voice_comes_back(at("2026-10-27T15:59:00Z"), &zone(-5)),
+            "19:00"
+        );
+        assert_eq!(
+            voice_comes_back(at("2026-12-31T23:59:59Z"), &chrono::Utc),
+            "00:00"
+        );
     }
 
     #[test]
     fn the_plan_decodes_and_only_the_paid_plan_has_a_month() {
-        let free: Account = serde_json::from_str(r#"{"signed_in":true,"plan":{"name":"free"}}"#).expect("account");
+        let free: Account =
+            serde_json::from_str(r#"{"signed_in":true,"plan":{"name":"free"}}"#).expect("account");
         let free = free.plan.expect("plan");
         assert!(!free.paid());
         assert_eq!(free.month_line(), None);
         let paid: Plan = serde_json::from_str(r#"{"name":"paid","period_end":"2026-11-24T12:00:00.000Z","characters":12300,"characters_limit":100000}"#).expect("plan");
         assert!(paid.paid());
         let line = paid.month_line().expect("a month");
-        assert!(line.starts_with("This month: 12,300 of 100,000 characters · renews ") && line.ends_with(" Nov"), "{line}");
-        assert_eq!((grouped(0), grouped(999), grouped(1000), grouped(1234567)), ("0".to_owned(), "999".to_owned(), "1,000".to_owned(), "1,234,567".to_owned()));
+        assert!(
+            line.starts_with("This month: 12,300 of 100,000 characters · renews ")
+                && line.ends_with(" Nov"),
+            "{line}"
+        );
+        assert_eq!(
+            (grouped(0), grouped(999), grouped(1000), grouped(1234567)),
+            (
+                "0".to_owned(),
+                "999".to_owned(),
+                "1,000".to_owned(),
+                "1,234,567".to_owned()
+            )
+        );
     }
 
     #[test]
@@ -592,7 +703,16 @@ mod tests {
         let status: Status = serde_json::from_str(LIVE).expect("status");
         assert_eq!(status.voice_keys, None);
         let keys: VoiceKeys = serde_json::from_str(r#"{"elevenlabs": {"set": true, "refused": true}, "volc": {"set": false, "refused": false}}"#).expect("keys");
-        assert_eq!(keys, VoiceKeys { elevenlabs: VoiceKey { set: true, refused: true }, volc: VoiceKey::default() });
+        assert_eq!(
+            keys,
+            VoiceKeys {
+                elevenlabs: VoiceKey {
+                    set: true,
+                    refused: true
+                },
+                volc: VoiceKey::default()
+            }
+        );
     }
 
     #[test]
@@ -601,7 +721,10 @@ mod tests {
         assert_eq!(status.making, None);
         let status: Status = serde_json::from_str(r#"{"making":{"id":"owl-1a2b3c4d","name":"Owl","state":"making","done":3,"total":12,"reason":null,"error":null}}"#).expect("status");
         let making = status.making.expect("making");
-        assert!(making.running() && making.id == "owl-1a2b3c4d" && making.progress() == 0.25, "{making:?}");
+        assert!(
+            making.running() && making.id == "owl-1a2b3c4d" && making.progress() == 0.25,
+            "{making:?}"
+        );
     }
 
     #[test]

@@ -58,12 +58,18 @@ type Handshake = NqHandshakeCore<X25519, ChaChaPoly, Sha256, NoRng>;
 
 fn key_pair(secret: [u8; 32]) -> KeyPair<[u8; 32], SensitiveByteArray<[u8; 32]>> {
     let secret = SensitiveByteArray::from_slice(&secret);
-    KeyPair { public: X25519::pubkey(&secret), secret }
+    KeyPair {
+        public: X25519::pubkey(&secret),
+        secret,
+    }
 }
 
 /// The box's first line on a new link: it speaks Noise, and which box it is.
 pub fn opener(box_key: &[u8; 32]) -> String {
-    alloc::format!(r#"{{"version":1,"event":"link.noise","box":"{}"}}"#, link::encode(box_key))
+    alloc::format!(
+        r#"{{"version":1,"event":"link.noise","box":"{}"}}"#,
+        link::encode(box_key)
+    )
 }
 
 /// Seals lines going one way.
@@ -101,14 +107,22 @@ pub struct SealedLines {
 
 impl SealedLines {
     pub fn new(sealer: Sealer) -> Self {
-        Self { partial: Vec::new(), sealer }
+        Self {
+            partial: Vec::new(),
+            sealer,
+        }
     }
 
     /// Bytes of output: each line they complete is sealed and handed to `send`, without its newline, one at
     /// a time. A line `fits` refuses, given its sealed length, is dropped before it is sealed: a sealed line
     /// that never arrives would leave the other end unable to open any after it. `fits` is asked again for
     /// every line, after the line before it was sent.
-    pub fn lines(&mut self, bytes: &[u8], mut fits: impl FnMut(usize) -> bool, mut send: impl FnMut(&str)) {
+    pub fn lines(
+        &mut self,
+        bytes: &[u8],
+        mut fits: impl FnMut(usize) -> bool,
+        mut send: impl FnMut(&str),
+    ) {
         self.partial.extend_from_slice(bytes);
         while let Some(end) = self.partial.iter().position(|&byte| byte == b'\n') {
             let line: Vec<u8> = self.partial.drain(..=end).collect();
@@ -154,15 +168,27 @@ pub struct Accepted {
 
 /// Answers a computer's first handshake message. `ephemeral` must be fresh randomness.
 pub fn accept(link: &Link, ephemeral: [u8; 32], message: &[u8]) -> Result<Accepted, Refused> {
-    let message = core::str::from_utf8(message).ok().and_then(link::decode_vec).ok_or(Refused::BadMessage)?;
+    let message = core::str::from_utf8(message)
+        .ok()
+        .and_then(link::decode_vec)
+        .ok_or(Refused::BadMessage)?;
     if message.len() > HANDSHAKE_BYTES {
         return Err(Refused::BadMessage);
     }
-    let mut handshake =
-        Handshake::new(noise_ik(), PROLOGUE, false, Some(key_pair(link.noise_secret())), Some(key_pair(ephemeral)), None, None)
-            .map_err(|_| Refused::Auth)?;
+    let mut handshake = Handshake::new(
+        noise_ik(),
+        PROLOGUE,
+        false,
+        Some(key_pair(link.noise_secret())),
+        Some(key_pair(ephemeral)),
+        None,
+        None,
+    )
+    .map_err(|_| Refused::Auth)?;
     let mut payload = vec![0u8; HANDSHAKE_BYTES];
-    let length = handshake.read_message(&message, &mut payload).map_err(|_| Refused::Auth)?;
+    let length = handshake
+        .read_message(&message, &mut payload)
+        .map_err(|_| Refused::Auth)?;
     payload.truncate(length);
     let remote = handshake.get_remote_static().ok_or(Refused::Auth)?;
     let computer = link
@@ -172,9 +198,13 @@ pub fn accept(link: &Link, ephemeral: [u8; 32], message: &[u8]) -> Result<Accept
         .map(|paired| paired.key)
         .ok_or(Refused::Auth)?;
     let mut reply = vec![0u8; HANDSHAKE_BYTES];
-    let length = handshake.write_message(&[], &mut reply).map_err(|_| Refused::Auth)?;
+    let length = handshake
+        .write_message(&[], &mut reply)
+        .map_err(|_| Refused::Auth)?;
     reply.truncate(length);
-    let ciphers = TransportState::new(handshake).map_err(|_| Refused::Auth)?.take();
+    let ciphers = TransportState::new(handshake)
+        .map_err(|_| Refused::Auth)?
+        .take();
     Ok(Accepted {
         computer,
         payload,
@@ -189,11 +219,24 @@ pub struct Initiator(Handshake);
 
 impl Initiator {
     /// Starts a handshake with the box whose key is `box_key`; returns the first message as a line.
-    pub fn start(computer_seed: [u8; 32], box_key: &[u8; 32], ephemeral: [u8; 32], payload: &[u8]) -> Option<(Self, String)> {
+    pub fn start(
+        computer_seed: [u8; 32],
+        box_key: &[u8; 32],
+        ephemeral: [u8; 32],
+        payload: &[u8],
+    ) -> Option<(Self, String)> {
         let secret = ed25519_dalek::SigningKey::from_bytes(&computer_seed).to_scalar_bytes();
         let box_public = link::noise_public(box_key)?;
-        let mut handshake =
-            Handshake::new(noise_ik(), PROLOGUE, true, Some(key_pair(secret)), Some(key_pair(ephemeral)), Some(box_public), None).ok()?;
+        let mut handshake = Handshake::new(
+            noise_ik(),
+            PROLOGUE,
+            true,
+            Some(key_pair(secret)),
+            Some(key_pair(ephemeral)),
+            Some(box_public),
+            None,
+        )
+        .ok()?;
         let mut out = vec![0u8; HANDSHAKE_BYTES];
         let length = handshake.write_message(payload, &mut out).ok()?;
         out.truncate(length);
@@ -206,7 +249,10 @@ impl Initiator {
         let mut payload = vec![0u8; HANDSHAKE_BYTES];
         self.0.read_message(&reply, &mut payload).ok()?;
         let ciphers = TransportState::new(self.0).ok()?.take();
-        Some((Sealer(ciphers.initiator_to_responder), Opener(ciphers.responder_to_initiator)))
+        Some((
+            Sealer(ciphers.initiator_to_responder),
+            Opener(ciphers.responder_to_initiator),
+        ))
     }
 }
 
@@ -218,7 +264,9 @@ mod tests {
 
     fn paired_box() -> Link {
         let mut link = Link::new([1; 32]);
-        let computer = ed25519_dalek::SigningKey::from_bytes(&COMPUTER).verifying_key().to_bytes();
+        let computer = ed25519_dalek::SigningKey::from_bytes(&COMPUTER)
+            .verifying_key()
+            .to_bytes();
         link.pair(computer, "a").unwrap();
         link
     }
@@ -227,22 +275,38 @@ mod tests {
     fn the_converted_keys_agree() {
         // X25519 on the Ed25519 scalar gives the Montgomery form of the Ed25519 public key.
         let link = Link::new([7; 32]);
-        assert_eq!(Some(X25519::pubkey(&SensitiveByteArray::from_slice(&link.noise_secret()))), link::noise_public(&link.public_key()));
+        assert_eq!(
+            Some(X25519::pubkey(&SensitiveByteArray::from_slice(
+                &link.noise_secret()
+            ))),
+            link::noise_public(&link.public_key())
+        );
     }
 
     #[test]
     fn a_paired_computer_gets_a_session_both_ways() {
         let link = paired_box();
-        let (initiator, first) = Initiator::start(COMPUTER, &link.public_key(), [3; 32], br#"{"takeover":true}"#).unwrap();
+        let (initiator, first) = Initiator::start(
+            COMPUTER,
+            &link.public_key(),
+            [3; 32],
+            br#"{"takeover":true}"#,
+        )
+        .unwrap();
         let accepted = accept(&link, [4; 32], first.as_bytes()).unwrap();
         assert_eq!(accepted.computer, link.paired[0].key);
         assert_eq!(accepted.payload, br#"{"takeover":true}"#);
         let (mut to_box, mut from_box) = initiator.finish(accepted.reply.as_bytes()).unwrap();
         let (mut box_sealer, mut box_opener) = (accepted.sealer, accepted.opener);
 
-        let line = to_box.seal(br#"{"version":1,"event":"device.hello"}"#).unwrap();
+        let line = to_box
+            .seal(br#"{"version":1,"event":"device.hello"}"#)
+            .unwrap();
         assert!(!line.contains("device.hello"), "the Relay sees ciphertext");
-        assert_eq!(box_opener.open(line.as_bytes()).unwrap(), br#"{"version":1,"event":"device.hello"}"#);
+        assert_eq!(
+            box_opener.open(line.as_bytes()).unwrap(),
+            br#"{"version":1,"event":"device.hello"}"#
+        );
         let back = box_sealer.seal(b"MODE DUTY").unwrap();
         assert_eq!(from_box.open(back.as_bytes()).unwrap(), b"MODE DUTY");
     }
@@ -250,24 +314,34 @@ mod tests {
     #[test]
     fn output_is_sealed_line_by_line_and_a_line_that_does_not_fit_is_never_sealed() {
         let link = paired_box();
-        let (initiator, first) = Initiator::start(COMPUTER, &link.public_key(), [3; 32], b"{}").unwrap();
+        let (initiator, first) =
+            Initiator::start(COMPUTER, &link.public_key(), [3; 32], b"{}").unwrap();
         let accepted = accept(&link, [4; 32], first.as_bytes()).unwrap();
         let (_, mut from_box) = initiator.finish(accepted.reply.as_bytes()).unwrap();
         let mut lines = SealedLines::new(accepted.sealer);
         let mut sealed = Vec::new();
         lines.lines(b"MODE ", |_| true, |line| sealed.push(String::from(line)));
         assert!(sealed.is_empty());
-        lines.lines(b"DUTY\nDROPPED\nVOLUME 65\n", |length| length != sealed_len(7), |line| sealed.push(String::from(line)));
+        lines.lines(
+            b"DUTY\nDROPPED\nVOLUME 65\n",
+            |length| length != sealed_len(7),
+            |line| sealed.push(String::from(line)),
+        );
         assert_eq!(sealed.len(), 2);
         assert_eq!(sealed[0].len(), sealed_len(9));
         assert_eq!(from_box.open(sealed[0].as_bytes()).unwrap(), b"MODE DUTY");
-        assert_eq!(from_box.open(sealed[1].as_bytes()).unwrap(), b"VOLUME 65", "the dropped line cost no nonce");
+        assert_eq!(
+            from_box.open(sealed[1].as_bytes()).unwrap(),
+            b"VOLUME 65",
+            "the dropped line cost no nonce"
+        );
     }
 
     #[test]
     fn replayed_tampered_or_reordered_lines_are_refused() {
         let link = paired_box();
-        let (initiator, first) = Initiator::start(COMPUTER, &link.public_key(), [3; 32], b"{}").unwrap();
+        let (initiator, first) =
+            Initiator::start(COMPUTER, &link.public_key(), [3; 32], b"{}").unwrap();
         let accepted = accept(&link, [4; 32], first.as_bytes()).unwrap();
         let (mut to_box, _) = initiator.finish(accepted.reply.as_bytes()).unwrap();
         let mut opener = accepted.opener;
@@ -287,9 +361,19 @@ mod tests {
     fn an_unpaired_computer_or_garbage_is_turned_away() {
         let link = paired_box();
         let (_, stranger) = Initiator::start([9; 32], &link.public_key(), [3; 32], b"{}").unwrap();
-        assert!(matches!(accept(&link, [4; 32], stranger.as_bytes()), Err(Refused::Auth)));
-        let (_, for_another_box) = Initiator::start(COMPUTER, &Link::new([8; 32]).public_key(), [3; 32], b"{}").unwrap();
-        assert!(matches!(accept(&link, [4; 32], for_another_box.as_bytes()), Err(Refused::Auth)));
-        assert!(matches!(accept(&link, [4; 32], br#"{"version":1,"event":"link.hello"}"#), Err(Refused::BadMessage)));
+        assert!(matches!(
+            accept(&link, [4; 32], stranger.as_bytes()),
+            Err(Refused::Auth)
+        ));
+        let (_, for_another_box) =
+            Initiator::start(COMPUTER, &Link::new([8; 32]).public_key(), [3; 32], b"{}").unwrap();
+        assert!(matches!(
+            accept(&link, [4; 32], for_another_box.as_bytes()),
+            Err(Refused::Auth)
+        ));
+        assert!(matches!(
+            accept(&link, [4; 32], br#"{"version":1,"event":"link.hello"}"#),
+            Err(Refused::BadMessage)
+        ));
     }
 }

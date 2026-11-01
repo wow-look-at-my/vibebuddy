@@ -4,8 +4,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use vibebuddy_protocol::Event;
 use tokio::sync::broadcast;
+use vibebuddy_protocol::Event;
 
 use crate::serial_transport::{DeviceMessage, Transport};
 
@@ -20,7 +20,11 @@ const NATIVE_SILENCE: Duration = Duration::from_secs(10);
 const BRIDGE_SILENCE: Duration = Duration::from_secs(30);
 
 pub fn silence_timeout(bridge: bool) -> Duration {
-    if bridge { BRIDGE_SILENCE } else { NATIVE_SILENCE }
+    if bridge {
+        BRIDGE_SILENCE
+    } else {
+        NATIVE_SILENCE
+    }
 }
 
 pub struct Frame {
@@ -72,7 +76,9 @@ pub fn encode_png(frame: &Frame) -> Result<Vec<u8>, String> {
             // With the backlight off the picture can't be seen anyway; dim it into a "lights out" image rather than pretend it's lit.
             frame.pixels.iter().map(|value| value / 4).collect()
         };
-        writer.write_image_data(&pixels).map_err(|error| error.to_string())?;
+        writer
+            .write_image_data(&pixels)
+            .map_err(|error| error.to_string())?;
     }
     Ok(output)
 }
@@ -86,7 +92,9 @@ pub async fn capture(
     let frame = Event::named("device.screenshot")
         .to_ndjson()
         .map_err(|error| error.to_string())?;
-    transport.send(frame).map_err(|error| format!("{error:?}"))?;
+    transport
+        .send(frame)
+        .map_err(|error| format!("{error:?}"))?;
 
     let cap = tokio::time::Instant::now() + TOTAL_TIMEOUT;
     let mut deadline = (tokio::time::Instant::now() + silence).min(cap);
@@ -96,11 +104,17 @@ pub async fn capture(
     loop {
         let message = match tokio::time::timeout_at(deadline, bus.recv()).await {
             Ok(Ok(message)) => message,
-            Ok(Err(broadcast::error::RecvError::Lagged(_))) => return Err("device messages backed up, screenshot rows lost".to_owned()),
-            Ok(Err(broadcast::error::RecvError::Closed)) => return Err("device message channel closed".to_owned()),
+            Ok(Err(broadcast::error::RecvError::Lagged(_))) => {
+                return Err("device messages backed up, screenshot rows lost".to_owned());
+            }
+            Ok(Err(broadcast::error::RecvError::Closed)) => {
+                return Err("device message channel closed".to_owned());
+            }
             Err(_) => {
                 let rows = pixels.len() / 3 / WIDTH;
-                return Err(format!("timed out waiting for the screenshot ({rows} of {HEIGHT} rows arrived)"));
+                return Err(format!(
+                    "timed out waiting for the screenshot ({rows} of {HEIGHT} rows arrived)"
+                ));
             }
         };
         let line = match message {
@@ -125,13 +139,19 @@ pub async fn capture(
             if pixels.len() != WIDTH * HEIGHT * 3 {
                 return Err(format!("incomplete frame: {} pixels", pixels.len() / 3));
             }
-            return Ok(Frame { pixels, backlight_on });
+            return Ok(Frame {
+                pixels,
+                backlight_on,
+            });
         }
         if started && let Some(runs) = line.strip_prefix("SHOT ") {
             decode_runs(runs, &mut pixels)?;
             // A full frame is a full frame; `SHOT END` only confirms it, so there's no reason to wait for one more line.
             if pixels.len() == WIDTH * HEIGHT * 3 {
-                return Ok(Frame { pixels, backlight_on });
+                return Ok(Frame {
+                    pixels,
+                    backlight_on,
+                });
             }
         }
     }
@@ -152,7 +172,10 @@ mod tests {
 
     #[test]
     fn a_full_frame_encodes_as_png() {
-        let frame = Frame { pixels: vec![0x80; WIDTH * HEIGHT * 3], backlight_on: true };
+        let frame = Frame {
+            pixels: vec![0x80; WIDTH * HEIGHT * 3],
+            backlight_on: true,
+        };
         let png = encode_png(&frame).expect("encode PNG");
         assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
     }

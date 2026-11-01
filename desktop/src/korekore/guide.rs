@@ -6,38 +6,66 @@
 use iced::widget::{Space, button, column, container, row, scrollable, text};
 use iced::{Alignment, Border, Element, Length, Padding, Shadow, Vector};
 
-use super::controls::{Fill, pixel, bar, bold, card_with, heading, note, pill, regular, sprite, tag};
+use super::controls::{
+    Fill, bar, bold, card_with, heading, note, pill, pixel, regular, sprite, tag,
+};
 use super::{sprites, theme};
 use crate::i18n::tr;
 use crate::status::{OperationKind, OperationState};
-use crate::{Message, ROBOT, BUILTIN};
+use crate::{BUILTIN, Message, ROBOT};
 
 /// The large pill the pages lead with: 15/800 (17 on the welcome page), a 3 px outline and the small shadow when it
 /// is the primary action.
-fn big<'a>(label: String, fill: Fill, primary: bool, size: f32, on_press: Option<Message>) -> Element<'a, Message> {
+fn big<'a>(
+    label: String,
+    fill: Fill,
+    primary: bool,
+    size: f32,
+    on_press: Option<Message>,
+) -> Element<'a, Message> {
     let (background, foreground) = match fill {
         Fill::Sun => (theme::SUN, theme::INK),
         Fill::Pink => (theme::KORE_PINK, theme::INK),
         Fill::Ink => (theme::INK, theme::CREAM),
         Fill::Paper => (theme::PAPER, theme::INK),
     };
-    let padding = if size > 15.0 { Padding::from([12, 28]) } else if primary { Padding::from([10, 22]) } else { Padding::from([10, 18]) };
+    let padding = if size > 15.0 {
+        Padding::from([12, 28])
+    } else if primary {
+        Padding::from([10, 22])
+    } else {
+        Padding::from([10, 18])
+    };
     button(text(label).font(bold()).size(size))
         .padding(padding)
         .on_press_maybe(on_press)
         .style(move |_, status| {
             let disabled = matches!(status, button::Status::Disabled);
-            let fade = |color: iced::Color| if disabled { iced::Color { a: 0.45, ..color } } else { color };
+            let fade = |color: iced::Color| {
+                if disabled {
+                    iced::Color { a: 0.45, ..color }
+                } else {
+                    color
+                }
+            };
             button::Style {
                 background: Some(fade(background).into()),
                 text_color: fade(foreground),
                 border: Border {
                     color: theme::INK,
-                    width: if primary { theme::STROKE_BOLD } else { theme::STROKE_BASE },
+                    width: if primary {
+                        theme::STROKE_BOLD
+                    } else {
+                        theme::STROKE_BASE
+                    },
                     radius: theme::RADIUS_PILL.into(),
                 },
                 shadow: if primary {
-                    Shadow { color: theme::INK, offset: Vector::new(0.0, theme::STICKER_SM), blur_radius: 0.0 }
+                    Shadow {
+                        color: theme::INK,
+                        offset: Vector::new(0.0, theme::STICKER_SM),
+                        blur_radius: 0.0,
+                    }
                 } else {
                     Shadow::default()
                 },
@@ -53,10 +81,20 @@ fn title<'a>(label: String, size: f32) -> Element<'a, Message> {
 
 impl crate::App {
     pub(crate) fn kk_guide(&self, page: usize) -> Element<'_, Message> {
-        let flashing = self.status.as_ref().and_then(|status| status.operation.as_ref()).is_some_and(|operation| {
-            operation.kind == OperationKind::Firmware && operation.running()
-        });
-        let names = [tr("Welcome", &[]), tr("Find the box", &[]), tr("Pick a character", &[]), tr("Wi-Fi", &[]), tr("Done", &[])];
+        let flashing = self
+            .status
+            .as_ref()
+            .and_then(|status| status.operation.as_ref())
+            .is_some_and(|operation| {
+                operation.kind == OperationKind::Firmware && operation.running()
+            });
+        let names = [
+            tr("Welcome", &[]),
+            tr("Find the box", &[]),
+            tr("Pick a character", &[]),
+            tr("Wi-Fi", &[]),
+            tr("Done", &[]),
+        ];
         // Done in mint, current in ink, the rest white; the ones done take you back.
         let chips = row(names.into_iter().enumerate().map(|(index, name)| {
             let (background, foreground) = match index.cmp(&page) {
@@ -70,7 +108,11 @@ impl crate::App {
                 .style(move |_, _| button::Style {
                     background: Some(background.into()),
                     text_color: foreground,
-                    border: Border { color: theme::INK, width: theme::STROKE_BASE, radius: theme::RADIUS_PILL.into() },
+                    border: Border {
+                        color: theme::INK,
+                        width: theme::STROKE_BASE,
+                        radius: theme::RADIUS_PILL.into(),
+                    },
                     ..button::Style::default()
                 })
                 .into()
@@ -89,24 +131,44 @@ impl crate::App {
                     Ok(message) => tag(message, theme::DONE_TEXT),
                     Err(error) => tag(error, theme::KORE_PINK_TEXT),
                 }))
-                .push(container(chips).center_x(Length::Fill).padding(Padding { top: 22.0, right: 0.0, bottom: 24.0, left: 0.0 }))
+                .push(container(chips).center_x(Length::Fill).padding(Padding {
+                    top: 22.0,
+                    right: 0.0,
+                    bottom: 24.0,
+                    left: 0.0,
+                }))
                 .padding(Padding::ZERO.top(40)),
         )
         .width(Length::Fill)
         .height(Length::Fill)
-        .style(|_| container::Style { background: Some(theme::CREAM.into()), ..container::Style::default() })
+        .style(|_| container::Style {
+            background: Some(theme::CREAM.into()),
+            ..container::Style::default()
+        })
         .into()
     }
 
     fn guide_welcome(&self) -> Element<'_, Message> {
         let stage = container(
             column![
-                container(text("hajimemashite!").font(bold()).size(20).color(theme::INK)).padding(Padding::from([6, 14])).style(|_| container::Style {
+                container(
+                    text("hajimemashite!")
+                        .font(bold())
+                        .size(20)
+                        .color(theme::INK)
+                )
+                .padding(Padding::from([6, 14]))
+                .style(|_| container::Style {
                     background: Some(theme::CREAM.into()),
                     border: Border {
                         color: theme::INK,
                         width: theme::STROKE_BASE,
-                        radius: iced::border::Radius { top_left: 16.0, top_right: 16.0, bottom_right: 16.0, bottom_left: 4.0 },
+                        radius: iced::border::Radius {
+                            top_left: 16.0,
+                            top_right: 16.0,
+                            bottom_right: 16.0,
+                            bottom_left: 4.0
+                        },
                     },
                     ..container::Style::default()
                 }),
@@ -119,8 +181,16 @@ impl crate::App {
         .center_y(360)
         .style(|_| container::Style {
             background: Some(theme::KORE_PINK.into()),
-            border: Border { color: theme::INK, width: theme::STROKE_BOLD, radius: theme::RADIUS_XL.into() },
-            shadow: Shadow { color: theme::INK, offset: Vector::new(0.0, theme::STICKER_MD), blur_radius: 0.0 },
+            border: Border {
+                color: theme::INK,
+                width: theme::STROKE_BOLD,
+                radius: theme::RADIUS_XL.into(),
+            },
+            shadow: Shadow {
+                color: theme::INK,
+                offset: Vector::new(0.0, theme::STICKER_MD),
+                blur_radius: 0.0,
+            },
             ..container::Style::default()
         });
         let right = column![
@@ -140,39 +210,77 @@ impl crate::App {
                 }),
         ]
         .spacing(14);
-        container(row![stage, right].spacing(36).align_y(Alignment::Center)).center(Length::Fill).padding(Padding::from([4, 44])).into()
+        container(row![stage, right].spacing(36).align_y(Alignment::Center))
+            .center(Length::Fill)
+            .padding(Padding::from([4, 44]))
+            .into()
     }
 
     fn guide_find(&self) -> Element<'_, Message> {
         let device = self.status.as_ref().map(|status| &status.device);
         let online = self.online();
-        let operation = self.status.as_ref().and_then(|status| status.operation.as_ref()).filter(|operation| operation.kind == OperationKind::Firmware);
+        let operation = self
+            .status
+            .as_ref()
+            .and_then(|status| status.operation.as_ref())
+            .filter(|operation| operation.kind == OperationKind::Firmware);
         let flashing = operation.is_some_and(|operation| operation.state != OperationState::Done);
         let (kore, word, screen, ink) = if flashing {
             (&sprites::KORE_WORKING, "UPDATING", theme::INK, theme::SKY)
         } else if online {
             (&sprites::KORE_HAPPY, "HELLO!", theme::SUN, theme::INK)
         } else {
-            (&sprites::KORE_SLEEP, "Z z", theme::BOX_GRAY_GROUND, theme::MIST)
+            (
+                &sprites::KORE_SLEEP,
+                "Z z",
+                theme::BOX_GRAY_GROUND,
+                theme::MIST,
+            )
         };
         let gray = !online && !flashing;
-        let face = if gray { super::controls::badge(kore, true, iced::Color::TRANSPARENT) } else { sprite(kore, 4) };
+        let face = if gray {
+            super::controls::badge(kore, true, iced::Color::TRANSPARENT)
+        } else {
+            sprite(kore, 4)
+        };
         let drawing = container(
-            container(column![face, text(word).font(pixel(18.0).0).size(pixel(18.0).1).color(ink)].spacing(6).align_x(Alignment::Center))
-                .center_x(240)
-                .center_y(180)
-                .style(move |_| container::Style {
-                    background: Some(screen.into()),
-                    border: Border { color: theme::INK, width: theme::STROKE_BOLD, radius: 12.0.into() },
-                    ..container::Style::default()
-                }),
+            container(
+                column![
+                    face,
+                    text(word)
+                        .font(pixel(18.0).0)
+                        .size(pixel(18.0).1)
+                        .color(ink)
+                ]
+                .spacing(6)
+                .align_x(Alignment::Center),
+            )
+            .center_x(240)
+            .center_y(180)
+            .style(move |_| container::Style {
+                background: Some(screen.into()),
+                border: Border {
+                    color: theme::INK,
+                    width: theme::STROKE_BOLD,
+                    radius: 12.0.into(),
+                },
+                ..container::Style::default()
+            }),
         )
         .center_x(300)
         .center_y(240)
         .style(|_| container::Style {
             background: Some(theme::LINE.into()),
-            border: Border { color: theme::INK, width: theme::STROKE_BOLD, radius: theme::RADIUS_XL.into() },
-            shadow: Shadow { color: theme::INK, offset: Vector::new(0.0, theme::STICKER_MD), blur_radius: 0.0 },
+            border: Border {
+                color: theme::INK,
+                width: theme::STROKE_BOLD,
+                radius: theme::RADIUS_XL.into(),
+            },
+            shadow: Shadow {
+                color: theme::INK,
+                offset: Vector::new(0.0, theme::STICKER_MD),
+                blur_radius: 0.0,
+            },
             ..container::Style::default()
         });
         let side: Element<'_, Message> = if let Some(operation) = operation.filter(|_| flashing) {
@@ -191,10 +299,22 @@ impl crate::App {
                 .spacing(8)
                 .into(),
             };
-            column![title(tr("Flashing korekore firmware…", &[]), 26.0), state].spacing(12).into()
+            column![title(tr("Flashing korekore firmware…", &[]), 26.0), state]
+                .spacing(12)
+                .into()
         } else if let Some(device) = device.filter(|_| online) {
-            let port = device.port.as_deref().unwrap_or("?").trim_start_matches("/dev/");
-            let kind = if device.network { tr("Wi-Fi", &[]) } else if device.bridge { tr("UART bridge", &[]) } else { tr("native USB", &[]) };
+            let port = device
+                .port
+                .as_deref()
+                .unwrap_or("?")
+                .trim_start_matches("/dev/");
+            let kind = if device.network {
+                tr("Wi-Fi", &[])
+            } else if device.bridge {
+                tr("UART bridge", &[])
+            } else {
+                tr("native USB", &[])
+            };
             column![
                 title(tr("Is this your box?", &[]), 32.0),
                 container(
@@ -237,10 +357,20 @@ impl crate::App {
         };
         container(
             row![
-                column![drawing, tag(if online { tr("the box blinks yellow", &[]) } else { tr("waiting for the box", &[]) }, theme::MUTED)]
-                    .spacing(12)
-                    .align_x(Alignment::Center)
-                    .width(340),
+                column![
+                    drawing,
+                    tag(
+                        if online {
+                            tr("the box blinks yellow", &[])
+                        } else {
+                            tr("waiting for the box", &[])
+                        },
+                        theme::MUTED
+                    )
+                ]
+                .spacing(12)
+                .align_x(Alignment::Center)
+                .width(340),
                 scrollable(container(side).padding(Padding::ZERO.right(14))).width(Length::Fill),
             ]
             .spacing(32)
@@ -254,16 +384,46 @@ impl crate::App {
     fn guide_pick(&self) -> Element<'_, Message> {
         let online = self.online();
         let busy = self.busy();
-        let current = self.status.as_ref().and_then(|status| status.device.voice.clone());
-        let robot_in_use = matches!(current.as_deref(), Some(ROBOT | BUILTIN)) && self.characters.robot_lender.is_none();
+        let current = self
+            .status
+            .as_ref()
+            .and_then(|status| status.device.voice.clone());
+        let robot_in_use = matches!(current.as_deref(), Some(ROBOT | BUILTIN))
+            && self.characters.robot_lender.is_none();
         let mut cards = vec![self.kore_card()];
-        cards.push(self.character_card("VibeBuddy".to_owned(), tr("The original robot", &[]), self.robot_face.clone(), robot_in_use, Some(ROBOT), Message::UseRobot));
+        cards.push(self.character_card(
+            "VibeBuddy".to_owned(),
+            tr("The original robot", &[]),
+            self.robot_face.clone(),
+            robot_in_use,
+            Some(ROBOT),
+            Message::UseRobot,
+        ));
         for (voice, face) in self.voices.iter().zip(&self.faces) {
-            cards.push(self.character_card(voice.name.clone(), voice.tag.clone(), face.clone(), current.as_deref() == Some(voice.id), Some(voice.id), Message::UseVoice(voice.id)));
+            cards.push(self.character_card(
+                voice.name.clone(),
+                voice.tag.clone(),
+                face.clone(),
+                current.as_deref() == Some(voice.id),
+                Some(voice.id),
+                Message::UseVoice(voice.id),
+            ));
         }
-        let strip = scrollable(row(cards.into_iter().map(|card| container(card).width(180).into())).spacing(12).padding(Padding::ZERO.bottom(8)))
-            .direction(scrollable::Direction::Horizontal(scrollable::Scrollbar::default()));
-        let operation = self.status.as_ref().and_then(|status| status.operation.as_ref()).filter(|operation| operation.kind == OperationKind::VoicePack);
+        let strip = scrollable(
+            row(cards
+                .into_iter()
+                .map(|card| container(card).width(180).into()))
+            .spacing(12)
+            .padding(Padding::ZERO.bottom(8)),
+        )
+        .direction(scrollable::Direction::Horizontal(
+            scrollable::Scrollbar::default(),
+        ));
+        let operation = self
+            .status
+            .as_ref()
+            .and_then(|status| status.operation.as_ref())
+            .filter(|operation| operation.kind == OperationKind::VoicePack);
         let progress: Option<Element<'_, Message>> = operation.and_then(|operation| match operation.state {
             OperationState::Running => Some(
                 card_with(
@@ -283,9 +443,21 @@ impl crate::App {
         });
         let done = operation.is_some_and(|operation| operation.state == OperationState::Done);
         let next = if done {
-            big(tr("Next", &[]), Fill::Sun, true, 15.0, Some(Message::Guide(Some(3))))
+            big(
+                tr("Next", &[]),
+                Fill::Sun,
+                true,
+                15.0,
+                Some(Message::Guide(Some(3))),
+            )
         } else {
-            big(tr("Skip", &[]), Fill::Paper, false, 15.0, (!busy).then_some(Message::Guide(Some(3))))
+            big(
+                tr("Skip", &[]),
+                Fill::Paper,
+                false,
+                15.0,
+                (!busy).then_some(Message::Guide(Some(3))),
+            )
         };
         column![title(tr("Who lives in your box?", &[]), 30.0), strip]
             .push(progress)
@@ -298,15 +470,32 @@ impl crate::App {
 
     fn guide_wifi(&self) -> Element<'_, Message> {
         let device = self.status.as_ref().map(|status| &status.device);
-        let form: Element<'_, Message> = match device.filter(|device| self.online() && device.box_key.is_some() && !device.network) {
+        let form: Element<'_, Message> = match device
+            .filter(|device| self.online() && device.box_key.is_some() && !device.network)
+        {
             Some(device) => self.wifi_card(device),
-            None => note(tr("Plug in the box to set its network. You can also do it later on the Device page.", &[])),
+            None => note(tr(
+                "Plug in the box to set its network. You can also do it later on the Device page.",
+                &[],
+            )),
         };
         let joined = device.is_some_and(|device| device.wifi_address.is_some());
         let next = if joined {
-            big(tr("Next", &[]), Fill::Sun, true, 15.0, Some(Message::Guide(Some(4))))
+            big(
+                tr("Next", &[]),
+                Fill::Sun,
+                true,
+                15.0,
+                Some(Message::Guide(Some(4))),
+            )
         } else {
-            big(tr("Skip for now", &[]), Fill::Paper, false, 15.0, Some(Message::Guide(Some(4))))
+            big(
+                tr("Skip for now", &[]),
+                Fill::Paper,
+                false,
+                15.0,
+                Some(Message::Guide(Some(4))),
+            )
         };
         scrollable(
             column![

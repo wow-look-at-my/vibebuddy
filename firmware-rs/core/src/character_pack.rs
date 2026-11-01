@@ -61,7 +61,11 @@ pub struct CharacterPack {
 
 impl CharacterPack {
     pub fn id(&self) -> &str {
-        let end = self.id.iter().position(|&byte| byte == 0).unwrap_or(ID_BYTES);
+        let end = self
+            .id
+            .iter()
+            .position(|&byte| byte == 0)
+            .unwrap_or(ID_BYTES);
         core::str::from_utf8(&self.id[..end]).unwrap_or("?")
     }
 
@@ -97,7 +101,14 @@ pub fn parse(header: &[u8], capacity: usize) -> Option<CharacterPack> {
     }
     let occasion_count = header[53] as usize;
     let line_count = read_u16(&header[54..]) as usize;
-    if occasion_count > MAX_OCCASIONS || line_count > if version == 1 { MAX_LINES } else { MAX_LINES_V2 } {
+    if occasion_count > MAX_OCCASIONS
+        || line_count
+            > if version == 1 {
+                MAX_LINES
+            } else {
+                MAX_LINES_V2
+            }
+    {
         return None;
     }
     let mut pack = CharacterPack {
@@ -105,7 +116,10 @@ pub fn parse(header: &[u8], capacity: usize) -> Option<CharacterPack> {
         payload_length: read_u32(&header[8..]),
         payload_crc32: read_u32(&header[12..]),
         pools: [(0, 0); OCCASIONS],
-        lines: [LineEntry { offset: 0, samples: 0 }; MAX_LINES],
+        lines: [LineEntry {
+            offset: 0,
+            samples: 0,
+        }; MAX_LINES],
         look: None,
     };
     pack.id[..ID_BYTES - 1].copy_from_slice(&header[16..16 + ID_BYTES - 1]);
@@ -124,8 +138,14 @@ pub fn parse(header: &[u8], capacity: usize) -> Option<CharacterPack> {
         }
     }
     for index in 0..line_count {
-        let line = LineEntry { offset: read_u32(&header[128 + index * 8..]), samples: read_u32(&header[132 + index * 8..]) };
-        if line.samples == 0 || (line.offset as usize) < HEADER_BYTES || line.offset as u64 + line.bytes() as u64 > end_of_payload {
+        let line = LineEntry {
+            offset: read_u32(&header[128 + index * 8..]),
+            samples: read_u32(&header[132 + index * 8..]),
+        };
+        if line.samples == 0
+            || (line.offset as usize) < HEADER_BYTES
+            || line.offset as u64 + line.bytes() as u64 > end_of_payload
+        {
             return None;
         }
         pack.lines[index] = line;
@@ -134,7 +154,10 @@ pub fn parse(header: &[u8], capacity: usize) -> Option<CharacterPack> {
         let (offset, length) = (read_u32(&header[1008..]), read_u32(&header[1012..]));
         if length > 0 {
             // Word-aligned, so the firmware can read it from flash in one go.
-            if !offset.is_multiple_of(4) || (offset as usize) < HEADER_BYTES || offset as u64 + length as u64 > end_of_payload {
+            if !offset.is_multiple_of(4)
+                || (offset as usize) < HEADER_BYTES
+                || offset as u64 + length as u64 > end_of_payload
+            {
                 return None;
             }
             pack.look = Some((offset, length));
@@ -184,7 +207,9 @@ pub(crate) mod tests {
             }
         }
         put_u16(&mut header[54..], line as u16);
-        let payload: Vec<u8> = (0..offset - HEADER_BYTES as u32).map(|index| (index * 7 % 251) as u8).collect();
+        let payload: Vec<u8> = (0..offset - HEADER_BYTES as u32)
+            .map(|index| (index * 7 % 251) as u8)
+            .collect();
         put_u32(&mut header[8..], payload.len() as u32);
         put_u32(&mut header[12..], crc32(0, &payload));
         reseal(&mut header);
@@ -194,17 +219,32 @@ pub(crate) mod tests {
 
     #[test]
     fn a_well_formed_pack_parses() {
-        let bytes = build_pack("jessica", &[&[100, 201], &[300], &[], &[], &[], &[51, 52, 53]]);
+        let bytes = build_pack(
+            "jessica",
+            &[&[100, 201], &[300], &[], &[], &[], &[51, 52, 53]],
+        );
         let pack = parse(&bytes, 2 * 1024 * 1024).expect("should parse");
         assert_eq!(pack.id(), "jessica");
-        assert_eq!(pack.pool(Occasion::InputRequired), &[
-            LineEntry { offset: 1024, samples: 100 },
-            LineEntry { offset: 1074, samples: 201 },
-        ]);
+        assert_eq!(
+            pack.pool(Occasion::InputRequired),
+            &[
+                LineEntry {
+                    offset: 1024,
+                    samples: 100
+                },
+                LineEntry {
+                    offset: 1074,
+                    samples: 201
+                },
+            ]
+        );
         assert_eq!(pack.pool(Occasion::Done).len(), 1);
         assert!(pack.pool(Occasion::Failed).is_empty());
         assert_eq!(pack.pool(Occasion::FirstDone).len(), 3);
-        assert!(pack.pool(Occasion::GreetingEvening).is_empty(), "occasions past the pack's table have no pool");
+        assert!(
+            pack.pool(Occasion::GreetingEvening).is_empty(),
+            "occasions past the pack's table have no pool"
+        );
         assert_eq!(pack.payload_length, 50 + 101 + 150 + 26 + 26 + 27);
     }
 
@@ -215,9 +255,33 @@ pub(crate) mod tests {
         let bytes = include_bytes!("fixtures/sample_character_pack.bin");
         let pack = parse(bytes, 4096).expect("should parse");
         assert_eq!(pack.id(), "sample");
-        assert_eq!(pack.pool(Occasion::InputRequired), &[LineEntry { offset: 1024, samples: 5 }, LineEntry { offset: 1027, samples: 6 }]);
-        assert_eq!(pack.pool(Occasion::Done), &[LineEntry { offset: 1030, samples: 3 }]);
-        assert_eq!(pack.pool(Occasion::GreetingEvening), &[LineEntry { offset: 1032, samples: 4 }]);
+        assert_eq!(
+            pack.pool(Occasion::InputRequired),
+            &[
+                LineEntry {
+                    offset: 1024,
+                    samples: 5
+                },
+                LineEntry {
+                    offset: 1027,
+                    samples: 6
+                }
+            ]
+        );
+        assert_eq!(
+            pack.pool(Occasion::Done),
+            &[LineEntry {
+                offset: 1030,
+                samples: 3
+            }]
+        );
+        assert_eq!(
+            pack.pool(Occasion::GreetingEvening),
+            &[LineEntry {
+                offset: 1032,
+                samples: 4
+            }]
+        );
         assert!(pack.pool(Occasion::Failed).is_empty());
         assert_eq!(pack.payload_length as usize, bytes.len() - HEADER_BYTES);
         assert_eq!(pack.payload_crc32, crc32(0, &bytes[HEADER_BYTES..]));
@@ -273,7 +337,10 @@ pub(crate) mod tests {
     #[test]
     fn lines_and_pools_must_stay_in_bounds() {
         let good = build_pack("x", &[&[10, 10]]);
-        assert!(parse(&good, 300).is_none(), "payload larger than the partition");
+        assert!(
+            parse(&good, 300).is_none(),
+            "payload larger than the partition"
+        );
 
         let mut bytes = good.clone();
         put_u16(&mut bytes[58..], 3);

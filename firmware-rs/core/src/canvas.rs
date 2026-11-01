@@ -60,17 +60,57 @@ fn glyph_row(character: u8, row: usize) -> u8 {
     match upper {
         b'A'..=b'Z' => LETTER_GLYPHS[(upper - b'A') as usize][row],
         b'0'..=b'9' => DIGIT_GLYPHS[(upper - b'0') as usize][row],
-        b'-' => if row == 3 { 0x1f } else { 0 },
-        b'.' => if row == 6 { 0x04 } else { 0 },
-        b',' => match row { 5 => 0x04, 6 => 0x08, _ => 0 },
-        b'\'' => if row < 2 { 0x04 } else { 0 },
-        b':' => if row == 2 || row == 5 { 0x04 } else { 0 },
+        b'-' => {
+            if row == 3 {
+                0x1f
+            } else {
+                0
+            }
+        }
+        b'.' => {
+            if row == 6 {
+                0x04
+            } else {
+                0
+            }
+        }
+        b',' => match row {
+            5 => 0x04,
+            6 => 0x08,
+            _ => 0,
+        },
+        b'\'' => {
+            if row < 2 {
+                0x04
+            } else {
+                0
+            }
+        }
+        b':' => {
+            if row == 2 || row == 5 {
+                0x04
+            } else {
+                0
+            }
+        }
         b'/' => 1 << if row < 5 { 4 - row } else { 0 },
-        b'!' => if row < 5 || row == 6 { 0x04 } else { 0 },
+        b'!' => {
+            if row < 5 || row == 6 {
+                0x04
+            } else {
+                0
+            }
+        }
         b'?' => [0x0e, 0x11, 0x01, 0x02, 0x04, 0x00, 0x04][row],
         b'>' => [0x10, 0x08, 0x04, 0x02, 0x04, 0x08, 0x10][row],
         b' ' => 0,
-        b'_' => if row == 6 { 0x1f } else { 0 },
+        b'_' => {
+            if row == 6 {
+                0x1f
+            } else {
+                0
+            }
+        }
         b'%' => [0x18, 0x19, 0x02, 0x04, 0x08, 0x13, 0x03][row],
         _ => match row {
             0 | 3 => 0x0e,
@@ -130,7 +170,10 @@ impl<'a> Canvas<'a> {
         } else {
             let under = u16::from_be_bytes([self.bytes[at], self.bytes[at + 1]]);
             let mix = |shift: u32, mask: u16| {
-                let (top, bottom) = (u32::from((color >> shift) & mask), u32::from((under >> shift) & mask));
+                let (top, bottom) = (
+                    u32::from((color >> shift) & mask),
+                    u32::from((under >> shift) & mask),
+                );
                 ((top * u32::from(alpha) + bottom * (15 - u32::from(alpha)) + 7) / 15) as u16 & mask
             };
             mix(11, 0x1f) << 11 | mix(5, 0x3f) << 5 | mix(0, 0x1f)
@@ -163,7 +206,15 @@ impl<'a> Canvas<'a> {
     }
 
     /// Draws byte by byte from (x, y), at most `max_characters`; stops at NUL.
-    pub fn draw_text(&mut self, x: i32, y: i32, text: &[u8], scale: i32, color: u16, max_characters: usize) {
+    pub fn draw_text(
+        &mut self,
+        x: i32,
+        y: i32,
+        text: &[u8],
+        scale: i32,
+        color: u16,
+        max_characters: usize,
+    ) {
         for (index, &character) in text.iter().take(max_characters).enumerate() {
             if character == 0 {
                 break;
@@ -177,7 +228,13 @@ impl<'a> Canvas<'a> {
             let bits = glyph_row(character, row);
             for column in 0..5 {
                 if bits & (1 << (4 - column)) != 0 {
-                    self.fill_rect(x + column * scale, y + row as i32 * scale, scale, scale, color);
+                    self.fill_rect(
+                        x + column * scale,
+                        y + row as i32 * scale,
+                        scale,
+                        scale,
+                        color,
+                    );
                 }
             }
         }
@@ -186,7 +243,15 @@ impl<'a> Canvas<'a> {
     /// Draws UTF-8 text from (x, y), as many whole characters as fit in `max_width` pixels; stops at NUL.
     /// ASCII is the 5×7 font exactly as `draw_text` draws it, with (x, y) its top left; Chinese is the 12 px
     /// font, centred on the ASCII line (font.rs). Returns the width drawn.
-    pub fn draw_str(&mut self, x: i32, y: i32, text: &[u8], scale: i32, color: u16, max_width: i32) -> i32 {
+    pub fn draw_str(
+        &mut self,
+        x: i32,
+        y: i32,
+        text: &[u8],
+        scale: i32,
+        color: u16,
+        max_width: i32,
+    ) -> i32 {
         let text = &text[..font::fit(text, scale, max_width)];
         let wide_scale = font::wide_scale(scale);
         let top = font::wide_top(y, scale);
@@ -199,7 +264,13 @@ impl<'a> Canvas<'a> {
                         let bits = font::row(index, row as usize);
                         for column in 0..font::CELL {
                             if bits & (0x800 >> column) != 0 {
-                                self.fill_rect(left + column * wide_scale, top + row * wide_scale, wide_scale, wide_scale, color);
+                                self.fill_rect(
+                                    left + column * wide_scale,
+                                    top + row * wide_scale,
+                                    wide_scale,
+                                    wide_scale,
+                                    color,
+                                );
                             }
                         }
                     }
@@ -207,8 +278,15 @@ impl<'a> Canvas<'a> {
                 // A dotted box over the ink area, so it can't pass for 口.
                 Glyph::Missing => {
                     for step in (0..11).step_by(2) {
-                        for (column, row) in [(step, 1), (step, 11), (0, 1 + step), (10, 1 + step)] {
-                            self.fill_rect(left + column * wide_scale, top + row * wide_scale, wide_scale, wide_scale, color);
+                        for (column, row) in [(step, 1), (step, 11), (0, 1 + step), (10, 1 + step)]
+                        {
+                            self.fill_rect(
+                                left + column * wide_scale,
+                                top + row * wide_scale,
+                                wide_scale,
+                                wide_scale,
+                                color,
+                            );
                         }
                     }
                 }
@@ -223,13 +301,28 @@ impl<'a> Canvas<'a> {
         // As much as `draw_text_centered` allows, so ASCII lands where it always has.
         let max_width = WIDTH / (6 * scale) * 6 * scale - scale;
         let text = &text[..font::fit(text, scale, max_width)];
-        self.draw_str((WIDTH - font::width(text, scale)) / 2, y, text, scale, color, max_width);
+        self.draw_str(
+            (WIDTH - font::width(text, scale)) / 2,
+            y,
+            text,
+            scale,
+            color,
+            max_width,
+        );
     }
 
     pub fn draw_text_centered(&mut self, y: i32, text: &[u8], scale: i32, color: u16) {
         let max_characters = (WIDTH / (6 * scale)) as usize;
-        let length = text.iter().take(max_characters).take_while(|&&byte| byte != 0).count() as i32;
-        let width = if length == 0 { 0 } else { (length * 6 - 1) * scale };
+        let length = text
+            .iter()
+            .take(max_characters)
+            .take_while(|&&byte| byte != 0)
+            .count() as i32;
+        let width = if length == 0 {
+            0
+        } else {
+            (length * 6 - 1) * scale
+        };
         self.draw_text((WIDTH - width) / 2, y, text, scale, color, max_characters);
     }
 
@@ -256,11 +349,18 @@ mod tests {
 
     /// The lit area as (top, bottom, left, right), inclusive.
     fn ink(bytes: &[u8]) -> (i32, i32, i32, i32) {
-        let lit: Vec<(i32, i32)> =
-            (0..WIDTH * HEIGHT).filter(|&index| bytes[index as usize * 2] != 0).map(|index| (index / WIDTH, index % WIDTH)).collect();
+        let lit: Vec<(i32, i32)> = (0..WIDTH * HEIGHT)
+            .filter(|&index| bytes[index as usize * 2] != 0)
+            .map(|index| (index / WIDTH, index % WIDTH))
+            .collect();
         let rows = || lit.iter().map(|&(row, _)| row);
         let columns = || lit.iter().map(|&(_, column)| column);
-        (rows().min().unwrap(), rows().max().unwrap(), columns().min().unwrap(), columns().max().unwrap())
+        (
+            rows().min().unwrap(),
+            rows().max().unwrap(),
+            columns().min().unwrap(),
+            columns().max().unwrap(),
+        )
     }
 
     #[test]
@@ -284,20 +384,33 @@ mod tests {
         let (top, bottom, _, _) = ink(&render(|canvas| {
             canvas.draw_str(10, 100, "国".as_bytes(), 1, 0xffff, 100);
         }));
-        assert!(top >= 98 && (106..=108).contains(&bottom), "{top}..{bottom}");
+        assert!(
+            top >= 98 && (106..=108).contains(&bottom),
+            "{top}..{bottom}"
+        );
         // Scale 2: still 12 px, centred on the 14 px ASCII.
         let (top, bottom, left, right) = ink(&render(|canvas| {
             canvas.draw_str(10, 100, "国".as_bytes(), 2, 0xffff, 100);
         }));
-        assert!(top >= 102 && bottom <= 112 && left >= 10 && right <= 20, "{top}..{bottom} {left}..{right}");
+        assert!(
+            top >= 102 && bottom <= 112 && left >= 10 && right <= 20,
+            "{top}..{bottom} {left}..{right}"
+        );
     }
 
     #[test]
     fn mixed_text_advances_by_each_font_and_stops_at_the_width() {
-        let whole = render(|canvas| assert_eq!(canvas.draw_str(0, 50, "A你B".as_bytes(), 1, 0xffff, 100), 6 + 12 + 5));
+        let whole = render(|canvas| {
+            assert_eq!(
+                canvas.draw_str(0, 50, "A你B".as_bytes(), 1, 0xffff, 100),
+                6 + 12 + 5
+            )
+        });
         assert_eq!(ink(&whole).3, 22);
         // Whole characters only: 你 doesn't fit in 15 px after A.
-        let cut = render(|canvas| assert_eq!(canvas.draw_str(0, 50, "A你B".as_bytes(), 1, 0xffff, 15), 5));
+        let cut = render(|canvas| {
+            assert_eq!(canvas.draw_str(0, 50, "A你B".as_bytes(), 1, 0xffff, 15), 5)
+        });
         assert_eq!(ink(&cut).3, 4);
     }
 

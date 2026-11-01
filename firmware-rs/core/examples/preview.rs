@@ -39,7 +39,11 @@ struct Preview {
 
 macro_rules! scene {
     ($preview:ident) => {
-        Scene { now_ms: $preview.now, pomodoro: &$preview.pomodoro, leisure: &$preview.leisure }
+        Scene {
+            now_ms: $preview.now,
+            pomodoro: &$preview.pomodoro,
+            leisure: &$preview.leisure,
+        }
     };
 }
 
@@ -50,7 +54,10 @@ impl Preview {
 
     fn snapshot(&mut self, name: &str) {
         self.display.refresh(&mut self.screen, &scene!(self));
-        write_ppm(&self.directory.join(format!("{name}.ppm")), &self.screen.bytes);
+        write_ppm(
+            &self.directory.join(format!("{name}.ppm")),
+            &self.screen.bytes,
+        );
     }
 
     fn set_mode(&mut self, mode: Mode) {
@@ -58,7 +65,14 @@ impl Preview {
     }
 
     fn show(&mut self, state: State, title: Option<&[u8]>, tasks: &[TaskInput]) {
-        let _ = self.display.show_tasks(&mut self.screen, &scene!(self), state, title, tasks, tasks.len());
+        let _ = self.display.show_tasks(
+            &mut self.screen,
+            &scene!(self),
+            state,
+            title,
+            tasks,
+            tasks.len(),
+        );
     }
 }
 
@@ -101,19 +115,34 @@ fn render_skits(preview: &mut Preview) {
 
 fn main() {
     let arguments: Vec<String> = std::env::args().collect();
-    let directory = PathBuf::from(arguments.get(1).expect("usage: preview <output directory> [leisure]"));
+    let directory = PathBuf::from(
+        arguments
+            .get(1)
+            .expect("usage: preview <output directory> [leisure]"),
+    );
     fs::create_dir_all(&directory).expect("create directory");
     let mut preview = Preview {
         directory,
-        screen: Frame { bytes: vec![0; FRAME_BYTES] },
+        screen: Frame {
+            bytes: vec![0; FRAME_BYTES],
+        },
         display: Display::new(),
         pomodoro: Pomodoro::new(),
         leisure: Leisure::new(1, 0),
         now: 0,
     };
-    preview.display.start(&mut preview.screen, &scene!(preview)).unwrap();
-    preview.display.set_stats(&[b"7 DONE", b"4 ASKS", b"1H23 BUSY"]);
-    preview.pomodoro.restore_tally(Tally { day: 20260915, completed: 3, focus_s: 4500 });
+    preview
+        .display
+        .start(&mut preview.screen, &scene!(preview))
+        .unwrap();
+    preview
+        .display
+        .set_stats(&[b"7 DONE", b"4 ASKS", b"1H23 BUSY"]);
+    preview.pomodoro.restore_tally(Tally {
+        day: 20260915,
+        completed: 3,
+        focus_s: 4500,
+    });
     if arguments.get(2).map(String::as_str) == Some("leisure") {
         render_skits(&mut preview);
         return;
@@ -124,13 +153,21 @@ fn main() {
     preview.snapshot("pomodoro_idle");
 
     let tasks = [
-        TaskInput { title: Some(b"CC:POMODORO TIMER FEATURE"), state: State::Working, elapsed_s: 75, project: Some(b"AGENT-BEACON"), id: None, icon: None },
+        TaskInput {
+            title: Some(b"CC:POMODORO TIMER FEATURE"),
+            state: State::Working,
+            elapsed_s: 75,
+            project: Some(b"AGENT-BEACON"),
+            id: None,
+            icon: None,
+        },
         TaskInput {
             title: Some(b"CX:EROS-TRAINING-INFRA"),
             state: State::InputRequired,
             elapsed_s: 900,
             project: Some(b"EROS-TRAINING-INFRA"),
-            id: None, icon: None,
+            id: None,
+            icon: None,
         },
     ];
     preview.show(State::InputRequired, Some(b"CC:AGENT-BEACON"), &tasks);
@@ -158,9 +195,13 @@ fn main() {
     // The alarm's first three seconds frame by frame: 20 shake frames of 100 ms each, then a 500 ms pulse beat.
     for frame in 0..30u32 {
         if frame < 20 {
-            preview.display.preview_pose(Some(frame), Some(20 - frame), None);
+            preview
+                .display
+                .preview_pose(Some(frame), Some(20 - frame), None);
         } else {
-            preview.display.preview_pose(Some((frame - 20) / 5), Some(0), None);
+            preview
+                .display
+                .preview_pose(Some((frame - 20) / 5), Some(0), None);
         }
         preview.snapshot(&format!("pomodoro_alarm_{frame:03}"));
     }
@@ -178,19 +219,48 @@ fn main() {
     preview.set_ms(focus_end + 30000 + 2 * 60 * 1000);
     preview.snapshot("pomodoro_break");
 
-    preview.display.set_link_lost(&mut preview.screen, &scene!(preview), true);
+    preview
+        .display
+        .set_link_lost(&mut preview.screen, &scene!(preview), true);
     preview.snapshot("pomodoro_no_link");
-    preview.display.set_link_lost(&mut preview.screen, &scene!(preview), false);
-    preview.display.set_muted(&mut preview.screen, &scene!(preview), true);
+    preview
+        .display
+        .set_link_lost(&mut preview.screen, &scene!(preview), false);
+    preview
+        .display
+        .set_muted(&mut preview.screen, &scene!(preview), true);
     preview.set_mode(Mode::Duty);
     preview.snapshot("pet_muted");
 
     // Three cards: the state label keeps clear of the last one.
-    preview.display.set_muted(&mut preview.screen, &scene!(preview), false);
+    preview
+        .display
+        .set_muted(&mut preview.screen, &scene!(preview), false);
     let three = [
-        TaskInput { title: Some(b"CC:UPDATE README"), state: State::Working, elapsed_s: 20, project: Some(b"VIBEBUDDY"), id: None, icon: None },
-        TaskInput { title: Some(b"CX:BUILD FIRMWARE"), state: State::Working, elapsed_s: 60, project: Some(b"VIBEBUDDY"), id: None, icon: None },
-        TaskInput { title: Some(b"CI:APP TESTS"), state: State::Working, elapsed_s: 120, project: Some(b"VIBEBUDDY"), id: None, icon: None },
+        TaskInput {
+            title: Some(b"CC:UPDATE README"),
+            state: State::Working,
+            elapsed_s: 20,
+            project: Some(b"VIBEBUDDY"),
+            id: None,
+            icon: None,
+        },
+        TaskInput {
+            title: Some(b"CX:BUILD FIRMWARE"),
+            state: State::Working,
+            elapsed_s: 60,
+            project: Some(b"VIBEBUDDY"),
+            id: None,
+            icon: None,
+        },
+        TaskInput {
+            title: Some(b"CI:APP TESTS"),
+            state: State::Working,
+            elapsed_s: 120,
+            project: Some(b"VIBEBUDDY"),
+            id: None,
+            icon: None,
+        },
     ];
     preview.show(State::Working, None, &three);
     preview.snapshot("pet_three_tasks");

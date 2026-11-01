@@ -11,29 +11,34 @@ use alloc::vec::Vec;
 use serde_json::{Map, Value};
 use vibebuddy_protocol::{Event, ProtocolError, VERSION};
 
-use crate::audio::{ES8311_ADDRESS, Occasion, SAMPLE_RATE, Sound, clamp_volume, VOLUME_DEFAULT};
-use crate::mic;
-use crate::buttons::{ButtonEvent, Buttons, Levels};
-use crate::display::{Display, LinkPath, MAX_STATS, MAX_TASKS, Mode, Panel, PanelKind, SNAPSHOT_LINE_BYTES, Scene, Screen, Screens, Snapshot, State, Target, TaskInput, Tone};
-use crate::leisure::{Leisure, Tier};
-use crate::menu::{self, Action as MenuAction, ComputersRow, Context as MenuContext, Menu, Row, View};
-use crate::pomodoro::{Phase, Pomodoro, Run, Transition};
-use crate::relay_box;
-use crate::storage::{Flash, Settings, SettingsStore, find_partition};
-use crate::text;
-use crate::spoken_reply::ReplyAudio;
 use crate::agent_icon::AgentIcon;
-use crate::touch::{self, Direction, Gesture, Gestures};
-use crate::voice_pack::{crc32, decode_base64};
-use crate::lines::LinePicker;
+use crate::audio::{ES8311_ADDRESS, Occasion, SAMPLE_RATE, Sound, VOLUME_DEFAULT, clamp_volume};
+use crate::buttons::{ButtonEvent, Buttons, Levels};
+use crate::display::{
+    Display, LinkPath, MAX_STATS, MAX_TASKS, Mode, Panel, PanelKind, SNAPSHOT_LINE_BYTES, Scene,
+    Screen, Screens, Snapshot, State, Target, TaskInput, Tone,
+};
 use crate::lan::{Conn, Lan, Output as LanOutput};
-use crate::noise::Sealer;
+use crate::leisure::{Leisure, Tier};
+use crate::lines::LinePicker;
 use crate::link::{self, Link, LinkStore, PairError, Wifi};
 use crate::look::Look;
-use crate::voices::{Pick, Voices, VoiceError};
-use crate::transfer::{self, Transfer};
+use crate::menu::{
+    self, Action as MenuAction, ComputersRow, Context as MenuContext, Menu, Row, View,
+};
+use crate::mic;
+use crate::noise::Sealer;
 use crate::ota;
+use crate::pomodoro::{Phase, Pomodoro, Run, Transition};
+use crate::relay_box;
+use crate::spoken_reply::ReplyAudio;
+use crate::storage::{Flash, Settings, SettingsStore, find_partition};
+use crate::text;
+use crate::touch::{self, Direction, Gesture, Gestures};
+use crate::transfer::{self, Transfer};
 use crate::voice_command::{self, Out as VoiceOut, VoiceCommand};
+use crate::voice_pack::{crc32, decode_base64};
+use crate::voices::{Pick, VoiceError, Voices};
 
 /// Longest line taken from a computer: a transfer chunk of 3072 bytes is about 4.2 KB as a line (ADR-0016).
 pub const MAX_LINE_BYTES: usize = 4608;
@@ -192,9 +197,14 @@ impl<B: Board> crate::audio::Registers for BoardI2c<'_, B> {
 enum MicState {
     Idle,
     /// Capturing since this time.
-    Recording { since: u32 },
+    Recording {
+        since: u32,
+    },
     /// Streaming the capture out as `MIC DATA` lines, one per poll.
-    Sending { capture: Vec<u8>, sent: usize },
+    Sending {
+        capture: Vec<u8>,
+        sent: usize,
+    },
 }
 
 /// What the box is linked to without the Relay.
@@ -291,7 +301,11 @@ pub struct Firmware {
 /// Borrows the Firmware's pomodoro and leisure director to build the context for one frame.
 macro_rules! scene {
     ($self:ident, $now:expr) => {
-        Scene { now_ms: $now, pomodoro: &$self.pomodoro, leisure: &$self.leisure }
+        Scene {
+            now_ms: $now,
+            pomodoro: &$self.pomodoro,
+            leisure: &$self.leisure,
+        }
     };
 }
 
@@ -306,9 +320,12 @@ fn task_state(status: &str) -> State {
 
 /// A subset of strtoul: skip leading whitespace and read the leading decimal digits; no digits means 0.
 fn leading_number(text: &str) -> u32 {
-    text.trim_start().bytes().take_while(u8::is_ascii_digit).fold(0u32, |value, digit| {
-        value.wrapping_mul(10).wrapping_add((digit - b'0') as u32)
-    })
+    text.trim_start()
+        .bytes()
+        .take_while(u8::is_ascii_digit)
+        .fold(0u32, |value, digit| {
+            value.wrapping_mul(10).wrapping_add((digit - b'0') as u32)
+        })
 }
 
 /// Both the envelope's extra fields (BTreeMap) and task cards (JSON objects) can be looked up by key.
@@ -393,7 +410,9 @@ impl Firmware {
             settings: None,
             link: None,
             // Good enough for tests and the simulator; the device passes hardware entropy.
-            entropy: core::array::from_fn(|index| (seed.rotate_left(index as u32 % 32) >> (index % 4 * 8)) as u8 ^ index as u8),
+            entropy: core::array::from_fn(|index| {
+                (seed.rotate_left(index as u32 % 32) >> (index % 4 * 8)) as u8 ^ index as u8
+            }),
             lan: Lan::new(),
             remote: false,
             snapshot: None,
@@ -474,14 +493,21 @@ impl Firmware {
                 }
                 self.pomodoro.restore_tally(tally);
                 self.settings = Some(store);
-                let line = text!(48, "TALLY LOADED {} {}S DAY {}\n", tally.completed % 10000, tally.focus_s % 1_000_000, tally.day % 100_000_000);
+                let line = text!(
+                    48,
+                    "TALLY LOADED {} {}S DAY {}\n",
+                    tally.completed % 10000,
+                    tally.focus_s % 1_000_000,
+                    tally.day % 100_000_000
+                );
                 board.write(line.as_bytes());
             }
             _ => Self::write_literal(board, "TALLY LOAD ERROR\n"),
         }
         self.load_link(board);
 
-        let display_ok = board.init_display() && self.display.start(board, &scene!(self, now)).is_ok();
+        let display_ok =
+            board.init_display() && self.display.start(board, &scene!(self, now)).is_ok();
         if display_ok {
             self.display.set_screens(board, &scene!(self, now), screens);
         }
@@ -518,7 +544,9 @@ impl Firmware {
             }
             None => Self::write_literal(board, "BUTTONS ERROR\n"),
         }
-        self.touch = board.init_touch().map(|chip| (chip, Gestures::new(), board.now_ms()));
+        self.touch = board
+            .init_touch()
+            .map(|chip| (chip, Gestures::new(), board.now_ms()));
         self.announce_touch(board);
 
         self.last_message_ms = board.now_ms();
@@ -623,7 +651,9 @@ impl Firmware {
 
     /// The Relay to connect to: what the computer on the cable last set, or the firmware's default.
     pub fn relay_url(&self) -> &str {
-        self.link().and_then(|link| link.relay.as_deref()).unwrap_or(relay_box::DEFAULT_URL)
+        self.link()
+            .and_then(|link| link.relay.as_deref())
+            .unwrap_or(relay_box::DEFAULT_URL)
     }
 
     /// True once after the computer on the cable moved the box to another Relay: the device layer
@@ -727,7 +757,10 @@ impl Firmware {
         // A transfer erases one block per pass, so the network and the screen keep running. A pack waits for the line
         // playing to finish first: it is read from the partition being erased (see continue_voice_begin).
         let draining = self.transfer.erasing() == Some(transfer::Kind::Character)
-            && self.pack_set_aside.is_some_and(|since| board.audio_busy() && (board.now_ms().wrapping_sub(since) as i32) < AUDIO_DRAIN_MS as i32);
+            && self.pack_set_aside.is_some_and(|since| {
+                board.audio_busy()
+                    && (board.now_ms().wrapping_sub(since) as i32) < AUDIO_DRAIN_MS as i32
+            });
         if !draining && self.transfer.erasing().is_some() {
             match self.transfer.erase_step(board.flash()) {
                 Ok(Some(offset)) => Self::transfer_reply(board, "xfer.ready", Some(offset)),
@@ -737,7 +770,9 @@ impl Firmware {
             self.after_transfer(board);
             self.show_overlay(board);
         }
-        if self.transfer.active() && board.now_ms().wrapping_sub(self.transfer_heard) >= TRANSFER_ABANDONED_MS {
+        if self.transfer.active()
+            && board.now_ms().wrapping_sub(self.transfer_heard) >= TRANSFER_ABANDONED_MS
+        {
             self.transfer.cancel();
             Self::write_literal(board, "XFER ABANDONED\n");
             self.after_transfer(board);
@@ -755,7 +790,9 @@ impl Firmware {
             self.ready_deadline = None;
             match self.display.settle_after_done(board, &scene!(self, now)) {
                 Ok(State::Working) => Self::write_literal(board, "DISPLAY STATE WORKING\n"),
-                Ok(State::InputRequired) => Self::write_literal(board, "DISPLAY STATE INPUT REQUIRED\n"),
+                Ok(State::InputRequired) => {
+                    Self::write_literal(board, "DISPLAY STATE INPUT REQUIRED\n")
+                }
                 Ok(_) => Self::write_literal(board, "DISPLAY STATE READY\n"),
                 Err(()) => Self::write_literal(board, "DISPLAY ERROR\n"),
             }
@@ -776,12 +813,15 @@ impl Firmware {
         let now = board.now_ms();
         // The cable goes quiet and links come and go without a line to the screen; this only redraws on a change.
         let (path, staging) = self.link_mark(now);
-        self.display.set_link(board, &scene!(self, now), path, staging);
+        self.display
+            .set_link(board, &scene!(self, now), path, staging);
         self.display.tick(board, &scene!(self, now));
     }
 
     fn send_snapshot<B: Board>(&mut self, board: &mut B, now: u32) {
-        let Some((snapshot, due)) = &mut self.snapshot else { return };
+        let Some((snapshot, due)) = &mut self.snapshot else {
+            return;
+        };
         if (now.wrapping_sub(*due) as i32) < 0 || !board.peer_can_take(SNAPSHOT_LINE_BYTES) {
             return;
         }
@@ -798,32 +838,60 @@ impl Firmware {
 
     /// `device.mic.record`: report what answers on I2C where a microphone ADC could be, set the ES8311's
     /// microphone gain if there is one, and start capturing; `tend_mic` reports and sends the result.
-    fn start_mic<B: Board>(&mut self, board: &mut B, fields: &BTreeMap<alloc::string::String, Value>) {
+    fn start_mic<B: Board>(
+        &mut self,
+        board: &mut B,
+        fields: &BTreeMap<alloc::string::String, Value>,
+    ) {
         if !matches!(self.mic, MicState::Idle) || self.voice_mic {
             return Self::write_literal(board, "MIC BUSY\n");
         }
-        let ms = number(fields, "ms").map_or(mic::DEFAULT_MS, |ms| (ms.max(0.0) as u32).clamp(mic::MIN_MS, mic::MAX_MS));
-        let gain = number(fields, "gain_db").map_or(mic::DEFAULT_GAIN_DB, |db| (db.max(0.0) as u32).min(mic::MAX_GAIN_DB));
+        let ms = number(fields, "ms").map_or(mic::DEFAULT_MS, |ms| {
+            (ms.max(0.0) as u32).clamp(mic::MIN_MS, mic::MAX_MS)
+        });
+        let gain = number(fields, "gain_db").map_or(mic::DEFAULT_GAIN_DB, |db| {
+            (db.max(0.0) as u32).min(mic::MAX_GAIN_DB)
+        });
         let mut es8311 = false;
         for (address, [high, low]) in mic::PROBES {
-            let id = board.i2c_read(address, high).zip(board.i2c_read(address, low));
+            let id = board
+                .i2c_read(address, high)
+                .zip(board.i2c_read(address, low));
             es8311 |= address == ES8311_ADDRESS && id.is_some();
             let line = match id {
-                Some((high, low)) => text!(32, "MIC PROBE 0x{:02X} ID {:02X}{:02X}\n", address, high, low),
+                Some((high, low)) => text!(
+                    32,
+                    "MIC PROBE 0x{:02X} ID {:02X}{:02X}\n",
+                    address,
+                    high,
+                    low
+                ),
                 None => text!(32, "MIC PROBE 0x{:02X} NONE\n", address),
             };
             board.write(line.as_bytes());
         }
         if es8311 {
-            let line = match mic::set_es8311_mic_gain(&mut BoardI2c { board: &mut *board, address: ES8311_ADDRESS }, gain) {
-                Ok(()) => text!(24, "MIC GAIN {} DB\n", mic::mic_gain_register(gain) as u32 * 6),
+            let line = match mic::set_es8311_mic_gain(
+                &mut BoardI2c {
+                    board: &mut *board,
+                    address: ES8311_ADDRESS,
+                },
+                gain,
+            ) {
+                Ok(()) => text!(
+                    24,
+                    "MIC GAIN {} DB\n",
+                    mic::mic_gain_register(gain) as u32 * 6
+                ),
                 Err(()) => text!(24, "MIC GAIN ERROR\n"),
             };
             board.write(line.as_bytes());
         }
         match board.mic_start(mic::capture_bytes(ms)) {
             Ok(()) => {
-                self.mic = MicState::Recording { since: board.now_ms() };
+                self.mic = MicState::Recording {
+                    since: board.now_ms(),
+                };
                 board.write(text!(32, "MIC RECORDING {} MS\n", ms).as_bytes());
             }
             Err(()) => Self::write_literal(board, "MIC UNAVAILABLE\n"),
@@ -843,14 +911,33 @@ impl Firmware {
                     }
                     Some(Ok(capture)) => {
                         // Much longer than asked for means samples were lost on the way in.
-                        let line = text!(48, "MIC CAPTURED {} MS {} BYTES\n", now.wrapping_sub(since), capture.len());
+                        let line = text!(
+                            48,
+                            "MIC CAPTURED {} MS {} BYTES\n",
+                            now.wrapping_sub(since),
+                            capture.len()
+                        );
                         board.write(line.as_bytes());
                         for (index, [left, right]) in mic::levels(&capture).iter().enumerate() {
                             let at = index as u32 * mic::LEVEL_WINDOW_MS;
-                            let line = text!(64, "MIC LEVEL {} L {} {} R {} {}\n", at, left.rms, left.peak, right.rms, right.peak);
+                            let line = text!(
+                                64,
+                                "MIC LEVEL {} L {} {} R {} {}\n",
+                                at,
+                                left.rms,
+                                left.peak,
+                                right.rms,
+                                right.peak
+                            );
                             board.write(line.as_bytes());
                         }
-                        let line = text!(48, "MIC BEGIN {} {} 16 {}\n", SAMPLE_RATE, mic::CHANNELS, capture.len());
+                        let line = text!(
+                            48,
+                            "MIC BEGIN {} {} 16 {}\n",
+                            SAMPLE_RATE,
+                            mic::CHANNELS,
+                            capture.len()
+                        );
                         board.write(line.as_bytes());
                         self.mic = MicState::Sending { capture, sent: 0 };
                     }
@@ -916,9 +1003,16 @@ impl Firmware {
             return;
         }
         // While a write is about to start, the partition is no longer trusted.
-        let pick = if self.pending_voice_begin.is_some() { None } else { self.voices.pick(occasion, &mut self.picker) };
+        let pick = if self.pending_voice_begin.is_some() {
+            None
+        } else {
+            self.voices.pick(occasion, &mut self.picker)
+        };
         let (first, then) = match pick {
-            Some(Pick { line, chime: Some(chime) }) => (Sound::Chime(chime), Some(Sound::Line(line))),
+            Some(Pick {
+                line,
+                chime: Some(chime),
+            }) => (Sound::Chime(chime), Some(Sound::Line(line))),
             Some(Pick { line, chime: None }) => (Sound::Line(line), None),
             None => match occasion.builtin() {
                 Some(prompt) => (Sound::Builtin(prompt), None),
@@ -932,7 +1026,9 @@ impl Firmware {
         // stays text only. The announcement is the box's own news and is short; queued behind a reply it
         // could come half a minute late, and two voices taking turns would be one too many.
         self.stop_reply(board);
-        let queued = self.audio_ready && board.play(first).is_ok() && then.is_none_or(|sound| board.play(sound).is_ok());
+        let queued = self.audio_ready
+            && board.play(first).is_ok()
+            && then.is_none_or(|sound| board.play(sound).is_ok());
         if queued {
             Self::write_value_line(board, "AUDIO QUEUED ", label.as_bytes());
         } else {
@@ -968,7 +1064,11 @@ impl Firmware {
     }
 
     fn save_settings<B: Board>(&mut self, board: &mut B) -> bool {
-        let settings = Settings { tally: self.pomodoro.tally(), volume: self.volume, screens: self.display.screens() };
+        let settings = Settings {
+            tally: self.pomodoro.tally(),
+            volume: self.volume,
+            screens: self.display.screens(),
+        };
         match self.settings.as_mut() {
             Some(store) => store.save(board.flash(), &settings).is_ok(),
             None => false,
@@ -978,7 +1078,13 @@ impl Firmware {
     /// When today's record changes, save it once and report a line to the Mac. It happens a few times a day.
     fn save_tally<B: Board>(&mut self, board: &mut B) {
         let tally = self.pomodoro.tally();
-        let line = text!(48, "POMODORO TODAY {} {}S DAY {}\n", tally.completed % 10000, tally.focus_s % 1_000_000, tally.day % 100_000_000);
+        let line = text!(
+            48,
+            "POMODORO TODAY {} {}S DAY {}\n",
+            tally.completed % 10000,
+            tally.focus_s % 1_000_000,
+            tally.day % 100_000_000
+        );
         board.write(line.as_bytes());
         if !self.save_settings(board) {
             Self::write_literal(board, "TALLY SAVE ERROR\n");
@@ -1014,7 +1120,9 @@ impl Firmware {
             return;
         }
         *next_read = now.wrapping_add(touch::POLL_MS);
-        let sample = board.read_touch().and_then(|report| touch::parse_report(&report));
+        let sample = board
+            .read_touch()
+            .and_then(|report| touch::parse_report(&report));
         match gestures.update(sample, now) {
             Some(Gesture::Tap(point)) => self.on_tap(board, point),
             Some(Gesture::Swipe(direction)) => self.on_swipe(board, direction),
@@ -1026,7 +1134,14 @@ impl Firmware {
     /// Boredom, and in Leisure only calls the buddy back.
     fn on_swipe<B: Board>(&mut self, board: &mut B, direction: Direction) {
         let now = board.now_ms();
-        Self::write_literal(board, if direction == Direction::Up { "SWIPE UP\n" } else { "SWIPE DOWN\n" });
+        Self::write_literal(
+            board,
+            if direction == Direction::Up {
+                "SWIPE UP\n"
+            } else {
+                "SWIPE DOWN\n"
+            },
+        );
         self.leisure.note_activity(now);
         if self.display.mode() == Mode::Leisure {
             self.leisure.tick(now);
@@ -1072,7 +1187,12 @@ impl Firmware {
                 self.on_menu_action(board, action);
             }
             Target::Hint(index) => {
-                let key = self.menu.view().and_then(|view| self.menu_panel(view, now).hints.get(index).map(|hint| hint.0));
+                let key = self.menu.view().and_then(|view| {
+                    self.menu_panel(view, now)
+                        .hints
+                        .get(index)
+                        .map(|hint| hint.0)
+                });
                 let event = match key {
                     Some(b"K0") => ButtonEvent::K0Short,
                     Some(b"K1") => ButtonEvent::K1Short,
@@ -1088,7 +1208,11 @@ impl Firmware {
             // The daemon opens that card's agent, as K2 opens the most pressing one.
             Target::Card(index) => {
                 if let Some(id) = self.display.card_id(index) {
-                    let line = text!(80, "{{\"version\":1,\"event\":\"focus\",\"task\":\"{}\"}}\n", core::str::from_utf8(id).unwrap_or_default());
+                    let line = text!(
+                        80,
+                        "{{\"version\":1,\"event\":\"focus\",\"task\":\"{}\"}}\n",
+                        core::str::from_utf8(id).unwrap_or_default()
+                    );
                     board.write(line.as_bytes());
                 }
             }
@@ -1144,7 +1268,10 @@ impl Firmware {
 
         match event {
             ButtonEvent::K2Short => {
-                Self::write_literal(board, "{\"version\":1,\"event\":\"button\",\"button\":\"K2\",\"action\":\"press\"}\n");
+                Self::write_literal(
+                    board,
+                    "{\"version\":1,\"event\":\"button\",\"button\":\"K2\",\"action\":\"press\"}\n",
+                );
                 return;
             }
             ButtonEvent::K2Long => {
@@ -1152,7 +1279,14 @@ impl Firmware {
                 return;
             }
             ButtonEvent::K1Short => {
-                self.set_mode(board, if mode_before == Mode::Pomodoro { Mode::Duty } else { Mode::Pomodoro });
+                self.set_mode(
+                    board,
+                    if mode_before == Mode::Pomodoro {
+                        Mode::Duty
+                    } else {
+                        Mode::Pomodoro
+                    },
+                );
                 return;
             }
             ButtonEvent::K1Long => {
@@ -1180,13 +1314,27 @@ impl Firmware {
         let break_phase = before.phase == Phase::Break;
         self.pomodoro.toggle(now);
         if before.run == Run::Pending {
-            Self::report_pomodoro(board, if break_phase { "BREAK START" } else { "FOCUS START" });
+            Self::report_pomodoro(
+                board,
+                if break_phase {
+                    "BREAK START"
+                } else {
+                    "FOCUS START"
+                },
+            );
             // Starting a phase brings the pomodoro to the front: the ring starting to move is the feedback.
             self.show_pomodoro(board);
             return;
         }
         // Pause and resume don't change scenes; the badge in the top right of the buddy scene flashes along.
-        Self::report_pomodoro(board, if before.run == Run::Paused { "RESUMED" } else { "PAUSED" });
+        Self::report_pomodoro(
+            board,
+            if before.run == Run::Paused {
+                "RESUMED"
+            } else {
+                "PAUSED"
+            },
+        );
         self.refresh(board);
     }
 
@@ -1289,7 +1437,10 @@ impl Firmware {
             Occasion::InputRequired => 1,
             _ => 0,
         };
-        if self.voice_held.is_none_or(|held| rank(occasion) > rank(held)) {
+        if self
+            .voice_held
+            .is_none_or(|held| rank(occasion) > rank(held))
+        {
             self.voice_held = Some(occasion);
         }
         Self::write_value_line(board, "AUDIO HELD ", occasion_label(occasion).as_bytes());
@@ -1338,16 +1489,19 @@ impl Firmware {
     fn show_overlay<B: Board>(&mut self, board: &mut B) {
         let now = board.now_ms();
         if let Some(panel) = self.transfer_panel() {
-            return self.display.set_panel(board, &scene!(self, now), Some(panel));
+            return self
+                .display
+                .set_panel(board, &scene!(self, now), Some(panel));
         }
         let panel = match self.menu.view() {
             Some(view) => Some(self.menu_panel(view, now)),
             None => self.voice.panel(now).map(|mut panel| {
-                let waiting: Option<&[u8]> = match self.voice_held.map(|held| held.fallback().unwrap_or(held)) {
-                    Some(Occasion::Failed) => Some(b"AN AGENT FAILED"),
-                    Some(Occasion::InputRequired) => Some(b"AN AGENT NEEDS YOU"),
-                    _ => None,
-                };
+                let waiting: Option<&[u8]> =
+                    match self.voice_held.map(|held| held.fallback().unwrap_or(held)) {
+                        Some(Occasion::Failed) => Some(b"AN AGENT FAILED"),
+                        Some(Occasion::InputRequired) => Some(b"AN AGENT NEEDS YOU"),
+                        _ => None,
+                    };
                 if let Some(waiting) = waiting {
                     panel.lines.push((waiting.to_vec(), Vec::new(), Tone::Warn));
                 }
@@ -1367,7 +1521,13 @@ impl Firmware {
     }
 
     /// `voice.available` (with why voice is off, if the computer says), a new link or a lost one.
-    fn set_voice_available<B: Board>(&mut self, board: &mut B, on: bool, reason: Option<&str>, message: Option<&str>) {
+    fn set_voice_available<B: Board>(
+        &mut self,
+        board: &mut B,
+        on: bool,
+        reason: Option<&str>,
+        message: Option<&str>,
+    ) {
         let out = self.voice.offer(on, reason, message, board.now_ms());
         Self::write_voice(board, out);
         self.stop_voice_mic(board);
@@ -1384,7 +1544,13 @@ impl Firmware {
         self.stop_voice_mic(board);
         self.stop_reply(board);
         // A box without the ES8311 (the NS4168 variant) has no gain to set; its microphone, if any, is untested.
-        let _ = mic::set_es8311_mic_gain(&mut BoardI2c { board: &mut *board, address: ES8311_ADDRESS }, voice_command::GAIN_DB);
+        let _ = mic::set_es8311_mic_gain(
+            &mut BoardI2c {
+                board: &mut *board,
+                address: ES8311_ADDRESS,
+            },
+            voice_command::GAIN_DB,
+        );
         let started = matches!(self.mic, MicState::Idle) && board.voice_start().is_ok();
         if started {
             self.voice_mic = true;
@@ -1433,9 +1599,20 @@ impl Firmware {
 
     /// `voice.audio`: a chunk of a spoken reply's MP3, or its end, for the turn being played. While muted the
     /// replies are only shown. A chunk that doesn't decode is a chunk lost: the next one's `seq` gives it away.
-    fn on_voice_audio<B: Board>(&mut self, board: &mut B, fields: &BTreeMap<alloc::string::String, Value>) {
-        let field = |key| number(fields, key).filter(|value| *value >= 0.0).map(|value| value as u32);
-        let (Some(turn), Some(reply), Some(seq)) = (field("turn"), field("reply"), field("seq")) else { return };
+    fn on_voice_audio<B: Board>(
+        &mut self,
+        board: &mut B,
+        fields: &BTreeMap<alloc::string::String, Value>,
+    ) {
+        let field = |key| {
+            number(fields, key)
+                .filter(|value| *value >= 0.0)
+                .map(|value| value as u32)
+        };
+        let (Some(turn), Some(reply), Some(seq)) = (field("turn"), field("reply"), field("seq"))
+        else {
+            return;
+        };
         if self.reply_turn != Some(turn) {
             return;
         }
@@ -1450,11 +1627,19 @@ impl Firmware {
             }
             return;
         }
-        let Some(data) = string(fields, "data").filter(|_| !self.muted) else { return };
+        let Some(data) = string(fields, "data").filter(|_| !self.muted) else {
+            return;
+        };
         let mut bytes = alloc::vec![0u8; data.len() / 4 * 3 + 3];
-        let Some(count) = decode_base64(data.as_bytes(), &mut bytes) else { return };
+        let Some(count) = decode_base64(data.as_bytes(), &mut bytes) else {
+            return;
+        };
         bytes.truncate(count);
-        board.reply_audio(ReplyAudio::Chunk { reply, seq, data: bytes });
+        board.reply_audio(ReplyAudio::Chunk {
+            reply,
+            seq,
+            data: bytes,
+        });
     }
 
     fn stop_voice_mic<B: Board>(&mut self, board: &mut B) {
@@ -1487,11 +1672,26 @@ impl Firmware {
     }
 
     /// `voice.heard`, `voice.reply`, `voice.done` and `voice.error` for a turn; `message` is the envelope's.
-    fn on_voice_turn<B: Board>(&mut self, board: &mut B, fields: &BTreeMap<alloc::string::String, Value>, event: &str, message: Option<&str>) {
-        let Some(turn) = number(fields, "turn").filter(|turn| *turn >= 0.0) else { return };
-        let text = if event == "voice.error" { message } else { string(fields, "text") };
+    fn on_voice_turn<B: Board>(
+        &mut self,
+        board: &mut B,
+        fields: &BTreeMap<alloc::string::String, Value>,
+        event: &str,
+        message: Option<&str>,
+    ) {
+        let Some(turn) = number(fields, "turn").filter(|turn| *turn >= 0.0) else {
+            return;
+        };
+        let text = if event == "voice.error" {
+            message
+        } else {
+            string(fields, "text")
+        };
         let now = board.now_ms();
-        if self.voice.event(event, turn as u32, text, string(fields, "reason"), now) {
+        if self
+            .voice
+            .event(event, turn as u32, text, string(fields, "reason"), now)
+        {
             self.stop_voice_mic(board);
             self.show_overlay(board);
         }
@@ -1510,10 +1710,16 @@ impl Firmware {
                 let lines = rows
                     .iter()
                     .map(|row| match row {
-                        Row::StopPhase if self.pomodoro.view(now).phase == Phase::Break => line(b"END BREAK", b"", Tone::Plain),
+                        Row::StopPhase if self.pomodoro.view(now).phase == Phase::Break => {
+                            line(b"END BREAK", b"", Tone::Plain)
+                        }
                         Row::StopPhase => line(b"STOP FOCUS", b"", Tone::Plain),
                         Row::Volume => line(b"VOLUME", volume.as_bytes(), Tone::Accent),
-                        Row::Mute => line(b"MUTE", if self.muted { b"ON" } else { b"OFF" }, Tone::Accent),
+                        Row::Mute => line(
+                            b"MUTE",
+                            if self.muted { b"ON" } else { b"OFF" },
+                            Tone::Accent,
+                        ),
                         Row::Computers => line(b"COMPUTERS", paired.as_bytes(), Tone::Dim),
                         Row::Network => line(b"NETWORK", b"OPEN", Tone::Dim),
                         Row::Status => line(b"STATUS", b"OPEN", Tone::Dim),
@@ -1542,7 +1748,9 @@ impl Firmware {
                 let lines = rows
                     .iter()
                     .map(|row| match row {
-                        ComputersRow::ForgetAll => line(b"FORGET ALL", paired.as_bytes(), Tone::Accent),
+                        ComputersRow::ForgetAll => {
+                            line(b"FORGET ALL", paired.as_bytes(), Tone::Accent)
+                        }
                         ComputersRow::NewIdentity => line(b"NEW ID", b"", Tone::Plain),
                         ComputersRow::Back => line(b"BACK", b"", Tone::Dim),
                     })
@@ -1574,7 +1782,10 @@ impl Firmware {
             View::Sure => Panel {
                 kind: PanelKind::Facts,
                 title: b"SURE?".to_vec(),
-                lines: alloc::vec![line(b"THE BOX GETS", b"A NEW KEY", Tone::Warn), line(b"THEN", b"RESTARTS", Tone::Plain)],
+                lines: alloc::vec![
+                    line(b"THE BOX GETS", b"A NEW KEY", Tone::Warn),
+                    line(b"THEN", b"RESTARTS", Tone::Plain)
+                ],
                 selected: None,
                 hints: alloc::vec![(b"K0", b"RESET"), (b"K1", b"BACK"), (b"K2", b"CLOSE")],
             },
@@ -1596,7 +1807,15 @@ impl Firmware {
             View::Network => {
                 let wifi = match self.wifi() {
                     None => line(b"WIFI", b"OFF", Tone::Dim),
-                    Some(wifi) => line(b"WIFI", wifi.ssid.as_bytes(), if self.wifi_joined { Tone::Plain } else { Tone::Dim }),
+                    Some(wifi) => line(
+                        b"WIFI",
+                        wifi.ssid.as_bytes(),
+                        if self.wifi_joined {
+                            Tone::Plain
+                        } else {
+                            Tone::Dim
+                        },
+                    ),
                 };
                 let relay = if self.wifi().is_none() {
                     line(b"RELAY", b"OFF", Tone::Dim)
@@ -1629,7 +1848,13 @@ impl Firmware {
                 let tally = self.pomodoro.tally();
                 let minutes = tally.focus_s / 60;
                 let today = if minutes >= 60 {
-                    text!(24, "{} FOCUS {}H{:02}", tally.completed % 1000, minutes / 60 % 100, minutes % 60)
+                    text!(
+                        24,
+                        "{} FOCUS {}H{:02}",
+                        tally.completed % 1000,
+                        minutes / 60 % 100,
+                        minutes % 60
+                    )
                 } else {
                     text!(24, "{} FOCUS {}M", tally.completed % 1000, minutes)
                 };
@@ -1638,7 +1863,15 @@ impl Firmware {
                     title: b"STATUS".to_vec(),
                     lines: alloc::vec![
                         build_line(b"FIRMWARE", &self.build, Tone::Plain),
-                        build_line(b"APP", &self.daemon_build, if self.link_lost { Tone::Dim } else { Tone::Plain }),
+                        build_line(
+                            b"APP",
+                            &self.daemon_build,
+                            if self.link_lost {
+                                Tone::Dim
+                            } else {
+                                Tone::Plain
+                            }
+                        ),
                         self.link_line(now),
                         line(b"VOICE", voice.as_bytes(), Tone::Plain),
                         line(b"TODAY", today.as_bytes(), Tone::Plain),
@@ -1668,7 +1901,14 @@ impl Firmware {
             Transition::FocusEnded => true,
             Transition::BreakEnded => false,
         };
-        Self::report_pomodoro(board, if focus_ended { "FOCUS END" } else { "BREAK END" });
+        Self::report_pomodoro(
+            board,
+            if focus_ended {
+                "FOCUS END"
+            } else {
+                "BREAK END"
+            },
+        );
         // The alarm waits for K0, which the menu would take.
         self.close_overlays(board);
         if focus_ended {
@@ -1693,7 +1933,12 @@ impl Firmware {
     fn tend_leisure<B: Board>(&mut self, board: &mut B) {
         let now = board.now_ms();
         let pomodoro = self.pomodoro.view(now);
-        if !self.display.agent_idle() || pomodoro.run == Run::Running || self.link_lost || self.menu.is_open() || self.voice.is_open() {
+        if !self.display.agent_idle()
+            || pomodoro.run == Run::Running
+            || self.link_lost
+            || self.menu.is_open()
+            || self.voice.is_open()
+        {
             self.leisure.note_activity(now);
         }
 
@@ -1709,7 +1954,14 @@ impl Firmware {
         }
         if leisure.lights_out != self.reported_lights_out {
             self.reported_lights_out = leisure.lights_out;
-            Self::write_literal(board, if leisure.lights_out { "LEISURE LIGHTS OUT\n" } else { "LEISURE LIGHTS ON\n" });
+            Self::write_literal(
+                board,
+                if leisure.lights_out {
+                    "LEISURE LIGHTS OUT\n"
+                } else {
+                    "LEISURE LIGHTS ON\n"
+                },
+            );
         }
 
         if mode == Mode::Duty && leisure.tier != Tier::Alert {
@@ -1733,15 +1985,29 @@ impl Firmware {
         let Some(Value::Array(items)) = fields.get("stats") else {
             return;
         };
-        let lines: Vec<&str> = items.iter().filter_map(Value::as_str).take(MAX_STATS).collect();
+        let lines: Vec<&str> = items
+            .iter()
+            .filter_map(Value::as_str)
+            .take(MAX_STATS)
+            .collect();
         let bytes: Vec<&[u8]> = lines.iter().map(|line| line.as_bytes()).collect();
         self.display.set_stats(&bytes);
         // The number in the "7 DONE" line: in leisure it decides whether the buddy is tired or bored.
-        let done = lines.iter().find(|line| line.contains("DONE")).map(|line| leading_number(line)).unwrap_or(0);
+        let done = lines
+            .iter()
+            .find(|line| line.contains("DONE"))
+            .map(|line| leading_number(line))
+            .unwrap_or(0);
         self.leisure.set_done_count(done);
     }
 
-    fn show_event<B: Board>(&mut self, board: &mut B, fields: &BTreeMap<alloc::string::String, Value>, event: &str, title: Option<&str>) {
+    fn show_event<B: Board>(
+        &mut self,
+        board: &mut B,
+        fields: &BTreeMap<alloc::string::String, Value>,
+        event: &str,
+        title: Option<&str>,
+    ) {
         let task_items: Vec<&Map<alloc::string::String, Value>> = match fields.get("tasks") {
             Some(Value::Array(items)) => items.iter().filter_map(Value::as_object).collect(),
             _ => Vec::new(),
@@ -1751,16 +2017,23 @@ impl Firmware {
             if tasks.len() == MAX_TASKS {
                 break;
             }
-            let (Some(task_title), Some(status)) = (string(item, "title"), string(item, "status")) else {
+            let (Some(task_title), Some(status)) = (string(item, "title"), string(item, "status"))
+            else {
                 continue;
             };
             tasks.push(TaskInput {
                 title: Some(task_title.as_bytes()),
                 state: task_state(status),
-                elapsed_s: number(item, "elapsed_s").map(|value| value as i32).unwrap_or(0),
+                elapsed_s: number(item, "elapsed_s")
+                    .map(|value| value as i32)
+                    .unwrap_or(0),
                 project: string(item, "project").map(str::as_bytes),
                 // Only a short id of letters and digits goes back out in a JSON line as is.
-                id: string(item, "id").filter(|id| id.len() <= 16 && id.bytes().all(|byte| byte.is_ascii_alphanumeric())).map(str::as_bytes),
+                id: string(item, "id")
+                    .filter(|id| {
+                        id.len() <= 16 && id.bytes().all(|byte| byte.is_ascii_alphanumeric())
+                    })
+                    .map(str::as_bytes),
                 icon: string(item, "agent").and_then(AgentIcon::for_agent),
             });
         }
@@ -1769,12 +2042,20 @@ impl Firmware {
         let (state, state_label, mut occasion) = match event {
             "task.start" => (State::Working, "WORKING", None),
             "agent.idle" => (State::Idle, "READY", None),
-            "agent.input_required" => (State::InputRequired, "INPUT REQUIRED", Some(Occasion::InputRequired)),
+            "agent.input_required" => (
+                State::InputRequired,
+                "INPUT REQUIRED",
+                Some(Occasion::InputRequired),
+            ),
             "task.done" => (State::Done, "DONE", Some(Occasion::Done)),
             "task.error" | "agent.blocked" => (State::Failed, "FAILED", Some(Occasion::Failed)),
             _ => return,
         };
-        self.ready_deadline = if event == "task.done" { Some(now.wrapping_add(DONE_TO_IDLE_MS)) } else { None };
+        self.ready_deadline = if event == "task.done" {
+            Some(now.wrapping_add(DONE_TO_IDLE_MS))
+        } else {
+            None
+        };
 
         if fields.get("suppress_audio") == Some(&Value::Bool(true)) {
             occasion = None;
@@ -1801,7 +2082,14 @@ impl Firmware {
                 self.close_overlays(board);
             }
         }
-        let shown = self.display.show_tasks(board, &scene!(self, now), state, title.map(str::as_bytes), &tasks, number(fields, "tasks_total").map_or(0, |total| total as usize));
+        let shown = self.display.show_tasks(
+            board,
+            &scene!(self, now),
+            state,
+            title.map(str::as_bytes),
+            &tasks,
+            number(fields, "tasks_total").map_or(0, |total| total as usize),
+        );
         if shown.is_err() {
             Self::write_literal(board, "DISPLAY ERROR\n");
         } else {
@@ -1826,9 +2114,9 @@ impl Firmware {
             Occasion::Failed => true,
             _ => return true,
         };
-        let merged = self
-            .last_end_spoken
-            .is_some_and(|(spoken_failed, at)| now.wrapping_sub(at) < MERGE_WINDOW_MS && (spoken_failed || !failed));
+        let merged = self.last_end_spoken.is_some_and(|(spoken_failed, at)| {
+            now.wrapping_sub(at) < MERGE_WINDOW_MS && (spoken_failed || !failed)
+        });
         if !merged {
             self.last_end_spoken = Some((failed, now));
         }
@@ -1848,7 +2136,11 @@ impl Firmware {
             None => true,
             Some(title) => title.is_string(),
         };
-        let parsed = if value.is_object() && title_ok { serde_json::from_value::<Event>(value).ok() } else { None };
+        let parsed = if value.is_object() && title_ok {
+            serde_json::from_value::<Event>(value).ok()
+        } else {
+            None
+        };
         let Some(message) = parsed else {
             Self::write_literal(board, "ERROR invalid_message\n");
             return;
@@ -1938,7 +2230,9 @@ impl Firmware {
             // muted, same rule as every other announcement.
             "device.volume" => {
                 match number(fields, "level") {
-                    Some(level) => self.set_volume_level(board, if level < 0.0 { 0 } else { level as u32 }),
+                    Some(level) => {
+                        self.set_volume_level(board, if level < 0.0 { 0 } else { level as u32 })
+                    }
                     None => self.announce_volume(board),
                 }
                 // The app's slider can move while the menu shows the volume.
@@ -1953,20 +2247,30 @@ impl Firmware {
             "voice.available" => {
                 let on = fields.get("on") == Some(&Value::Bool(true));
                 // `message` is the envelope's own field, not one of the extra ones.
-                self.set_voice_available(board, on, string(fields, "reason"), message.message.as_deref());
+                self.set_voice_available(
+                    board,
+                    on,
+                    string(fields, "reason"),
+                    message.message.as_deref(),
+                );
             }
-            "voice.heard" | "voice.reply" | "voice.done" | "voice.error" => self.on_voice_turn(board, fields, event, message.message.as_deref()),
+            "voice.heard" | "voice.reply" | "voice.done" | "voice.error" => {
+                self.on_voice_turn(board, fields, event, message.message.as_deref())
+            }
             "voice.audio" => self.on_voice_audio(board, fields),
             _ if event.starts_with("voice.") => self.handle_voice_event(board, fields, event),
             _ if event.starts_with("xfer.") => self.handle_transfer(board, fields, event),
             // Pairing is the computer at the other end of the cable telling the box who it is (ADR-0012).
             // Only over the cable: whoever is at the box decides who may link and which network it joins.
-            "device.pair" | "device.unpair" | "device.pairs" | "device.wifi.set" | "device.wifi.forget" | "device.wifi.scan" | "device.relay.set" | "device.baud"
+            "device.pair" | "device.unpair" | "device.pairs" | "device.wifi.set"
+            | "device.wifi.forget" | "device.wifi.scan" | "device.relay.set" | "device.baud"
                 if self.remote =>
             {
                 Self::write_literal(board, "ERROR cable_only\n");
             }
-            "device.pair" | "device.unpair" | "device.pairs" => self.handle_pairing(board, fields, event),
+            "device.pair" | "device.unpair" | "device.pairs" => {
+                self.handle_pairing(board, fields, event)
+            }
             "device.wifi.set" | "device.wifi.forget" => self.handle_wifi(board, fields, event),
             // Which Relay follows the computer on the cable, so a development build and a release reach the
             // same Relay as their box (docs/relay-protocol.md, "Which Relay").
@@ -1988,7 +2292,12 @@ impl Firmware {
             // Link self-test: send the received string's length and CRC back to the Mac to check for corrupted serial bytes.
             "device.echo" => {
                 if let Some(data) = string(fields, "data") {
-                    let reply = text!(96, "{{\"version\":1,\"event\":\"echo\",\"length\":{},\"crc\":{}}}\n", data.len(), crc32(0, data.as_bytes()));
+                    let reply = text!(
+                        96,
+                        "{{\"version\":1,\"event\":\"echo\",\"length\":{},\"crc\":{}}}\n",
+                        data.len(),
+                        crc32(0, data.as_bytes())
+                    );
                     board.write(reply.as_bytes());
                     // Echo the line back verbatim; the Mac compares byte by byte to see what the port actually received.
                     Self::write_value_line(board, "ECHO ", data.as_bytes());
@@ -2015,7 +2324,9 @@ impl Firmware {
     /// without the partition (the single-slot layout) has no key and can't be paired; it says nothing,
     /// and the missing `BOX KEY` line tells the computer so.
     fn load_link<B: Board>(&mut self, board: &mut B) {
-        let Some(region) = find_partition(board.flash(), "link") else { return };
+        let Some(region) = find_partition(board.flash(), "link") else {
+            return;
+        };
         match LinkStore::open(board.flash(), region) {
             Ok((store, Some(link))) => self.link = Some((store, link)),
             Ok((mut store, None)) => {
@@ -2035,7 +2346,11 @@ impl Firmware {
     fn announce_key<B: Board>(&self, board: &mut B) {
         if let Some((_, link)) = &self.link {
             Self::write_literal(board, "LINK NOISE\n");
-            Self::write_value_line(board, "BOX KEY ", link::encode_key(&link.public_key()).as_bytes());
+            Self::write_value_line(
+                board,
+                "BOX KEY ",
+                link::encode_key(&link.public_key()).as_bytes(),
+            );
             // The network's name only; the password never leaves the box.
             if let Some(wifi) = &link.wifi {
                 Self::write_value_line(board, "WIFI NETWORK ", wifi.ssid.as_bytes());
@@ -2047,7 +2362,12 @@ impl Firmware {
         }
     }
 
-    fn handle_pairing<B: Board>(&mut self, board: &mut B, fields: &BTreeMap<alloc::string::String, Value>, event: &str) {
+    fn handle_pairing<B: Board>(
+        &mut self,
+        board: &mut B,
+        fields: &BTreeMap<alloc::string::String, Value>,
+        event: &str,
+    ) {
         let Some((_, link)) = &self.link else {
             return Self::write_literal(board, "PAIR UNAVAILABLE\n");
         };
@@ -2067,7 +2387,9 @@ impl Firmware {
         if event == "device.pair" {
             self.cable_key = Some(key);
         }
-        let Some((store, link)) = self.link.as_mut() else { return };
+        let Some((store, link)) = self.link.as_mut() else {
+            return;
+        };
         let changed = if event == "device.pair" {
             match link.pair(key, string(fields, "name").unwrap_or("")) {
                 Ok(changed) => changed,
@@ -2079,7 +2401,11 @@ impl Firmware {
         if changed && store.save(board.flash(), link).is_err() {
             return Self::write_literal(board, "LINK SAVE ERROR\n");
         }
-        let label = if event == "device.pair" { "PAIRED " } else { "UNPAIRED " };
+        let label = if event == "device.pair" {
+            "PAIRED "
+        } else {
+            "UNPAIRED "
+        };
         Self::write_value_line(board, label, link::encode_key(&key).as_bytes());
         if event == "device.unpair" {
             let outputs = self.lan.unpaired(&key, board.now_ms());
@@ -2087,17 +2413,28 @@ impl Firmware {
         }
     }
 
-    fn handle_wifi<B: Board>(&mut self, board: &mut B, fields: &BTreeMap<alloc::string::String, Value>, event: &str) {
+    fn handle_wifi<B: Board>(
+        &mut self,
+        board: &mut B,
+        fields: &BTreeMap<alloc::string::String, Value>,
+        event: &str,
+    ) {
         let Some((store, link)) = self.link.as_mut() else {
             return Self::write_literal(board, "WIFI UNAVAILABLE\n");
         };
         if event == "device.wifi.set" {
             let ssid = string(fields, "ssid").unwrap_or("");
             let password = string(fields, "password").unwrap_or("");
-            if ssid.is_empty() || ssid.len() > link::MAX_SSID_BYTES || password.len() > link::MAX_PASSWORD_BYTES {
+            if ssid.is_empty()
+                || ssid.len() > link::MAX_SSID_BYTES
+                || password.len() > link::MAX_PASSWORD_BYTES
+            {
                 return Self::write_literal(board, "WIFI INVALID\n");
             }
-            link.wifi = Some(Wifi { ssid: ssid.into(), password: password.into() });
+            link.wifi = Some(Wifi {
+                ssid: ssid.into(),
+                password: password.into(),
+            });
         } else {
             link.wifi = None;
         }
@@ -2113,8 +2450,13 @@ impl Firmware {
 
     /// `device.relay.set {"url": "wss://host"}`. The computer sends it on every link over the cable, so
     /// the record is saved only when the Relay really changes.
-    fn handle_relay<B: Board>(&mut self, board: &mut B, fields: &BTreeMap<alloc::string::String, Value>) {
-        let Some(url) = string(fields, "url").filter(|url| relay_box::url_host(url).is_some()) else {
+    fn handle_relay<B: Board>(
+        &mut self,
+        board: &mut B,
+        fields: &BTreeMap<alloc::string::String, Value>,
+    ) {
+        let Some(url) = string(fields, "url").filter(|url| relay_box::url_host(url).is_some())
+        else {
             return Self::write_literal(board, "RELAY INVALID\n");
         };
         let url = url.trim_end_matches('/');
@@ -2134,7 +2476,9 @@ impl Firmware {
     /// From the box's menu: forget every paired computer, for a box changing hands. Each pairs
     /// again the next time it is plugged in.
     fn forget_computers<B: Board>(&mut self, board: &mut B) {
-        let Some((store, link)) = self.link.as_mut() else { return };
+        let Some((store, link)) = self.link.as_mut() else {
+            return;
+        };
         link.paired.clear();
         if store.save(board.flash(), link).is_err() {
             return Self::write_literal(board, "LINK SAVE ERROR\n");
@@ -2160,14 +2504,20 @@ impl Firmware {
         if store.save(board.flash(), link).is_err() {
             return Self::write_literal(board, "LINK SAVE ERROR\n");
         }
-        Self::write_value_line(board, "NEW IDENTITY ", link::encode_key(&link.public_key()).as_bytes());
+        Self::write_value_line(
+            board,
+            "NEW IDENTITY ",
+            link::encode_key(&link.public_key()).as_bytes(),
+        );
         board.restart();
     }
 
     /// `TRANSFER 1`: this firmware takes firmware images over any link (ADR-0016). `FIRMWARE ROLLED BACK`: the last
     /// image sent that way didn't confirm itself, and the bootloader went back to this one; it stays until the next.
     fn announce_updates<B: Board>(board: &mut B) {
-        let Some(otadata) = find_partition(board.flash(), "otadata") else { return };
+        let Some(otadata) = find_partition(board.flash(), "otadata") else {
+            return;
+        };
         Self::write_literal(board, "TRANSFER 1\n");
         if ota::rolled_back(board.flash(), otadata).unwrap_or(false) {
             Self::write_literal(board, "FIRMWARE ROLLED BACK\n");
@@ -2178,19 +2528,33 @@ impl Firmware {
     /// since the computer's window is driven by them.
     fn transfer_reply<B: Board>(board: &mut B, event: &str, offset: Option<u32>) {
         let line = match offset {
-            Some(offset) => text!(80, "{{\"version\":1,\"event\":\"{}\",\"offset\":{}}}\n", event, offset),
+            Some(offset) => text!(
+                80,
+                "{{\"version\":1,\"event\":\"{}\",\"offset\":{}}}\n",
+                event,
+                offset
+            ),
             None => text!(80, "{{\"version\":1,\"event\":\"{}\"}}\n", event),
         };
         board.write(line.as_bytes());
     }
 
     fn transfer_error<B: Board>(board: &mut B, failure: transfer::Error) {
-        let line = text!(80, "{{\"version\":1,\"event\":\"xfer.error\",\"code\":\"{}\"}}\n", failure.code());
+        let line = text!(
+            80,
+            "{{\"version\":1,\"event\":\"xfer.error\",\"code\":\"{}\"}}\n",
+            failure.code()
+        );
         board.write(line.as_bytes());
     }
 
     /// `xfer.*`: a firmware image or a Character pack over any link, in chunks, resumable (ADR-0016, [`crate::transfer`]).
-    fn handle_transfer<B: Board>(&mut self, board: &mut B, fields: &BTreeMap<alloc::string::String, Value>, event: &str) {
+    fn handle_transfer<B: Board>(
+        &mut self,
+        board: &mut B,
+        fields: &BTreeMap<alloc::string::String, Value>,
+        event: &str,
+    ) {
         self.transfer_heard = board.now_ms();
         match event {
             "xfer.begin" => {
@@ -2202,7 +2566,10 @@ impl Firmware {
                 let Some(kind) = kind else {
                     return Self::transfer_error(board, transfer::Error::Unsupported);
                 };
-                match self.transfer.begin(board.flash(), kind, size as u32, sha256) {
+                match self
+                    .transfer
+                    .begin(board.flash(), kind, size as u32, sha256)
+                {
                     Ok(Some(offset)) => Self::transfer_reply(board, "xfer.ready", Some(offset)),
                     // Erasing first; poll answers once it is done.
                     Ok(None) => {
@@ -2217,19 +2584,34 @@ impl Firmware {
                 }
             }
             "xfer.chunk" => {
-                let (Some(offset), Some(crc), Some(data)) = (number(fields, "offset"), number(fields, "crc"), string(fields, "data")) else {
+                let (Some(offset), Some(crc), Some(data)) = (
+                    number(fields, "offset"),
+                    number(fields, "crc"),
+                    string(fields, "data"),
+                ) else {
                     self.transfer.cancel();
                     Self::transfer_error(board, transfer::Error::BadMessage);
                     return self.after_transfer(board);
                 };
                 let mut bytes = alloc::vec![0u8; transfer::CHUNK_BYTES + 3];
                 // Base64 the UART bridge damaged decodes to nothing, and the chunk is asked for again.
-                let length = crate::voice_pack::decode_base64(data.as_bytes(), &mut bytes).unwrap_or(0);
-                match self.transfer.chunk(board.flash(), offset as u32, &bytes[..length], crc as u32) {
+                let length =
+                    crate::voice_pack::decode_base64(data.as_bytes(), &mut bytes).unwrap_or(0);
+                match self.transfer.chunk(
+                    board.flash(),
+                    offset as u32,
+                    &bytes[..length],
+                    crc as u32,
+                ) {
                     // The computer's round goes back with the answer: it tells answers to chunks sent again apart.
                     Ok(next) => match number(fields, "round") {
                         Some(round) => {
-                            let line = text!(96, "{{\"version\":1,\"event\":\"xfer.ack\",\"offset\":{},\"round\":{}}}\n", next, round as u64);
+                            let line = text!(
+                                96,
+                                "{{\"version\":1,\"event\":\"xfer.ack\",\"offset\":{},\"round\":{}}}\n",
+                                next,
+                                round as u64
+                            );
                             board.write(line.as_bytes());
                         }
                         None => Self::transfer_reply(board, "xfer.ack", Some(next)),
@@ -2247,7 +2629,12 @@ impl Firmware {
                     self.after_transfer(board);
                     let id = alloc::string::String::from(self.voices.current_id());
                     let quoted = serde_json::to_string(&id).unwrap_or_default();
-                    Self::write_value_line(board, "", alloc::format!(r#"{{"version":1,"event":"xfer.done","voice":{quoted}}}"#).as_bytes());
+                    Self::write_value_line(
+                        board,
+                        "",
+                        alloc::format!(r#"{{"version":1,"event":"xfer.done","voice":{quoted}}}"#)
+                            .as_bytes(),
+                    );
                     Self::write_value_line(board, "VOICES ", id.as_bytes());
                     // As after voice.end: the new voice says it is in.
                     self.announce(board, Occasion::Done);
@@ -2299,14 +2686,33 @@ impl Firmware {
     /// Voice pack write acknowledgements are all JSON lines: the Mac does stop-and-wait flow control by sequence number, which diagnostic lines can't support.
     fn voice_reply<B: Board>(board: &mut B, event: &str, seq: i64, detail: &str) {
         let line = match event {
-            "voice.written" => text!(160, "{{\"version\":1,\"event\":\"voice.written\",\"voice\":\"{}\"}}\n", detail),
-            "voice.error" => text!(160, "{{\"version\":1,\"event\":\"voice.error\",\"seq\":{},\"message\":\"{}\"}}\n", seq, detail),
-            _ => text!(160, "{{\"version\":1,\"event\":\"{}\",\"seq\":{}}}\n", event, seq),
+            "voice.written" => text!(
+                160,
+                "{{\"version\":1,\"event\":\"voice.written\",\"voice\":\"{}\"}}\n",
+                detail
+            ),
+            "voice.error" => text!(
+                160,
+                "{{\"version\":1,\"event\":\"voice.error\",\"seq\":{},\"message\":\"{}\"}}\n",
+                seq,
+                detail
+            ),
+            _ => text!(
+                160,
+                "{{\"version\":1,\"event\":\"{}\",\"seq\":{}}}\n",
+                event,
+                seq
+            ),
         };
         board.write(line.as_bytes());
     }
 
-    fn handle_voice_event<B: Board>(&mut self, board: &mut B, fields: &BTreeMap<alloc::string::String, Value>, event: &str) {
+    fn handle_voice_event<B: Board>(
+        &mut self,
+        board: &mut B,
+        fields: &BTreeMap<alloc::string::String, Value>,
+        event: &str,
+    ) {
         match event {
             "voice.begin" => {
                 let Some(size) = number(fields, "size") else {
@@ -2336,7 +2742,10 @@ impl Firmware {
                     self.voices.abort(board.flash());
                     return;
                 };
-                match self.voices.chunk(board.flash(), seq as u32, data.as_bytes(), crc as u32) {
+                match self
+                    .voices
+                    .chunk(board.flash(), seq as u32, data.as_bytes(), crc as u32)
+                {
                     Ok(()) => Self::voice_reply(board, "voice.ack", seq as i64, ""),
                     Err(error) => {
                         Self::voice_reply(board, "voice.error", seq as i32 as i64, error.name());
@@ -2373,7 +2782,11 @@ impl Firmware {
             board.flash().read(offset, &mut bytes).ok()?;
             Look::parse(&bytes)
         });
-        let label = if look.is_some() { self.voices.current_id() } else { "ROBOT" };
+        let label = if look.is_some() {
+            self.voices.current_id()
+        } else {
+            "ROBOT"
+        };
         if label != self.reported_look {
             self.reported_look = alloc::string::String::from(label);
             let line = self.reported_look.clone();
@@ -2388,7 +2801,8 @@ impl Firmware {
         let Some((size, since)) = self.pending_voice_begin else {
             return;
         };
-        if board.audio_busy() && (board.now_ms().wrapping_sub(since) as i32) < AUDIO_DRAIN_MS as i32 {
+        if board.audio_busy() && (board.now_ms().wrapping_sub(since) as i32) < AUDIO_DRAIN_MS as i32
+        {
             return;
         }
         self.pending_voice_begin = None;

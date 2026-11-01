@@ -118,7 +118,11 @@ impl DeviceState {
     pub fn apply(&mut self, message: &DeviceMessage) -> bool {
         let before = self.clone();
         match message {
-            DeviceMessage::Connected { port, bridge, usb_serial } => {
+            DeviceMessage::Connected {
+                port,
+                bridge,
+                usb_serial,
+            } => {
                 self.connected = true;
                 self.port = Some(port.clone());
                 self.bridge = *bridge;
@@ -153,7 +157,11 @@ impl DeviceState {
                 self.box_relay = None;
             }
             DeviceMessage::ConnectedNetwork { address } => {
-                self.apply(&DeviceMessage::Connected { port: address.clone(), bridge: false, usb_serial: None });
+                self.apply(&DeviceMessage::Connected {
+                    port: address.clone(),
+                    bridge: false,
+                    usb_serial: None,
+                });
                 self.network = true;
                 // Reached over Wi-Fi, so that is its address there, even from firmware that doesn't repeat it in answer to hello.
                 if let Ok(socket) = address.parse::<std::net::SocketAddr>() {
@@ -161,7 +169,11 @@ impl DeviceState {
                 }
             }
             DeviceMessage::ConnectedRelay { url } => {
-                self.apply(&DeviceMessage::Connected { port: url.clone(), bridge: false, usb_serial: None });
+                self.apply(&DeviceMessage::Connected {
+                    port: url.clone(),
+                    bridge: false,
+                    usb_serial: None,
+                });
                 self.network = true;
                 self.relay = true;
             }
@@ -169,7 +181,12 @@ impl DeviceState {
                 self.bridge_baud = Some(*baud);
                 self.bridge_switches = *switches;
             }
-            DeviceMessage::Busy { owner, reason } => self.busy = Some(Busy { owner: owner.clone(), reason: reason.clone() }),
+            DeviceMessage::Busy { owner, reason } => {
+                self.busy = Some(Busy {
+                    owner: owner.clone(),
+                    reason: reason.clone(),
+                })
+            }
             DeviceMessage::ForeignFirmware => {
                 // Over the bridge the port survives a reset into other firmware, so what ours reported must go too.
                 self.foreign_firmware = true;
@@ -238,7 +255,11 @@ impl DeviceState {
                     // Another network: the address and any failure were the old one's. The same name comes again
                     // with every hello and changes nothing.
                     let network = network.trim();
-                    if self.wifi_network.as_deref().is_some_and(|old| old != network) {
+                    if self
+                        .wifi_network
+                        .as_deref()
+                        .is_some_and(|old| old != network)
+                    {
                         self.wifi_address = None;
                         self.wifi_error = None;
                     }
@@ -260,15 +281,24 @@ impl DeviceState {
                 } else if let Some(seen) = line.strip_prefix("WIFI SEEN ") {
                     // `WIFI SEEN <count>` starts a scan; `WIFI SEEN <rssi> <channel> <ssid>` is one network.
                     let mut parts = seen.splitn(3, ' ');
-                    match (parts.next().map(str::parse::<i32>), parts.next().map(str::parse::<u8>), parts.next()) {
+                    match (
+                        parts.next().map(str::parse::<i32>),
+                        parts.next().map(str::parse::<u8>),
+                        parts.next(),
+                    ) {
                         (Some(Ok(_)), None, None) => self.wifi_seen.clear(),
                         (Some(Ok(rssi)), Some(Ok(_)), Some(ssid)) if !ssid.trim().is_empty() => {
                             let ssid = ssid.trim_end().to_owned();
-                            match self.wifi_seen.iter_mut().find(|network| network.ssid == ssid) {
+                            match self
+                                .wifi_seen
+                                .iter_mut()
+                                .find(|network| network.ssid == ssid)
+                            {
                                 Some(network) => network.rssi = network.rssi.max(rssi),
                                 None => self.wifi_seen.push(SeenNetwork { ssid, rssi }),
                             }
-                            self.wifi_seen.sort_by_key(|network| std::cmp::Reverse(network.rssi));
+                            self.wifi_seen
+                                .sort_by_key(|network| std::cmp::Reverse(network.rssi));
                         }
                         _ => {}
                     }
@@ -277,10 +307,15 @@ impl DeviceState {
                     self.wifi_error = None;
                 } else if line.starts_with("PAIRS ") {
                     self.paired_computers.clear();
-                } else if let Some((key, name)) = line.strip_prefix("PAIR ").and_then(|rest| rest.split_once(' '))
+                } else if let Some((key, name)) = line
+                    .strip_prefix("PAIR ")
+                    .and_then(|rest| rest.split_once(' '))
                     && key.len() == 43
                 {
-                    self.paired_computers.push(PairedComputer { key: key.to_owned(), name: name.trim().to_owned() });
+                    self.paired_computers.push(PairedComputer {
+                        key: key.to_owned(),
+                        name: name.trim().to_owned(),
+                    });
                 } else if line.trim() == "UNPAIRED ALL" {
                     self.paired = false;
                     self.paired_computers.clear();
@@ -386,12 +421,20 @@ pub struct Status {
 /// / `ssid` (unusable as given). Anything else is passed on as it came. Firmware up to 0.5.0 sends the driver's whole
 /// error, `Failed(DisconnectedInfo { .., reason: AuthenticationExpired, .. })`; later firmware just the reason.
 pub fn wifi_failure(why: &str) -> String {
-    let reason = why.split_once("reason: ").map_or(why, |(_, rest)| rest.split([',', ' ', '}']).next().unwrap_or(rest));
+    let reason = why.split_once("reason: ").map_or(why, |(_, rest)| {
+        rest.split([',', ' ', '}']).next().unwrap_or(rest)
+    });
     match reason {
-        "AuthenticationExpired" | "AuthenticationFailed" | "FourWayHandshakeTimeout" | "HandshakeTimeout" | "MicFailure"
+        "AuthenticationExpired"
+        | "AuthenticationFailed"
+        | "FourWayHandshakeTimeout"
+        | "HandshakeTimeout"
+        | "MicFailure"
         | "_802_1xAuthenticationFailed" => "wrong_password",
         "NoAccessPointFound" | "NoAccessPointFoundInRssiThreshold" | "BeaconTimeout" => "not_found",
-        "NoAccessPointFoundWithCompatibleSecurity" | "NoAccessPointFoundInAuthmodeThreshold" => "security",
+        "NoAccessPointFoundWithCompatibleSecurity" | "NoAccessPointFoundInAuthmodeThreshold" => {
+            "security"
+        }
         _ => why,
     }
     .to_owned()
@@ -408,12 +451,33 @@ mod tests {
     #[test]
     fn the_bridge_rate_is_kept_until_the_link_changes() {
         let mut state = DeviceState::default();
-        state.apply(&DeviceMessage::Connected { port: "/dev/cu.x".to_owned(), bridge: true, usb_serial: None });
-        assert!(state.apply(&DeviceMessage::BridgeRate { baud: 921_600, switches: true }));
-        assert_eq!((state.bridge_baud, state.bridge_switches), (Some(921_600), true));
-        state.apply(&DeviceMessage::Connected { port: "/dev/cu.x".to_owned(), bridge: true, usb_serial: None });
-        assert_eq!((state.bridge_baud, state.bridge_switches), (None, false), "a new link settles it again");
-        state.apply(&DeviceMessage::BridgeRate { baud: 115_200, switches: false });
+        state.apply(&DeviceMessage::Connected {
+            port: "/dev/cu.x".to_owned(),
+            bridge: true,
+            usb_serial: None,
+        });
+        assert!(state.apply(&DeviceMessage::BridgeRate {
+            baud: 921_600,
+            switches: true
+        }));
+        assert_eq!(
+            (state.bridge_baud, state.bridge_switches),
+            (Some(921_600), true)
+        );
+        state.apply(&DeviceMessage::Connected {
+            port: "/dev/cu.x".to_owned(),
+            bridge: true,
+            usb_serial: None,
+        });
+        assert_eq!(
+            (state.bridge_baud, state.bridge_switches),
+            (None, false),
+            "a new link settles it again"
+        );
+        state.apply(&DeviceMessage::BridgeRate {
+            baud: 115_200,
+            switches: false,
+        });
         state.apply(&DeviceMessage::Disconnected);
         assert_eq!(state.bridge_baud, None);
     }
@@ -422,21 +486,39 @@ mod tests {
     fn candidates_wait_for_a_choice_and_go_once_a_box_connects() {
         let mut state = DeviceState::default();
         let candidates = vec![
-            Candidate { port: "/dev/cu.usbmodem1101".to_owned(), usb_serial: Some("30:ED:A0:A4:0D:08".to_owned()) },
-            Candidate { port: "/dev/cu.usbmodem8401".to_owned(), usb_serial: Some("98:88:E0:06:8B:CC".to_owned()) },
+            Candidate {
+                port: "/dev/cu.usbmodem1101".to_owned(),
+                usb_serial: Some("30:ED:A0:A4:0D:08".to_owned()),
+            },
+            Candidate {
+                port: "/dev/cu.usbmodem8401".to_owned(),
+                usb_serial: Some("98:88:E0:06:8B:CC".to_owned()),
+            },
         ];
         assert!(state.apply(&DeviceMessage::Candidates(candidates.clone())));
         assert_eq!(state.candidates, candidates);
         let usb_serial = Some("98:88:E0:06:8B:CC".to_owned());
-        state.apply(&DeviceMessage::Connected { port: "/dev/cu.usbmodem8401".to_owned(), bridge: false, usb_serial });
-        assert!(state.candidates.is_empty(), "connected: there is nothing left to choose");
+        state.apply(&DeviceMessage::Connected {
+            port: "/dev/cu.usbmodem8401".to_owned(),
+            bridge: false,
+            usb_serial,
+        });
+        assert!(
+            state.candidates.is_empty(),
+            "connected: there is nothing left to choose"
+        );
     }
 
     #[test]
     fn a_build_glued_behind_a_stray_line_is_still_read() {
         let mut state = DeviceState::default();
-        state.apply(&line("LEISURE SKIT DISPLAY READY BUILD v0.2.1-38-ga0bffc7 2026-09-30 16:29"));
-        assert_eq!(state.firmware_build.as_deref(), Some("v0.2.1-38-ga0bffc7 2026-09-30 16:29"));
+        state.apply(&line(
+            "LEISURE SKIT DISPLAY READY BUILD v0.2.1-38-ga0bffc7 2026-09-30 16:29",
+        ));
+        assert_eq!(
+            state.firmware_build.as_deref(),
+            Some("v0.2.1-38-ga0bffc7 2026-09-30 16:29")
+        );
     }
 
     #[test]
@@ -449,16 +531,29 @@ mod tests {
     #[test]
     fn device_state_is_read_off_the_diagnostic_lines() {
         let mut state = DeviceState::default();
-        assert!(state.apply(&DeviceMessage::Connected { port: "/dev/cu.x".to_owned(), bridge: true, usb_serial: None }));
+        assert!(state.apply(&DeviceMessage::Connected {
+            port: "/dev/cu.x".to_owned(),
+            bridge: true,
+            usb_serial: None
+        }));
         assert!(state.apply(&line("DISPLAY READY BUILD 21a8360-dirty 2026-09-16 10:23")));
         assert!(state.apply(&line("FIRMWARE VERSION 0.2.2")));
         assert!(state.apply(&line("VOICES builtin")));
         assert!(state.apply(&line("MODE POMODORO")));
-        assert!(!state.apply(&line("MODE POMODORO")), "no change is not a change");
+        assert!(
+            !state.apply(&line("MODE POMODORO")),
+            "no change is not a change"
+        );
         assert!(state.apply(&line("VOLUME 65")));
-        assert!(!state.apply(&line("VOLUME ERROR")), "an error does not change the volume");
+        assert!(
+            !state.apply(&line("VOLUME ERROR")),
+            "an error does not change the volume"
+        );
         assert!(state.apply(&line("SCREENS KOREKORE")));
-        assert!(!state.apply(&line("SCREENS ERROR")), "an unknown style does not change the screens");
+        assert!(
+            !state.apply(&line("SCREENS ERROR")),
+            "an unknown style does not change the screens"
+        );
         assert_eq!(
             state,
             DeviceState {
@@ -501,23 +596,48 @@ mod tests {
     #[test]
     fn the_box_key_and_pairing_belong_to_the_box_now_connected() {
         let mut state = DeviceState::default();
-        state.apply(&DeviceMessage::Connected { port: "/dev/cu.x".to_owned(), bridge: false, usb_serial: None });
+        state.apply(&DeviceMessage::Connected {
+            port: "/dev/cu.x".to_owned(),
+            bridge: false,
+            usb_serial: None,
+        });
         state.apply(&line("BOX KEY 1Uc4Vh8Aby1bV4I08TphnmbwAm0AzHkw5RelizUGdRE"));
         state.apply(&line("PAIRED AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI"));
-        assert_eq!(state.box_key.as_deref(), Some("1Uc4Vh8Aby1bV4I08TphnmbwAm0AzHkw5RelizUGdRE"));
+        assert_eq!(
+            state.box_key.as_deref(),
+            Some("1Uc4Vh8Aby1bV4I08TphnmbwAm0AzHkw5RelizUGdRE")
+        );
         assert!(state.paired);
-        state.apply(&DeviceMessage::Connected { port: "/dev/cu.y".to_owned(), bridge: false, usb_serial: None });
+        state.apply(&DeviceMessage::Connected {
+            port: "/dev/cu.y".to_owned(),
+            bridge: false,
+            usb_serial: None,
+        });
         assert_eq!((state.box_key, state.paired), (None, false));
     }
 
     #[test]
     fn a_scan_lists_each_network_once_strongest_first() {
         let mut state = DeviceState::default();
-        for text in ["WIFI SEEN 4", "WIFI SEEN -61 1 ByteTrade Guest", "WIFI SEEN -49 1 ByteTrade", "WIFI SEEN -68 6 ByteTrade", "WIFI SEEN -70 3 "] {
+        for text in [
+            "WIFI SEEN 4",
+            "WIFI SEEN -61 1 ByteTrade Guest",
+            "WIFI SEEN -49 1 ByteTrade",
+            "WIFI SEEN -68 6 ByteTrade",
+            "WIFI SEEN -70 3 ",
+        ] {
             state.apply(&line(text));
         }
-        let seen: Vec<_> = state.wifi_seen.iter().map(|network| (network.ssid.as_str(), network.rssi)).collect();
-        assert_eq!(seen, [("ByteTrade", -49), ("ByteTrade Guest", -61)], "hidden networks are left out");
+        let seen: Vec<_> = state
+            .wifi_seen
+            .iter()
+            .map(|network| (network.ssid.as_str(), network.rssi))
+            .collect();
+        assert_eq!(
+            seen,
+            [("ByteTrade", -49), ("ByteTrade Guest", -61)],
+            "hidden networks are left out"
+        );
         state.apply(&line("WIFI SEEN 0"));
         assert!(state.wifi_seen.is_empty(), "a new scan starts over");
     }
@@ -529,7 +649,11 @@ mod tests {
         state.apply(&line("WIFI NETWORK Home"));
         state.apply(&line("WIFI ADDRESS 192.168.1.23"));
         state.apply(&line("BOX KEY 1Uc4Vh8Aby1bV4I08TphnmbwAm0AzHkw5RelizUGdRE"));
-        assert_eq!(state.wifi_network.as_deref(), Some("Home"), "the same key again changes nothing");
+        assert_eq!(
+            state.wifi_network.as_deref(),
+            Some("Home"),
+            "the same key again changes nothing"
+        );
         state.apply(&line("BOX KEY pm3f5yT3yi4s2P90TalP1NcUZD3xBTfETdlii-KnvWM"));
         assert_eq!((state.wifi_network, state.wifi_address), (None, None));
     }
@@ -545,7 +669,11 @@ mod tests {
         state.apply(&line("WIFI FAILED password"));
         assert_eq!(state.wifi_error.as_deref(), Some("password"));
         state.apply(&line("WIFI NETWORK Office"));
-        assert_eq!(state.wifi_error.as_deref(), Some("password"), "a hello repeats the name, nothing changed");
+        assert_eq!(
+            state.wifi_error.as_deref(),
+            Some("password"),
+            "a hello repeats the name, nothing changed"
+        );
         state.apply(&line("WIFI CONNECTED"));
         assert_eq!(state.wifi_error, None);
         state.apply(&line("WIFI ADDRESS 10.0.0.7"));
@@ -563,13 +691,18 @@ mod tests {
         assert_eq!(state.wifi_address, None, "not joined while it tries again");
         state.apply(&line("WIFI ADDRESS 192.168.1.23"));
         state.apply(&line("WIFI FAILED AuthenticationExpired"));
-        assert_eq!((state.wifi_address, state.wifi_error.as_deref()), (None, Some("wrong_password")));
+        assert_eq!(
+            (state.wifi_address, state.wifi_error.as_deref()),
+            (None, Some("wrong_password"))
+        );
     }
 
     #[test]
     fn a_box_reached_over_the_local_network_is_joined_there() {
         let mut state = DeviceState::default();
-        state.apply(&DeviceMessage::ConnectedNetwork { address: "192.168.1.160:7340".to_owned() });
+        state.apply(&DeviceMessage::ConnectedNetwork {
+            address: "192.168.1.160:7340".to_owned(),
+        });
         state.apply(&line("WIFI NETWORK Home"));
         assert_eq!(state.wifi_address.as_deref(), Some("192.168.1.160"));
     }
@@ -579,25 +712,42 @@ mod tests {
         let mut state = DeviceState::default();
         state.apply(&line("WIFI NETWORK Home"));
         state.apply(&line(r#"WIFI FAILED Failed(DisconnectedInfo { ssid: "Home", bssid: [136, 220, 151, 19, 86, 27], reason: AuthenticationExpired, rssi: -59 })"#));
-        assert_eq!(state.wifi_error.as_deref(), Some("wrong_password"), "firmware 0.5.0's whole driver error");
+        assert_eq!(
+            state.wifi_error.as_deref(),
+            Some("wrong_password"),
+            "firmware 0.5.0's whole driver error"
+        );
         state.apply(&line("WIFI FAILED NoAccessPointFound"));
         assert_eq!(state.wifi_error.as_deref(), Some("not_found"));
-        state.apply(&line("WIFI FAILED NoAccessPointFoundWithCompatibleSecurity"));
+        state.apply(&line(
+            "WIFI FAILED NoAccessPointFoundWithCompatibleSecurity",
+        ));
         assert_eq!(state.wifi_error.as_deref(), Some("security"));
         state.apply(&line("WIFI FAILED FourWayHandshakeTimeout"));
         assert_eq!(state.wifi_error.as_deref(), Some("wrong_password"));
         state.apply(&line("WIFI FAILED ssid"));
         assert_eq!(state.wifi_error.as_deref(), Some("ssid"));
         state.apply(&line("WIFI FAILED AssociationTooMany"));
-        assert_eq!(state.wifi_error.as_deref(), Some("AssociationTooMany"), "passed on as it came");
+        assert_eq!(
+            state.wifi_error.as_deref(),
+            Some("AssociationTooMany"),
+            "passed on as it came"
+        );
     }
 
     #[test]
     fn the_box_says_which_relay_it_uses() {
         let mut state = DeviceState::default();
         state.apply(&line("RELAY URL wss://relay-staging.korekore.ai"));
-        assert_eq!(state.box_relay.as_deref(), Some("wss://relay-staging.korekore.ai"));
-        state.apply(&DeviceMessage::Connected { port: "/dev/cu.x".to_owned(), bridge: false, usb_serial: None });
+        assert_eq!(
+            state.box_relay.as_deref(),
+            Some("wss://relay-staging.korekore.ai")
+        );
+        state.apply(&DeviceMessage::Connected {
+            port: "/dev/cu.x".to_owned(),
+            bridge: false,
+            usb_serial: None,
+        });
         assert_eq!(state.box_relay, None, "a box that comes back says it again");
     }
 
@@ -606,7 +756,10 @@ mod tests {
         let mut state = DeviceState::default();
         state.apply(&line("WIFI NETWORK Home 5G"));
         state.apply(&line("WIFI ADDRESS 192.168.1.23"));
-        assert_eq!((state.wifi_network.as_deref(), state.wifi_address.as_deref()), (Some("Home 5G"), Some("192.168.1.23")));
+        assert_eq!(
+            (state.wifi_network.as_deref(), state.wifi_address.as_deref()),
+            (Some("Home 5G"), Some("192.168.1.23"))
+        );
         state.apply(&line("WIFI FORGOTTEN"));
         assert_eq!((state.wifi_network, state.wifi_address), (None, None));
     }
@@ -614,34 +767,64 @@ mod tests {
     #[test]
     fn busy_lasts_until_a_link_comes_up() {
         let mut state = DeviceState::default();
-        state.apply(&DeviceMessage::Busy { owner: "omarchy".to_owned(), reason: "linked".to_owned() });
-        assert_eq!(state.busy.as_ref().map(|busy| busy.owner.as_str()), Some("omarchy"));
-        state.apply(&DeviceMessage::ConnectedRelay { url: "wss://relay.korekore.ai".to_owned() });
+        state.apply(&DeviceMessage::Busy {
+            owner: "omarchy".to_owned(),
+            reason: "linked".to_owned(),
+        });
+        assert_eq!(
+            state.busy.as_ref().map(|busy| busy.owner.as_str()),
+            Some("omarchy")
+        );
+        state.apply(&DeviceMessage::ConnectedRelay {
+            url: "wss://relay.korekore.ai".to_owned(),
+        });
         assert!(state.busy.is_none() && state.relay && state.network);
         state.apply(&DeviceMessage::Disconnected);
-        assert!(!state.relay && !state.network, "a dropped link isn't through anything");
+        assert!(
+            !state.relay && !state.network,
+            "a dropped link isn't through anything"
+        );
     }
 
     #[test]
     fn a_network_link_is_a_connection_with_an_address() {
         let mut state = DeviceState::default();
-        state.apply(&DeviceMessage::ConnectedNetwork { address: "192.168.1.23:7340".to_owned() });
+        state.apply(&DeviceMessage::ConnectedNetwork {
+            address: "192.168.1.23:7340".to_owned(),
+        });
         assert!(state.connected && state.network);
         assert_eq!(state.port.as_deref(), Some("192.168.1.23:7340"));
-        state.apply(&DeviceMessage::Connected { port: "/dev/cu.x".to_owned(), bridge: false, usb_serial: None });
-        assert!(state.connected && !state.network, "back on the cable, with no drop in between");
+        state.apply(&DeviceMessage::Connected {
+            port: "/dev/cu.x".to_owned(),
+            bridge: false,
+            usb_serial: None,
+        });
+        assert!(
+            state.connected && !state.network,
+            "back on the cable, with no drop in between"
+        );
     }
 
     #[test]
     fn the_paired_list_follows_what_the_box_reports() {
         let mine = "A".repeat(43);
         let other = "B".repeat(43);
-        let mut state = DeviceState { computer_key: Some(mine.clone()), ..DeviceState::default() };
+        let mut state = DeviceState {
+            computer_key: Some(mine.clone()),
+            ..DeviceState::default()
+        };
         state.apply(&line(&format!("PAIRED {mine}")));
         state.apply(&line("PAIRS 2"));
         state.apply(&line(&format!("PAIR {mine} dragon's MacBook")));
         state.apply(&line(&format!("PAIR {other} omarchy")));
-        assert_eq!(state.paired_computers.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["dragon's MacBook", "omarchy"]);
+        assert_eq!(
+            state
+                .paired_computers
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>(),
+            ["dragon's MacBook", "omarchy"]
+        );
         assert!(!state.apply(&line("PAIR FULL")), "not a list entry");
         state.apply(&line(&format!("UNPAIRED {other}")));
         assert_eq!(state.paired_computers.len(), 1);
@@ -658,20 +841,34 @@ mod tests {
         assert_eq!(state.unsupported_board, None, "a build for the box itself");
         state.apply(&line("BOARD goouuu-s3-spi"));
         assert_eq!(state.unsupported_board.as_deref(), Some("goouuu-s3-spi"));
-        state.apply(&DeviceMessage::Connected { port: "/dev/cu.x".to_owned(), bridge: false, usb_serial: None });
-        assert_eq!(state.unsupported_board, None, "released firmware says no board: the box");
+        state.apply(&DeviceMessage::Connected {
+            port: "/dev/cu.x".to_owned(),
+            bridge: false,
+            usb_serial: None,
+        });
+        assert_eq!(
+            state.unsupported_board, None,
+            "released firmware says no board: the box"
+        );
     }
 
     #[test]
     fn disconnecting_keeps_the_last_known_firmware_and_voice() {
         let mut state = DeviceState::default();
-        state.apply(&DeviceMessage::Connected { port: "/dev/cu.x".to_owned(), bridge: true, usb_serial: None });
+        state.apply(&DeviceMessage::Connected {
+            port: "/dev/cu.x".to_owned(),
+            bridge: true,
+            usb_serial: None,
+        });
         state.apply(&line("DISPLAY READY BUILD abc 2026-09-16 10:23"));
         state.apply(&line("VOICES wanwanxiaohe"));
         assert!(state.apply(&DeviceMessage::Disconnected));
         assert!(!state.connected);
         assert_eq!(state.port, None);
-        assert_eq!(state.firmware_build.as_deref(), Some("abc 2026-09-16 10:23"));
+        assert_eq!(
+            state.firmware_build.as_deref(),
+            Some("abc 2026-09-16 10:23")
+        );
         assert_eq!(state.voice.as_deref(), Some("wanwanxiaohe"));
     }
 
@@ -679,11 +876,19 @@ mod tests {
     fn a_new_connection_forgets_the_previous_firmware_build() {
         // A different factory unit got plugged in; the previous box's build id mustn't make the app think it's ours.
         let mut state = DeviceState::default();
-        state.apply(&DeviceMessage::Connected { port: "/dev/cu.x".to_owned(), bridge: true, usb_serial: None });
+        state.apply(&DeviceMessage::Connected {
+            port: "/dev/cu.x".to_owned(),
+            bridge: true,
+            usb_serial: None,
+        });
         state.apply(&line("DISPLAY READY BUILD abc 2026-09-16 10:23"));
         state.apply(&line("FIRMWARE VERSION 0.2.2"));
         state.apply(&DeviceMessage::Disconnected);
-        assert!(state.apply(&DeviceMessage::Connected { port: "/dev/cu.y".to_owned(), bridge: false, usb_serial: None }));
+        assert!(state.apply(&DeviceMessage::Connected {
+            port: "/dev/cu.y".to_owned(),
+            bridge: false,
+            usb_serial: None
+        }));
         assert_eq!(state.firmware_version, None);
         assert_eq!(state.firmware_build, None);
     }
@@ -691,13 +896,24 @@ mod tests {
     #[test]
     fn a_new_connection_forgets_everything_the_previous_device_said() {
         let mut state = DeviceState::default();
-        state.apply(&DeviceMessage::Connected { port: "/dev/cu.x".to_owned(), bridge: false, usb_serial: None });
+        state.apply(&DeviceMessage::Connected {
+            port: "/dev/cu.x".to_owned(),
+            bridge: false,
+            usb_serial: None,
+        });
         for said in ["MODE DUTY", "VOICES ahu", "VOLUME 50", "SCREENS ROBOT"] {
             state.apply(&line(said));
         }
         state.apply(&DeviceMessage::Disconnected);
-        state.apply(&DeviceMessage::Connected { port: "/dev/cu.y".to_owned(), bridge: false, usb_serial: None });
-        assert_eq!((state.mode.as_deref(), state.voice.as_deref(), state.volume), (None, None, None));
+        state.apply(&DeviceMessage::Connected {
+            port: "/dev/cu.y".to_owned(),
+            bridge: false,
+            usb_serial: None,
+        });
+        assert_eq!(
+            (state.mode.as_deref(), state.voice.as_deref(), state.volume),
+            (None, None, None)
+        );
         assert_eq!(state.screens, None);
     }
 
@@ -711,15 +927,29 @@ mod tests {
     #[test]
     fn a_box_running_other_firmware_is_there_until_it_reports_our_build() {
         let mut state = DeviceState::default();
-        state.apply(&DeviceMessage::Connected { port: "/dev/cu.x".to_owned(), bridge: true, usb_serial: None });
+        state.apply(&DeviceMessage::Connected {
+            port: "/dev/cu.x".to_owned(),
+            bridge: true,
+            usb_serial: None,
+        });
         state.apply(&line("DISPLAY READY BUILD abc 2026-09-16 10:23"));
         state.apply(&line("VOICES xiaohe2"));
         // Switched to Muse over the bridge: the port stayed open, so what our firmware said is on record.
         assert!(state.apply(&DeviceMessage::ForeignFirmware));
-        assert!(state.connected, "a box running other firmware is there, not offline");
+        assert!(
+            state.connected,
+            "a box running other firmware is there, not offline"
+        );
         assert!(state.foreign_firmware);
-        assert_eq!((state.firmware_build.as_deref(), state.voice.as_deref()), (None, None));
-        assert_eq!(serde_json::to_value(&state).unwrap()["foreign_firmware"], true, "/v1/status carries it");
+        assert_eq!(
+            (state.firmware_build.as_deref(), state.voice.as_deref()),
+            (None, None)
+        );
+        assert_eq!(
+            serde_json::to_value(&state).unwrap()["foreign_firmware"],
+            true,
+            "/v1/status carries it"
+        );
 
         assert!(state.apply(&line("DISPLAY READY BUILD def 2026-10-07 09:00")));
         assert!(!state.foreign_firmware);

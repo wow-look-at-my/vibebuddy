@@ -79,7 +79,12 @@ impl From<&OwnVoice> for Voice {
 
 /// The Volcano Engine resources a speaker of the user's own may be on, tried in this order: cloned with 2.0 or 1.0,
 /// then Doubao's own 2.0 and 1.0 voices. A speaker id doesn't say which.
-const VOLC_RESOURCES: [&str; 4] = ["seed-icl-2.0", "seed-icl-1.0", "seed-tts-2.0", VOLC_RESOURCE_ID];
+const VOLC_RESOURCES: [&str; 4] = [
+    "seed-icl-2.0",
+    "seed-icl-1.0",
+    "seed-tts-2.0",
+    VOLC_RESOURCE_ID,
+];
 
 pub fn voices() -> Vec<Voice> {
     rows(VOICES)
@@ -101,7 +106,11 @@ pub fn voices() -> Vec<Voice> {
 
 /// The language a preset speaks, from its voice in `voices.tsv`.
 fn preset_language(id: &str) -> String {
-    voices().into_iter().find(|voice| voice.id == id).map(|voice| voice.language).unwrap_or_default()
+    voices()
+        .into_iter()
+        .find(|voice| voice.id == id)
+        .map(|voice| voice.language)
+        .unwrap_or_default()
 }
 
 /// Each preset's lines (`characters/<id>/lines.tsv`), which a made Character starts from in the App.
@@ -112,7 +121,10 @@ const PRESET_LINES: &[(&str, &str)] = &[
     ("kai", include_str!("../../characters/kai/lines.tsv")),
     ("luna", include_str!("../../characters/luna/lines.tsv")),
     ("mei", include_str!("../../characters/mei/lines.tsv")),
-    ("wanwanxiaohe", include_str!("../../characters/wanwanxiaohe/lines.tsv")),
+    (
+        "wanwanxiaohe",
+        include_str!("../../characters/wanwanxiaohe/lines.tsv"),
+    ),
 ];
 
 /// The lines of preset `id`, in `lines.tsv` order; None for anything not a preset.
@@ -121,7 +133,10 @@ pub fn preset_lines(id: &str) -> Option<Vec<Line>> {
     Some(
         rows(tsv)
             .filter_map(|row| match row[..] {
-                [occasion, text] => Some(Line { occasion: occasion.to_owned(), text: text.to_owned() }),
+                [occasion, text] => Some(Line {
+                    occasion: occasion.to_owned(),
+                    text: text.to_owned(),
+                }),
                 _ => None,
             })
             .collect(),
@@ -130,7 +145,9 @@ pub fn preset_lines(id: &str) -> Option<Vec<Line>> {
 
 /// A TSV's rows, without blank ones and `#` comments.
 fn rows(tsv: &str) -> impl Iterator<Item = Vec<&str>> {
-    tsv.lines().filter(|line| !line.trim().is_empty() && !line.starts_with('#')).map(|line| line.split('\t').collect())
+    tsv.lines()
+        .filter(|line| !line.trim().is_empty() && !line.starts_with('#'))
+        .map(|line| line.split('\t').collect())
 }
 
 /// The forms of address of `language`: id and the words spoken.
@@ -150,13 +167,20 @@ pub fn without_address(text: &str) -> String {
     // make-character.sh's lookaheads, as a captured character put back.
     let patterns = PATTERNS.get_or_init(|| {
         [
-            (Regex::new(r"[，,]\s*\{address\}([。！？.!?，,]|$)").unwrap(), "$1"),
+            (
+                Regex::new(r"[，,]\s*\{address\}([。！？.!?，,]|$)").unwrap(),
+                "$1",
+            ),
             (Regex::new(r"\s\{address\}([,.!?])").unwrap(), "$1"),
             (Regex::new(r"\{address\}[，,]\s*").unwrap(), ""),
             (Regex::new(r"\s?\{address\}").unwrap(), ""),
         ]
     });
-    patterns.iter().fold(text.to_owned(), |text, (pattern, with)| pattern.replace_all(&text, *with).into_owned())
+    patterns
+        .iter()
+        .fold(text.to_owned(), |text, (pattern, with)| {
+            pattern.replace_all(&text, *with).into_owned()
+        })
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -191,20 +215,43 @@ struct Piece {
 /// their pool in row order; any other line once into `audio/`, prefixed `1`.
 fn pieces(lines: &[Line], forms: &[(&str, &str)]) -> Vec<Piece> {
     let piece = |into: PathBuf, occasion: &str, prefix: &str, text: String| {
-        let hash: String = Sha1::digest(text.as_bytes()).iter().map(|byte| format!("{byte:02x}")).collect();
-        Piece { path: into.join(occasion).join(format!("{prefix}-{}.pcm", &hash[..10])), text }
+        let hash: String = Sha1::digest(text.as_bytes())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        Piece {
+            path: into
+                .join(occasion)
+                .join(format!("{prefix}-{}.pcm", &hash[..10])),
+            text,
+        }
     };
     let mut pieces = Vec::new();
     for (row, line) in lines.iter().enumerate() {
         if line.text.contains("{address}") {
             let prefix = format!("0-{:03}", row + 1);
-            pieces.push(piece("audio".into(), &line.occasion, &prefix, without_address(&line.text)));
+            pieces.push(piece(
+                "audio".into(),
+                &line.occasion,
+                &prefix,
+                without_address(&line.text),
+            ));
             for (form, words) in forms {
                 let into = Path::new("audio-address").join(form);
-                pieces.push(piece(into, &line.occasion, &prefix, line.text.replace("{address}", words)));
+                pieces.push(piece(
+                    into,
+                    &line.occasion,
+                    &prefix,
+                    line.text.replace("{address}", words),
+                ));
             }
         } else {
-            pieces.push(piece("audio".into(), &line.occasion, "1", line.text.clone()));
+            pieces.push(piece(
+                "audio".into(),
+                &line.occasion,
+                "1",
+                line.text.clone(),
+            ));
         }
     }
     // The same text twice in a pool is one line, as one file.
@@ -250,22 +297,35 @@ pub static OWN: std::sync::OnceLock<(Arc<OwnVoices>, Arc<VoiceKeys>)> = std::syn
 /// own voices is `<provider>:<voice>` while their own key for it is set and not refused (a Volcano Engine one
 /// `volc:<speaker>#<resource>`), else the base preset's voice: the service can't speak a voice in someone's account.
 pub fn voice_of(dir: &Path, id: &str) -> Option<String> {
-    voice_with(dir, id, OWN.get().map(|(voices, keys)| (voices.as_ref(), keys.as_ref())))
+    voice_with(
+        dir,
+        id,
+        OWN.get()
+            .map(|(voices, keys)| (voices.as_ref(), keys.as_ref())),
+    )
 }
 
 fn voice_with(dir: &Path, id: &str, own: Option<(&OwnVoices, &VoiceKeys)>) -> Option<String> {
     if !valid_id(id) {
         return None;
     }
-    let manifest: Request = serde_json::from_str(&std::fs::read_to_string(dir.join(id).join(MANIFEST)).ok()?).ok()?;
-    if let Some(voice) = voices().into_iter().find(|voice| voice.id == manifest.voice) {
+    let manifest: Request =
+        serde_json::from_str(&std::fs::read_to_string(dir.join(id).join(MANIFEST)).ok()?).ok()?;
+    if let Some(voice) = voices()
+        .into_iter()
+        .find(|voice| voice.id == manifest.voice)
+    {
         return Some(format!("{}:{}", voice.provider, voice.voice));
     }
     let usable = own.and_then(|(voices, keys)| {
         let voice = voices.get(&manifest.voice)?;
         let provider = Provider::named(&voice.provider)?;
         let status = keys.status();
-        let key = if provider == Provider::ElevenLabs { status.elevenlabs } else { status.volc };
+        let key = if provider == Provider::ElevenLabs {
+            status.elevenlabs
+        } else {
+            status.volc
+        };
         (key.set && !key.refused).then(|| match voice.resource {
             Some(resource) => format!("{}:{}#{resource}", voice.provider, voice.voice),
             None => format!("{}:{}", voice.provider, voice.voice),
@@ -325,13 +385,19 @@ struct Stop {
 
 impl Stop {
     fn because(reason: &'static str, message: impl Into<String>) -> Self {
-        Self { reason: Some(reason), message: message.into() }
+        Self {
+            reason: Some(reason),
+            message: message.into(),
+        }
     }
 }
 
 impl From<String> for Stop {
     fn from(message: String) -> Self {
-        Self { reason: None, message }
+        Self {
+            reason: None,
+            message,
+        }
     }
 }
 
@@ -351,7 +417,13 @@ pub struct Maker {
 }
 
 impl Maker {
-    pub fn new(dir: Option<PathBuf>, service: Option<String>, account: Arc<Account>, keys: Arc<VoiceKeys>, own: Arc<OwnVoices>) -> Self {
+    pub fn new(
+        dir: Option<PathBuf>,
+        service: Option<String>,
+        account: Arc<Account>,
+        keys: Arc<VoiceKeys>,
+        own: Arc<OwnVoices>,
+    ) -> Self {
         Self {
             dir,
             service,
@@ -376,7 +448,9 @@ impl Maker {
 
     /// The status, even after a job panicked holding it.
     fn lock(&self) -> std::sync::MutexGuard<'_, Option<MakingStatus>> {
-        self.status.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        self.status
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     fn report(&self, change: impl FnOnce(&mut MakingStatus)) {
@@ -399,34 +473,64 @@ impl Maker {
 
     /// The voices a made Character can speak with: ours, then the user's own.
     pub fn voices(&self) -> Vec<Voice> {
-        voices().into_iter().chain(self.own.list().iter().map(Voice::from)).collect()
+        voices()
+            .into_iter()
+            .chain(self.own.list().iter().map(Voice::from))
+            .collect()
     }
 
     /// Tries a voice in the user's own account with their own key, saying `text`; keeps it when the provider speaks
     /// it, and answers it with what was said, as 16 kHz PCM.
-    pub fn add_own(&self, provider: &str, voice: &str, name: &str, text: &str) -> Result<(Voice, Vec<i16>), OwnVoiceError> {
+    pub fn add_own(
+        &self,
+        provider: &str,
+        voice: &str,
+        name: &str,
+        text: &str,
+    ) -> Result<(Voice, Vec<i16>), OwnVoiceError> {
         let invalid = |message: String| OwnVoiceError::Invalid(message);
-        let named = Provider::named(provider).ok_or_else(|| invalid(format!("{provider} is not a provider: elevenlabs or volc")))?;
+        let named = Provider::named(provider)
+            .ok_or_else(|| invalid(format!("{provider} is not a provider: elevenlabs or volc")))?;
         let (voice, name, text) = (voice.trim(), name.trim(), without_address(text.trim()));
-        if voice.is_empty() || voice.len() > 128 || voice.contains(char::is_whitespace) || voice.contains('#') {
-            return Err(invalid("a voice id is 1 to 128 characters, with no spaces".to_owned()));
+        if voice.is_empty()
+            || voice.len() > 128
+            || voice.contains(char::is_whitespace)
+            || voice.contains('#')
+        {
+            return Err(invalid(
+                "a voice id is 1 to 128 characters, with no spaces".to_owned(),
+            ));
         }
         if name.is_empty() || name.chars().count() > 64 {
             return Err(invalid("a name must be 1 to 64 characters".to_owned()));
         }
         if text.is_empty() || text.encode_utf16().count() > MAX_TEXT {
-            return Err(invalid(format!("the line to try must be 1 to {MAX_TEXT} characters")));
+            return Err(invalid(format!(
+                "the line to try must be 1 to {MAX_TEXT} characters"
+            )));
         }
-        let key = self.keys.key(named).ok_or_else(|| invalid(format!("no own key for {provider}")))?;
-        let resources: &[&str] = if named == Provider::Volc { &VOLC_RESOURCES } else { &[""] };
+        let key = self
+            .keys
+            .key(named)
+            .ok_or_else(|| invalid(format!("no own key for {provider}")))?;
+        let resources: &[&str] = if named == Provider::Volc {
+            &VOLC_RESOURCES
+        } else {
+            &[""]
+        };
         let mut first_error = None;
         for resource in resources {
             let resource = Some(*resource).filter(|resource| !resource.is_empty());
             match self.call(named, voice, &key, &text, resource) {
                 Ok(bytes) => {
                     self.keys.refused(named, false);
-                    let samples = trim_and_normalize(&pcm(&bytes)).ok_or_else(|| OwnVoiceError::Provider("the line came back silent".to_owned()))?;
-                    let kept = self.own.add(provider, voice, name, resource.map(str::to_owned)).map_err(|error| OwnVoiceError::Io(error.to_string()))?;
+                    let samples = trim_and_normalize(&pcm(&bytes)).ok_or_else(|| {
+                        OwnVoiceError::Provider("the line came back silent".to_owned())
+                    })?;
+                    let kept = self
+                        .own
+                        .add(provider, voice, name, resource.map(str::to_owned))
+                        .map_err(|error| OwnVoiceError::Io(error.to_string()))?;
                     info!(provider, resource, "kept a voice of the user's own");
                     return Ok((Voice::from(&kept), samples));
                 }
@@ -450,7 +554,10 @@ impl Maker {
         struct Library {
             voices: Vec<ProviderVoice>,
         }
-        let key = self.keys.key(Provider::ElevenLabs).ok_or_else(|| OwnVoiceError::Invalid("no own key for elevenlabs".to_owned()))?;
+        let key = self
+            .keys
+            .key(Provider::ElevenLabs)
+            .ok_or_else(|| OwnVoiceError::Invalid("no own key for elevenlabs".to_owned()))?;
         let url = format!("{}/v1/voices", self.elevenlabs_url);
         let mut response = agent()
             .get(&url)
@@ -458,11 +565,21 @@ impl Maker {
             .call()
             .map_err(|error| OwnVoiceError::Provider(format!("calling ElevenLabs: {error}")))?;
         let status = response.status().as_u16();
-        let body = response.body_mut().with_config().limit(MAX_AUDIO).read_to_string().unwrap_or_default();
+        let body = response
+            .body_mut()
+            .with_config()
+            .limit(MAX_AUDIO)
+            .read_to_string()
+            .unwrap_or_default();
         if status != 200 {
-            return Err(OwnVoiceError::Provider(format!("ElevenLabs answered {status}: {}", body.trim().chars().take(200).collect::<String>())));
+            return Err(OwnVoiceError::Provider(format!(
+                "ElevenLabs answered {status}: {}",
+                body.trim().chars().take(200).collect::<String>()
+            )));
         }
-        let library: Library = serde_json::from_str(&body).map_err(|error| OwnVoiceError::Provider(format!("reading ElevenLabs' voices: {error}")))?;
+        let library: Library = serde_json::from_str(&body).map_err(|error| {
+            OwnVoiceError::Provider(format!("reading ElevenLabs' voices: {error}"))
+        })?;
         let mut voices = library.voices;
         // The account's own voices first, then ElevenLabs' stock ones, each by name.
         voices.sort_by_key(|voice| (voice.category == "premade", voice.name.to_lowercase()));
@@ -471,7 +588,12 @@ impl Maker {
 
     /// Forgets one of the user's own voices; not while a Character made here speaks with it.
     pub fn remove_own(&self, id: &str) -> Result<(), OwnVoiceError> {
-        let using: Vec<String> = self.list().into_iter().filter(|made| made.voice == id).map(|made| made.name).collect();
+        let using: Vec<String> = self
+            .list()
+            .into_iter()
+            .filter(|made| made.voice == id)
+            .map(|made| made.name)
+            .collect();
         if !using.is_empty() {
             return Err(OwnVoiceError::InUse(using));
         }
@@ -484,14 +606,34 @@ impl Maker {
 
     /// The Characters made here, by id: what was asked, and whether its packs are made.
     pub fn list(&self) -> Vec<MadeCharacter> {
-        let Some(entries) = self.dir.as_ref().and_then(|dir| std::fs::read_dir(dir).ok()) else { return Vec::new() };
+        let Some(entries) = self
+            .dir
+            .as_ref()
+            .and_then(|dir| std::fs::read_dir(dir).ok())
+        else {
+            return Vec::new();
+        };
         let mut made: Vec<MadeCharacter> = entries
             .flatten()
             .filter_map(|entry| {
-                let id = entry.file_name().into_string().ok().filter(|id| valid_id(id))?;
-                let manifest: Request = serde_json::from_str(&std::fs::read_to_string(entry.path().join(MANIFEST)).ok()?).ok()?;
+                let id = entry
+                    .file_name()
+                    .into_string()
+                    .ok()
+                    .filter(|id| valid_id(id))?;
+                let manifest: Request = serde_json::from_str(
+                    &std::fs::read_to_string(entry.path().join(MANIFEST)).ok()?,
+                )
+                .ok()?;
                 let complete = entry.path().join("pack.bin").is_file();
-                Some(MadeCharacter { id, name: manifest.name, base: manifest.base, voice: manifest.voice, lines: manifest.lines.len(), complete })
+                Some(MadeCharacter {
+                    id,
+                    name: manifest.name,
+                    base: manifest.base,
+                    voice: manifest.voice,
+                    lines: manifest.lines.len(),
+                    complete,
+                })
             })
             .collect();
         made.sort_by(|a, b| a.id.cmp(&b.id));
@@ -500,16 +642,25 @@ impl Maker {
 
     /// Deletes a Character made here, its packs, line audio, manifest and the App's look with it; not while its job runs.
     pub fn delete(&self, id: &str) -> Result<(), DeleteError> {
-        let dir = self.dir.as_ref().filter(|_| valid_id(id)).map(|dir| dir.join(id)).ok_or(DeleteError::NotFound)?;
+        let dir = self
+            .dir
+            .as_ref()
+            .filter(|_| valid_id(id))
+            .map(|dir| dir.join(id))
+            .ok_or(DeleteError::NotFound)?;
         // Held while removing, so the job can't start again halfway.
         let status = self.lock();
-        if status.as_ref().is_some_and(|status| status.state == "making" && status.id == id) {
+        if status
+            .as_ref()
+            .is_some_and(|status| status.state == "making" && status.id == id)
+        {
             return Err(DeleteError::Busy);
         }
         if !dir.join(MANIFEST).is_file() {
             return Err(DeleteError::NotFound);
         }
-        std::fs::remove_dir_all(&dir).map_err(|error| DeleteError::Io(format!("deleting {}: {error}", dir.display())))?;
+        std::fs::remove_dir_all(&dir)
+            .map_err(|error| DeleteError::Io(format!("deleting {}: {error}", dir.display())))?;
         info!(id, "deleted a made Character");
         Ok(())
     }
@@ -524,18 +675,36 @@ impl Maker {
 
     /// Checks the request, settles the Character's id and marks the job as making.
     pub(crate) fn begin(&self, request: &Request) -> Result<(String, Voice), StartError> {
-        let dir = self.dir.as_ref().ok_or_else(|| StartError::Unavailable("no config directory".to_owned()))?;
+        let dir = self
+            .dir
+            .as_ref()
+            .ok_or_else(|| StartError::Unavailable("no config directory".to_owned()))?;
         let voice = check(request, &self.voices()).map_err(StartError::Invalid)?;
         let id = match &request.id {
             Some(id) if valid_id(id) && dir.join(id).join(MANIFEST).is_file() => id.clone(),
-            Some(id) => return Err(StartError::Invalid(format!("{id} is not a Character made here"))),
+            Some(id) => {
+                return Err(StartError::Invalid(format!(
+                    "{id} is not a Character made here"
+                )));
+            }
             None => new_id(&request.name).map_err(StartError::Unavailable)?,
         };
         let mut status = self.lock();
-        if status.as_ref().is_some_and(|status| status.state == "making") {
+        if status
+            .as_ref()
+            .is_some_and(|status| status.state == "making")
+        {
             return Err(StartError::Busy);
         }
-        *status = Some(MakingStatus { id: id.clone(), name: request.name.trim().to_owned(), state: "making", done: 0, total: 0, reason: None, error: None });
+        *status = Some(MakingStatus {
+            id: id.clone(),
+            name: request.name.trim().to_owned(),
+            state: "making",
+            done: 0,
+            total: 0,
+            reason: None,
+            error: None,
+        });
         drop(status);
         self.changed.send_replace(());
         Ok((id, voice))
@@ -563,43 +732,83 @@ impl Maker {
     fn make_in(&self, dir: &Path, id: &str, voice: &Voice, request: &Request) -> Result<(), Stop> {
         let io = |error: std::io::Error| Stop::from(format!("writing {}: {error}", dir.display()));
         // Lines made in another voice are no use to this one.
-        let before: Option<Request> = std::fs::read_to_string(dir.join(MANIFEST)).ok().and_then(|text| serde_json::from_str(&text).ok());
+        let before: Option<Request> = std::fs::read_to_string(dir.join(MANIFEST))
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok());
         if before.is_some_and(|before| before.voice != request.voice) {
             for gone in ["audio", "audio-address"] {
                 let _ = std::fs::remove_dir_all(dir.join(gone));
             }
         }
         std::fs::create_dir_all(dir).map_err(io)?;
-        write(&dir.join(MANIFEST), serde_json::to_string_pretty(request).expect("serializes").as_bytes()).map_err(io)?;
+        write(
+            &dir.join(MANIFEST),
+            serde_json::to_string_pretty(request)
+                .expect("serializes")
+                .as_bytes(),
+        )
+        .map_err(io)?;
         // The packs are of the lines before; they come back once these are made.
         let _ = std::fs::remove_file(dir.join("pack.bin"));
         let _ = std::fs::remove_dir_all(dir.join("address"));
 
-        let language = if voice.own { preset_language(&request.base) } else { voice.language.clone() };
+        let language = if voice.own {
+            preset_language(&request.base)
+        } else {
+            voice.language.clone()
+        };
         let forms = forms(&language);
         let pieces = pieces(&request.lines, &forms);
-        let made = pieces.iter().filter(|piece| dir.join(&piece.path).is_file()).count();
+        let made = pieces
+            .iter()
+            .filter(|piece| dir.join(&piece.path).is_file())
+            .count();
         self.report(|status| (status.done, status.total) = (made, pieces.len()));
-        for (done, piece) in (made + 1..).zip(pieces.iter().filter(|piece| !dir.join(&piece.path).is_file())) {
-            let samples = trim_and_normalize(&self.synthesize(voice, &piece.text)?).ok_or_else(|| format!("the line came back silent: {}", piece.text))?;
+        for (done, piece) in (made + 1..).zip(
+            pieces
+                .iter()
+                .filter(|piece| !dir.join(&piece.path).is_file()),
+        ) {
+            let samples = trim_and_normalize(&self.synthesize(voice, &piece.text)?)
+                .ok_or_else(|| format!("the line came back silent: {}", piece.text))?;
             let path = dir.join(&piece.path);
             std::fs::create_dir_all(path.parent().expect("in a pool")).map_err(io)?;
-            write(&path.with_extension("txt"), format!("{}\n", piece.text).as_bytes()).map_err(io)?;
-            write(&path, &samples.iter().flat_map(|sample| sample.to_le_bytes()).collect::<Vec<_>>()).map_err(io)?;
+            write(
+                &path.with_extension("txt"),
+                format!("{}\n", piece.text).as_bytes(),
+            )
+            .map_err(io)?;
+            write(
+                &path,
+                &samples
+                    .iter()
+                    .flat_map(|sample| sample.to_le_bytes())
+                    .collect::<Vec<_>>(),
+            )
+            .map_err(io)?;
             self.report(|status| status.done = done);
         }
 
         // Drop the audio of lines that were deleted or reworded, as make-character.sh does.
-        let keep: std::collections::HashSet<PathBuf> = pieces.iter().map(|piece| dir.join(&piece.path)).collect();
+        let keep: std::collections::HashSet<PathBuf> =
+            pieces.iter().map(|piece| dir.join(&piece.path)).collect();
         for root in ["audio", "audio-address"] {
             prune(&dir.join(root), &keep);
         }
-        write(&dir.join("pack.bin"), &pack(id, &pools(&dir.join("audio")))?).map_err(io)?;
+        write(
+            &dir.join("pack.bin"),
+            &pack(id, &pools(&dir.join("audio")))?,
+        )
+        .map_err(io)?;
         for (form, _) in &forms {
             let audio = dir.join("audio-address").join(form);
             if audio.is_dir() {
                 std::fs::create_dir_all(dir.join("address")).map_err(io)?;
-                write(&dir.join("address").join(format!("{form}.bin")), &pack(id, &pools(&audio))?).map_err(io)?;
+                write(
+                    &dir.join("address").join(format!("{form}.bin")),
+                    &pack(id, &pools(&audio))?,
+                )
+                .map_err(io)?;
             }
         }
         Ok(())
@@ -607,18 +816,44 @@ impl Maker {
 
     /// One line as 16 kHz mono PCM: from the provider with the user's own key for it, else from the voice service.
     fn synthesize(&self, voice: &Voice, text: &str) -> Result<Vec<i16>, Stop> {
-        let provider = Provider::named(&voice.provider).ok_or_else(|| format!("{} is not a provider", voice.provider))?;
+        let provider = Provider::named(&voice.provider)
+            .ok_or_else(|| format!("{} is not a provider", voice.provider))?;
         let bytes = match self.keys.key(provider) {
-            Some(key) => self.own(provider, &voice.voice, &key, text, voice.resource.as_deref())?,
-            None if voice.own => return Err(Stop::because("own_key", format!("{} is in your own {} account: set your own key for it", voice.name, voice.provider))),
+            Some(key) => self.own(
+                provider,
+                &voice.voice,
+                &key,
+                text,
+                voice.resource.as_deref(),
+            )?,
+            None if voice.own => {
+                return Err(Stop::because(
+                    "own_key",
+                    format!(
+                        "{} is in your own {} account: set your own key for it",
+                        voice.name, voice.provider
+                    ),
+                ));
+            }
             None => self.service(&format!("{}:{}", voice.provider, voice.voice), text)?,
         };
         Ok(pcm(&bytes))
     }
 
     /// A line from the provider with the user's own key; a 401 or 403 marks the key refused.
-    fn own(&self, provider: Provider, voice: &str, key: &str, text: &str, resource: Option<&str>) -> Result<Vec<u8>, Stop> {
-        let name = if provider == Provider::ElevenLabs { "ElevenLabs" } else { "Volcano Engine" };
+    fn own(
+        &self,
+        provider: Provider,
+        voice: &str,
+        key: &str,
+        text: &str,
+        resource: Option<&str>,
+    ) -> Result<Vec<u8>, Stop> {
+        let name = if provider == Provider::ElevenLabs {
+            "ElevenLabs"
+        } else {
+            "Volcano Engine"
+        };
         match self.call(provider, voice, key, text, resource) {
             Ok(audio) => {
                 self.keys.refused(provider, false);
@@ -626,7 +861,10 @@ impl Maker {
             }
             Err((Some(status @ (401 | 403)), _)) => {
                 self.keys.refused(provider, true);
-                Err(Stop::because("own_key", format!("{name} refused your own key ({status})")))
+                Err(Stop::because(
+                    "own_key",
+                    format!("{name} refused your own key ({status})"),
+                ))
             }
             Err((_, message)) => Err(message.into()),
         }
@@ -634,13 +872,34 @@ impl Maker {
 
     /// One line from the provider as 16 kHz PCM, on `resource` for Volcano Engine (ours when None); on failure, the
     /// status it answered, if it answered, and what went wrong.
-    fn call(&self, provider: Provider, voice: &str, key: &str, text: &str, resource: Option<&str>) -> Result<Vec<u8>, (Option<u16>, String)> {
+    fn call(
+        &self,
+        provider: Provider,
+        voice: &str,
+        key: &str,
+        text: &str,
+        resource: Option<&str>,
+    ) -> Result<Vec<u8>, (Option<u16>, String)> {
         let agent = agent();
         let (name, request) = match provider {
             Provider::ElevenLabs => {
-                let url = format!("{}/v1/text-to-speech/{voice}/stream?output_format=pcm_16000", self.elevenlabs_url);
-                let request = agent.post(&url).header("xi-api-key", key).header("Accept", "audio/pcm").header("Content-Type", "application/json");
-                ("ElevenLabs", request.send(json!({"text": text, "model_id": ELEVENLABS_MODEL}).to_string().as_bytes()))
+                let url = format!(
+                    "{}/v1/text-to-speech/{voice}/stream?output_format=pcm_16000",
+                    self.elevenlabs_url
+                );
+                let request = agent
+                    .post(&url)
+                    .header("xi-api-key", key)
+                    .header("Accept", "audio/pcm")
+                    .header("Content-Type", "application/json");
+                (
+                    "ElevenLabs",
+                    request.send(
+                        json!({"text": text, "model_id": ELEVENLABS_MODEL})
+                            .to_string()
+                            .as_bytes(),
+                    ),
+                )
             }
             Provider::Volc => {
                 let body = json!({
@@ -651,7 +910,10 @@ impl Maker {
                     .post(&self.volc_url)
                     .header("X-Api-Key", key)
                     .header("X-Api-Resource-Id", resource.unwrap_or(VOLC_RESOURCE_ID))
-                    .header("X-Api-Request-Id", &crate::synthesis::request_id().map_err(|error| (None, error))?)
+                    .header(
+                        "X-Api-Request-Id",
+                        &crate::synthesis::request_id().map_err(|error| (None, error))?,
+                    )
                     .header("Content-Type", "application/json");
                 ("Volcano Engine", request.send(body.to_string().as_bytes()))
             }
@@ -659,11 +921,24 @@ impl Maker {
         let mut response = request.map_err(|error| (None, format!("calling {name}: {error}")))?;
         let status = response.status().as_u16();
         if status != 200 {
-            let answer = response.body_mut().with_config().limit(1024).read_to_string().unwrap_or_default();
-            return Err((Some(status), format!("{name} answered {status}: {}", answer.trim().chars().take(200).collect::<String>())));
+            let answer = response
+                .body_mut()
+                .with_config()
+                .limit(1024)
+                .read_to_string()
+                .unwrap_or_default();
+            return Err((
+                Some(status),
+                format!(
+                    "{name} answered {status}: {}",
+                    answer.trim().chars().take(200).collect::<String>()
+                ),
+            ));
         }
         match provider {
-            Provider::ElevenLabs => read_all(&mut response, name).map_err(|stop| (None, stop.message)),
+            Provider::ElevenLabs => {
+                read_all(&mut response, name).map_err(|stop| (None, stop.message))
+            }
             Provider::Volc => {
                 let mut audio = Vec::new();
                 crate::synthesis::read_volc(response.into_body().into_reader(), &mut |piece| {
@@ -677,27 +952,47 @@ impl Maker {
     }
 
     fn service(&self, voice: &str, text: &str) -> Result<Vec<u8>, Stop> {
-        let base = self.service.as_deref().ok_or("no voice service, and no own key for this voice".to_owned())?;
-        let token = self.account.token().ok_or_else(|| Stop::because("signed_out", "not signed in"))?;
+        let base = self
+            .service
+            .as_deref()
+            .ok_or("no voice service, and no own key for this voice".to_owned())?;
+        let token = self
+            .account
+            .token()
+            .ok_or_else(|| Stop::because("signed_out", "not signed in"))?;
         let url = format!("{}/v1/voice/speak", base.trim_end_matches('/'));
         let mut response = agent()
             .post(&url)
             .header("Content-Type", "application/json")
             .header("Authorization", &format!("Bearer {token}"))
-            .send(json!({"text": text, "voice": voice, "for": "character"}).to_string().as_bytes())
+            .send(
+                json!({"text": text, "voice": voice, "for": "character"})
+                    .to_string()
+                    .as_bytes(),
+            )
             .map_err(|error| format!("calling the voice service: {error}"))?;
         let status = response.status().as_u16();
         if status == 200 {
             return read_all(&mut response, "the voice service");
         }
-        let answer = response.body_mut().with_config().limit(1024).read_to_string().unwrap_or_default();
-        let reason = serde_json::from_str::<serde_json::Value>(&answer).ok().and_then(|value| value.get("reason")?.as_str().map(str::to_owned));
+        let answer = response
+            .body_mut()
+            .with_config()
+            .limit(1024)
+            .read_to_string()
+            .unwrap_or_default();
+        let reason = serde_json::from_str::<serde_json::Value>(&answer)
+            .ok()
+            .and_then(|value| value.get("reason")?.as_str().map(str::to_owned));
         Err(match (status, reason.as_deref()) {
             (401, _) => {
                 self.account.forget();
                 Stop::because("signed_out", "signed out")
             }
-            (403, _) => Stop::because("plan", "making a Character with our voices needs the Paid plan"),
+            (403, _) => Stop::because(
+                "plan",
+                "making a Character with our voices needs the Paid plan",
+            ),
             (429, Some("global_cap")) => Stop::because("global_cap", "voice is paused for today"),
             (429, _) => Stop::because("monthly", "this month's Characters are used up"),
             _ => format!("the voice service answered {status}: {}", answer.trim()).into(),
@@ -711,7 +1006,12 @@ fn agent() -> &'static ureq::Agent {
 }
 
 fn read_all(response: &mut ureq::http::Response<ureq::Body>, from: &str) -> Result<Vec<u8>, Stop> {
-    Ok(response.body_mut().with_config().limit(MAX_AUDIO).read_to_vec().map_err(|error| format!("reading audio from {from}: {error}"))?)
+    Ok(response
+        .body_mut()
+        .with_config()
+        .limit(MAX_AUDIO)
+        .read_to_vec()
+        .map_err(|error| format!("reading audio from {from}: {error}"))?)
 }
 
 /// The voice, of `voices`, if the request can be made.
@@ -720,10 +1020,17 @@ fn check(request: &Request, voices: &[Voice]) -> Result<Voice, String> {
     if name.is_empty() || name.chars().count() > 64 {
         return Err("a name must be 1 to 64 characters".to_owned());
     }
-    if !crate::synthesis::VOICE_FILES.iter().any(|(id, _)| *id == request.base) {
+    if !crate::synthesis::VOICE_FILES
+        .iter()
+        .any(|(id, _)| *id == request.base)
+    {
         return Err(format!("{} is not a preset Character", request.base));
     }
-    let voice = voices.iter().find(|voice| voice.id == request.voice).cloned().ok_or_else(|| format!("{} is not in voices.tsv or your own voices", request.voice))?;
+    let voice = voices
+        .iter()
+        .find(|voice| voice.id == request.voice)
+        .cloned()
+        .ok_or_else(|| format!("{} is not in voices.tsv or your own voices", request.voice))?;
     if request.lines.is_empty() || request.lines.len() > MAX_LINES {
         return Err(format!("a Character has 1 to {MAX_LINES} lines"));
     }
@@ -732,8 +1039,12 @@ fn check(request: &Request, voices: &[Voice]) -> Result<Voice, String> {
             return Err(format!("{} is not an occasion", line.occasion));
         }
         let units = line.text.encode_utf16().count();
-        if line.text.trim().is_empty() || units > MAX_TEXT || line.text.contains(['\n', '\r', '\t']) {
-            return Err(format!("a line must be one row of 1 to {MAX_TEXT} characters: {:?}", line.text));
+        if line.text.trim().is_empty() || units > MAX_TEXT || line.text.contains(['\n', '\r', '\t'])
+        {
+            return Err(format!(
+                "a line must be one row of 1 to {MAX_TEXT} characters: {:?}",
+                line.text
+            ));
         }
     }
     Ok(voice)
@@ -741,7 +1052,10 @@ fn check(request: &Request, voices: &[Voice]) -> Result<Voice, String> {
 
 /// A made Character's id: lowercase letters, digits and dashes, at most 31, as a pack's id may be.
 fn valid_id(id: &str) -> bool {
-    (1..=31).contains(&id.len()) && id.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+    (1..=31).contains(&id.len())
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
 }
 
 /// The slug of the name and eight random hex digits.
@@ -755,7 +1069,11 @@ fn new_id(name: &str) -> Result<String, String> {
         }
     }
     let slug: String = slug.trim_end_matches('-').chars().take(22).collect();
-    let slug = if slug.is_empty() { "character" } else { slug.trim_end_matches('-') };
+    let slug = if slug.is_empty() {
+        "character"
+    } else {
+        slug.trim_end_matches('-')
+    };
     let mut bytes = [0u8; 4];
     getrandom::fill(&mut bytes).map_err(|error| error.to_string())?;
     Ok(format!("{slug}-{:08x}", u32::from_le_bytes(bytes)))
@@ -769,13 +1087,17 @@ fn write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 }
 
 fn prune(root: &Path, keep: &std::collections::HashSet<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(root) else { return };
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
             prune(&path, keep);
             let _ = std::fs::remove_dir(&path);
-        } else if path.extension().is_some_and(|extension| extension == "pcm") && !keep.contains(&path) {
+        } else if path.extension().is_some_and(|extension| extension == "pcm")
+            && !keep.contains(&path)
+        {
             let _ = std::fs::remove_file(path.with_extension("txt"));
             let _ = std::fs::remove_file(&path);
         }
@@ -789,7 +1111,13 @@ fn pools(audio: &Path) -> Vec<Vec<Vec<i16>>> {
         .iter()
         .map(|occasion| {
             let mut files: Vec<PathBuf> = std::fs::read_dir(audio.join(occasion.name()))
-                .map(|entries| entries.flatten().map(|entry| entry.path()).filter(|path| path.extension().is_some_and(|extension| extension == "pcm")).collect())
+                .map(|entries| {
+                    entries
+                        .flatten()
+                        .map(|entry| entry.path())
+                        .filter(|path| path.extension().is_some_and(|extension| extension == "pcm"))
+                        .collect()
+                })
                 .unwrap_or_default();
             files.sort();
             files
@@ -823,7 +1151,12 @@ pub fn wav(samples: &[i16]) -> Vec<u8> {
 
 /// 16-bit little-endian PCM as samples.
 fn pcm(bytes: &[u8]) -> Vec<i16> {
-    bytes.as_chunks::<2>().0.iter().map(|pair| i16::from_le_bytes(*pair)).collect()
+    bytes
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| i16::from_le_bytes(*pair))
+        .collect()
 }
 
 /// TTS pads both ends with silence; trimmed at -50 dBFS, the box speaks as soon as it is asked to. Then the peak goes
@@ -836,13 +1169,27 @@ fn trim_and_normalize(samples: &[i16]) -> Option<Vec<i16>> {
     let trimmed = &samples[start..end];
     let peak = f64::from(trimmed.iter().map(|sample| sample.unsigned_abs()).max()?);
     let gain = 32768.0 * 10f64.powf(-1.0 / 20.0) / peak;
-    Some(trimmed.iter().map(|&sample| (f64::from(sample) * gain).round().clamp(-32768.0, 32767.0) as i16).collect())
+    Some(
+        trimmed
+            .iter()
+            .map(|&sample| (f64::from(sample) * gain).round().clamp(-32768.0, 32767.0) as i16)
+            .collect(),
+    )
 }
 
 /// IMA ADPCM with the box's own encoder, two samples a byte, low nibble first.
 fn encode(samples: &[i16]) -> Vec<u8> {
     let mut encoder = Encoder::default();
-    samples.chunks(2).map(|pair| if let [first, second] = pair { encoder.encode_pair(*first, *second) } else { encoder.encode(pair[0]) }).collect()
+    samples
+        .chunks(2)
+        .map(|pair| {
+            if let [first, second] = pair {
+                encoder.encode_pair(*first, *second)
+            } else {
+                encoder.encode(pair[0])
+            }
+        })
+        .collect()
 }
 
 /// A Character pack with no look, byte for byte as `tools/character_pack.py` builds it.
@@ -851,16 +1198,34 @@ fn pack(id: &str, pools: &[Vec<Vec<i16>>]) -> Result<Vec<u8>, String> {
     let mut header = vec![0u8; HEADER_BYTES];
     let mut payload = Vec::new();
     let mut line = 0usize;
-    let put = |header: &mut Vec<u8>, at: usize, bytes: &[u8]| header[at..at + bytes.len()].copy_from_slice(bytes);
+    let put = |header: &mut Vec<u8>, at: usize, bytes: &[u8]| {
+        header[at..at + bytes.len()].copy_from_slice(bytes)
+    };
     for (slot, lines) in pools.iter().enumerate() {
-        put(&mut header, 56 + slot * 4, &(if lines.is_empty() { 0 } else { line as u16 }).to_le_bytes());
-        put(&mut header, 58 + slot * 4, &(lines.len() as u16).to_le_bytes());
+        put(
+            &mut header,
+            56 + slot * 4,
+            &(if lines.is_empty() { 0 } else { line as u16 }).to_le_bytes(),
+        );
+        put(
+            &mut header,
+            58 + slot * 4,
+            &(lines.len() as u16).to_le_bytes(),
+        );
         for samples in lines {
             if line == MAX_LINES {
                 return Err(format!("more than {MAX_LINES} lines"));
             }
-            put(&mut header, 128 + line * 8, &((HEADER_BYTES + payload.len()) as u32).to_le_bytes());
-            put(&mut header, 132 + line * 8, &(samples.len() as u32).to_le_bytes());
+            put(
+                &mut header,
+                128 + line * 8,
+                &((HEADER_BYTES + payload.len()) as u32).to_le_bytes(),
+            );
+            put(
+                &mut header,
+                132 + line * 8,
+                &(samples.len() as u32).to_le_bytes(),
+            );
             payload.extend(encode(samples));
             line += 1;
         }
@@ -891,26 +1256,44 @@ mod tests {
     use super::*;
 
     fn line(occasion: &str, text: &str) -> Line {
-        Line { occasion: occasion.to_owned(), text: text.to_owned() }
+        Line {
+            occasion: occasion.to_owned(),
+            text: text.to_owned(),
+        }
     }
 
     fn request(voice: &str, lines: Vec<Line>) -> Request {
-        Request { id: None, name: "Night Owl".to_owned(), base: "ada".to_owned(), voice: voice.to_owned(), lines }
+        Request {
+            id: None,
+            name: "Night Owl".to_owned(),
+            base: "ada".to_owned(),
+            voice: voice.to_owned(),
+            lines,
+        }
     }
 
     /// A line as a TTS answers it: silence, a tone, silence.
     fn spoken() -> Vec<u8> {
         let tone = (0..1600).map(|n| (8000.0 * (n as f64 * 0.2).sin()) as i16);
-        std::iter::repeat_n(0i16, 400).chain(tone).chain(std::iter::repeat_n(3, 400)).flat_map(i16::to_le_bytes).collect()
+        std::iter::repeat_n(0i16, 400)
+            .chain(tone)
+            .chain(std::iter::repeat_n(3, 400))
+            .flat_map(i16::to_le_bytes)
+            .collect()
     }
 
     fn answer(status: &str, content_type: &str, body: &[u8]) -> Vec<u8> {
-        let head = format!("HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
+        let head = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
         [head.as_bytes(), body].concat()
     }
 
     /// A fake HTTP server answering the nth request with `respond(n, request)`; returns its base URL and the requests.
-    fn serve(respond: impl Fn(usize, &str) -> Vec<u8> + Send + 'static) -> (String, Arc<Mutex<Vec<String>>>) {
+    fn serve(
+        respond: impl Fn(usize, &str) -> Vec<u8> + Send + 'static,
+    ) -> (String, Arc<Mutex<Vec<String>>>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
         let requests = Arc::new(Mutex::new(Vec::new()));
@@ -923,7 +1306,15 @@ mod tests {
                 loop {
                     let text = String::from_utf8_lossy(&request).into_owned();
                     if let Some((head, body)) = text.split_once("\r\n\r\n") {
-                        let length = head.lines().find_map(|line| line.to_ascii_lowercase().strip_prefix("content-length: ")?.parse::<usize>().ok()).unwrap_or(0);
+                        let length = head
+                            .lines()
+                            .find_map(|line| {
+                                line.to_ascii_lowercase()
+                                    .strip_prefix("content-length: ")?
+                                    .parse::<usize>()
+                                    .ok()
+                            })
+                            .unwrap_or(0);
                         if body.len() >= length {
                             break;
                         }
@@ -940,12 +1331,33 @@ mod tests {
         (base, requests)
     }
 
-    fn maker(tag: &str, service: Option<String>, keys: &[(Provider, &str)], elevenlabs: &str, volc: &str) -> (Maker, PathBuf) {
+    fn maker(
+        tag: &str,
+        service: Option<String>,
+        keys: &[(Provider, &str)],
+        elevenlabs: &str,
+        volc: &str,
+    ) -> (Maker, PathBuf) {
         let scratch = crate::voice_keys::tests::scratch(tag);
-        let account = Arc::new(crate::account::signed_in_for_tests(&scratch.join("account"), "tok_session"));
+        let account = Arc::new(crate::account::signed_in_for_tests(
+            &scratch.join("account"),
+            "tok_session",
+        ));
         let own = Arc::new(VoiceKeys::new(Some(&scratch)));
-        own.set(&keys.iter().map(|(provider, key)| (*provider, Some((*key).to_owned()))).collect::<Vec<_>>()).unwrap();
-        let mut maker = Maker::new(Some(scratch.join("characters")), service, account, own, Arc::new(OwnVoices::new(Some(&scratch))));
+        own.set(
+            &keys
+                .iter()
+                .map(|(provider, key)| (*provider, Some((*key).to_owned())))
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+        let mut maker = Maker::new(
+            Some(scratch.join("characters")),
+            service,
+            account,
+            own,
+            Arc::new(OwnVoices::new(Some(&scratch))),
+        );
         (maker.elevenlabs_url, maker.volc_url) = (elevenlabs.to_owned(), volc.to_owned());
         (maker, scratch)
     }
@@ -958,43 +1370,99 @@ mod tests {
     }
 
     fn text_of(request: &str) -> String {
-        let body: serde_json::Value = serde_json::from_str(request.split_once("\r\n\r\n").unwrap().1).unwrap();
-        body["text"].as_str().or(body["req_params"]["text"].as_str()).unwrap().to_owned()
+        let body: serde_json::Value =
+            serde_json::from_str(request.split_once("\r\n\r\n").unwrap().1).unwrap();
+        body["text"]
+            .as_str()
+            .or(body["req_params"]["text"].as_str())
+            .unwrap()
+            .to_owned()
     }
 
     #[test]
     fn a_form_of_address_goes_with_its_comma_as_in_make_character() {
         assert_eq!(without_address("All done, {address}."), "All done.");
-        assert_eq!(without_address("Hey {address}, need you."), "Hey, need you.");
+        assert_eq!(
+            without_address("Hey {address}, need you."),
+            "Hey, need you."
+        );
         assert_eq!(without_address("{address}，快来看看。"), "快来看看。");
         assert_eq!(without_address("好了，{address}！"), "好了！");
-        assert_eq!(without_address("都这么晚了，{address}快去睡"), "都这么晚了，快去睡");
+        assert_eq!(
+            without_address("都这么晚了，{address}快去睡"),
+            "都这么晚了，快去睡"
+        );
         assert_eq!(without_address("Nice one {address}"), "Nice one");
     }
 
     #[test]
     fn lines_with_an_address_are_made_once_per_form_and_named_as_make_character_names_them() {
-        let lines = [line("done", "Nice."), line("done", "Done, {address}."), line("failed", "Oops.")];
+        let lines = [
+            line("done", "Nice."),
+            line("done", "Done, {address}."),
+            line("failed", "Oops."),
+        ];
         let pieces = pieces(&lines, &forms("en"));
-        let paths: Vec<String> = pieces.iter().map(|piece| piece.path.display().to_string()).collect();
+        let paths: Vec<String> = pieces
+            .iter()
+            .map(|piece| piece.path.display().to_string())
+            .collect();
         // `printf '%s' 'Done, boss.' | shasum -a 1` starts 1641ab442f.
-        assert!(paths.contains(&"audio-address/boss/done/0-002-1641ab442f.pcm".to_owned()), "{paths:?}");
+        assert!(
+            paths.contains(&"audio-address/boss/done/0-002-1641ab442f.pcm".to_owned()),
+            "{paths:?}"
+        );
         let texts: Vec<&str> = pieces.iter().map(|piece| piece.text.as_str()).collect();
-        assert_eq!(texts, ["Nice.", "Done.", "Done, boss.", "Done, captain.", "Done, buddy.", "Oops."]);
-        assert!(paths[0].starts_with("audio/done/1-") && paths[1].starts_with("audio/done/0-002-") && paths[3].starts_with("audio-address/captain/done/0-002-"));
-        assert_eq!(forms("zh").iter().map(|(form, _)| *form).collect::<Vec<_>>(), ["laoban", "dalao", "ge", "jie", "qin"]);
+        assert_eq!(
+            texts,
+            [
+                "Nice.",
+                "Done.",
+                "Done, boss.",
+                "Done, captain.",
+                "Done, buddy.",
+                "Oops."
+            ]
+        );
+        assert!(
+            paths[0].starts_with("audio/done/1-")
+                && paths[1].starts_with("audio/done/0-002-")
+                && paths[3].starts_with("audio-address/captain/done/0-002-")
+        );
+        assert_eq!(
+            forms("zh")
+                .iter()
+                .map(|(form, _)| *form)
+                .collect::<Vec<_>>(),
+            ["laoban", "dalao", "ge", "jie", "qin"]
+        );
     }
 
     #[test]
     fn adpcm_decodes_back_close_to_the_input() {
-        let input: Vec<i16> = (0..4001).map(|n| (20000.0 * (n as f64 * 0.05).sin() * (n as f64 * 0.001).cos()) as i16).collect();
+        let input: Vec<i16> = (0..4001)
+            .map(|n| (20000.0 * (n as f64 * 0.05).sin() * (n as f64 * 0.001).cos()) as i16)
+            .collect();
         let bytes = encode(&input);
         assert_eq!(bytes.len(), input.len().div_ceil(2));
         let mut decoder = Decoder::default();
-        let output: Vec<i16> = bytes.iter().flat_map(|byte| [byte & 15, byte >> 4]).take(input.len()).map(|nibble| decoder.decode(nibble)).collect();
-        let error: f64 = input.iter().zip(&output).map(|(a, b)| (f64::from(*a) - f64::from(*b)).powi(2)).sum();
+        let output: Vec<i16> = bytes
+            .iter()
+            .flat_map(|byte| [byte & 15, byte >> 4])
+            .take(input.len())
+            .map(|nibble| decoder.decode(nibble))
+            .collect();
+        let error: f64 = input
+            .iter()
+            .zip(&output)
+            .map(|(a, b)| (f64::from(*a) - f64::from(*b)).powi(2))
+            .sum();
         let signal: f64 = input.iter().map(|a| f64::from(*a).powi(2)).sum();
-        assert!(10.0 * (signal / error).log10() > 20.0, "signal to noise {}", 10.0 * (signal / error).log10());
+        assert!(
+            10.0 * (signal / error).log10() > 20.0,
+            "signal to noise {}",
+            10.0 * (signal / error).log10()
+        );
     }
 
     #[test]
@@ -1002,8 +1470,15 @@ mod tests {
         let samples = pcm(&spoken());
         let out = trim_and_normalize(&samples).unwrap();
         assert!(out.len() < 1600 && out.len() > 1590, "{}", out.len());
-        assert_eq!(out.iter().map(|sample| sample.unsigned_abs()).max(), Some(29205));
-        assert_eq!(trim_and_normalize(&[0, 50, -100, 3]), None, "all below -50 dBFS");
+        assert_eq!(
+            out.iter().map(|sample| sample.unsigned_abs()).max(),
+            Some(29205)
+        );
+        assert_eq!(
+            trim_and_normalize(&[0, 50, -100, 3]),
+            None,
+            "all below -50 dBFS"
+        );
     }
 
     #[test]
@@ -1012,25 +1487,63 @@ mod tests {
         // (`tools/character_pack.py made-a1b2c3d4 daemon/src/fixtures/character/audio pack.bin`).
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/fixtures/character");
         let pools = pools(&fixture.join("audio"));
-        assert_eq!(pools.iter().map(Vec::len).collect::<Vec<_>>(), [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
-        assert_eq!(pack("made-a1b2c3d4", &pools).unwrap(), std::fs::read(fixture.join("pack.bin")).unwrap());
+        assert_eq!(
+            pools.iter().map(Vec::len).collect::<Vec<_>>(),
+            [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+        );
+        assert_eq!(
+            pack("made-a1b2c3d4", &pools).unwrap(),
+            std::fs::read(fixture.join("pack.bin")).unwrap()
+        );
     }
 
     #[test]
     fn only_voices_in_voices_tsv_are_accepted() {
         let all = voices();
         // Every preset's voice, and the built-in default's, as the voice service names them.
-        for character in [None, Some("ada"), Some("dave"), Some("hank"), Some("kai"), Some("luna"), Some("mei"), Some("wanwanxiaohe")] {
+        for character in [
+            None,
+            Some("ada"),
+            Some("dave"),
+            Some("hank"),
+            Some("kai"),
+            Some("luna"),
+            Some("mei"),
+            Some("wanwanxiaohe"),
+        ] {
             let voice = crate::synthesis::voice_for(character);
-            assert!(all.iter().any(|known| format!("{}:{}", known.provider, known.voice) == voice), "{voice} is missing");
+            assert!(
+                all.iter()
+                    .any(|known| format!("{}:{}", known.provider, known.voice) == voice),
+                "{voice} is missing"
+            );
         }
-        assert!(all.iter().all(|voice| Provider::named(&voice.provider).is_some() && ["en", "zh"].contains(&voice.language.as_str())));
+        assert!(
+            all.iter()
+                .all(|voice| Provider::named(&voice.provider).is_some()
+                    && ["en", "zh"].contains(&voice.language.as_str()))
+        );
         let ok = request("luna", vec![line("done", "Done.")]);
-        assert_eq!(check(&ok, &voices()).map(|voice| voice.voice), Ok("ggx46gxUmdtruayPIL8q".to_owned()));
+        assert_eq!(
+            check(&ok, &voices()).map(|voice| voice.voice),
+            Ok("ggx46gxUmdtruayPIL8q".to_owned())
+        );
         for (bad, why) in [
-            (request("elevenlabs:ggx46gxUmdtruayPIL8q", ok.lines.clone()), "not in voices.tsv"),
-            (Request { base: "robot".to_owned(), ..ok.clone() }, "not a preset"),
-            (request("luna", vec![line("lunch", "Food.")]), "not an occasion"),
+            (
+                request("elevenlabs:ggx46gxUmdtruayPIL8q", ok.lines.clone()),
+                "not in voices.tsv",
+            ),
+            (
+                Request {
+                    base: "robot".to_owned(),
+                    ..ok.clone()
+                },
+                "not a preset",
+            ),
+            (
+                request("luna", vec![line("lunch", "Food.")]),
+                "not an occasion",
+            ),
             (request("luna", vec![line("done", "Two\nrows")]), "one row"),
             (request("luna", vec![]), "1 to 110 lines"),
         ] {
@@ -1043,11 +1556,31 @@ mod tests {
         for (id, _) in crate::synthesis::VOICE_FILES {
             let lines = preset_lines(id).unwrap_or_else(|| panic!("{id} has no lines"));
             assert_eq!(lines.len(), 55, "{id}");
-            assert!(lines.iter().any(|line| line.text.contains("{address}")), "{id}");
+            assert!(
+                lines.iter().any(|line| line.text.contains("{address}")),
+                "{id}"
+            );
             let voice = voices().into_iter().find(|voice| voice.id == *id).unwrap();
-            assert_eq!(check(&Request { id: None, name: "Copy".to_owned(), base: (*id).to_owned(), voice: voice.id, lines }, &voices()).err(), None, "{id}");
+            assert_eq!(
+                check(
+                    &Request {
+                        id: None,
+                        name: "Copy".to_owned(),
+                        base: (*id).to_owned(),
+                        voice: voice.id,
+                        lines
+                    },
+                    &voices()
+                )
+                .err(),
+                None,
+                "{id}"
+            );
         }
-        assert_eq!(preset_lines("ada").unwrap()[0], line("input_required", "Hey {address}, it's waiting on you."));
+        assert_eq!(
+            preset_lines("ada").unwrap()[0],
+            line("input_required", "Hey {address}, it's waiting on you.")
+        );
         assert_eq!(preset_lines("robot"), None);
     }
 
@@ -1057,48 +1590,126 @@ mod tests {
         let refuse = Arc::new(std::sync::atomic::AtomicBool::new(true));
         let refusing = refuse.clone();
         let (service, requests) = serve(move |n, _| match n {
-            2 if refusing.load(std::sync::atomic::Ordering::SeqCst) => answer("429 Too Many Requests", "application/json", br#"{"reason":"monthly"}"#),
+            2 if refusing.load(std::sync::atomic::Ordering::SeqCst) => answer(
+                "429 Too Many Requests",
+                "application/json",
+                br#"{"reason":"monthly"}"#,
+            ),
             _ => answer("200 OK", "audio/pcm;rate=16000", &spoken()),
         });
-        let (maker, scratch) = maker("making-resume", Some(service), &[], "http://127.0.0.1:9", "http://127.0.0.1:9");
-        let lines = vec![line("done", "All done."), line("done", "Done, {address}."), line("welcome_back", "Back again.")];
+        let (maker, scratch) = maker(
+            "making-resume",
+            Some(service),
+            &[],
+            "http://127.0.0.1:9",
+            "http://127.0.0.1:9",
+        );
+        let lines = vec![
+            line("done", "All done."),
+            line("done", "Done, {address}."),
+            line("welcome_back", "Back again."),
+        ];
         let mut request = request("ada", lines);
 
         let stopped = run(&maker, &request);
-        assert_eq!((stopped.state, stopped.reason, stopped.done, stopped.total), ("failed", Some("monthly"), 2, 6));
+        assert_eq!(
+            (stopped.state, stopped.reason, stopped.done, stopped.total),
+            ("failed", Some("monthly"), 2, 6)
+        );
         let dir = scratch.join("characters").join(&stopped.id);
-        assert!(!dir.join("pack.bin").exists(), "no pack until every line is made");
+        assert!(
+            !dir.join("pack.bin").exists(),
+            "no pack until every line is made"
+        );
         let listed = maker.list();
-        assert_eq!(listed, [MadeCharacter { id: stopped.id.clone(), name: "Night Owl".to_owned(), base: "ada".to_owned(), voice: "ada".to_owned(), lines: 3, complete: false }]);
+        assert_eq!(
+            listed,
+            [MadeCharacter {
+                id: stopped.id.clone(),
+                name: "Night Owl".to_owned(),
+                base: "ada".to_owned(),
+                voice: "ada".to_owned(),
+                lines: 3,
+                complete: false
+            }]
+        );
         let first = requests.lock().unwrap().clone();
-        assert!(first[0].to_ascii_lowercase().contains("authorization: bearer tok_session"), "{}", first[0]);
-        assert!(first[0].contains(r#""for":"character""#) && first[0].contains(r#""voice":"elevenlabs:tcSsCJFYrsHpK5rCQZMf""#), "{}", first[0]);
+        assert!(
+            first[0]
+                .to_ascii_lowercase()
+                .contains("authorization: bearer tok_session"),
+            "{}",
+            first[0]
+        );
+        assert!(
+            first[0].contains(r#""for":"character""#)
+                && first[0].contains(r#""voice":"elevenlabs:tcSsCJFYrsHpK5rCQZMf""#),
+            "{}",
+            first[0]
+        );
 
         refuse.store(false, std::sync::atomic::Ordering::SeqCst);
         request.id = Some(stopped.id.clone());
         let done = run(&maker, &request);
-        assert_eq!((done.state, done.reason, done.done, done.total), ("done", None, 6, 6));
+        assert_eq!(
+            (done.state, done.reason, done.done, done.total),
+            ("done", None, 6, 6)
+        );
         assert!(maker.list()[0].complete);
         let all = requests.lock().unwrap().clone();
         // Each line answered with audio once: the refused one was asked again, nothing else was.
-        let made: Vec<String> = all.iter().enumerate().filter(|(n, _)| *n != 2).map(|(_, request)| text_of(request)).collect();
+        let made: Vec<String> = all
+            .iter()
+            .enumerate()
+            .filter(|(n, _)| *n != 2)
+            .map(|(_, request)| text_of(request))
+            .collect();
         let mut unique = made.clone();
         unique.sort();
         unique.dedup();
         assert_eq!((made.len(), unique.len()), (6, 6), "{made:?}");
-        assert_eq!(text_of(&all[2]), text_of(&all[3]), "the refused line is the first made on resuming");
+        assert_eq!(
+            text_of(&all[2]),
+            text_of(&all[3]),
+            "the refused line is the first made on resuming"
+        );
 
         // The packs read as the box reads them: the address line first in its pool, then the other.
         let pack = std::fs::read(dir.join("pack.bin")).unwrap();
         let parsed = character_pack::parse(&pack, 1 << 21).unwrap();
         assert_eq!(parsed.id(), stopped.id);
-        assert_eq!((parsed.pool(Occasion::Done).len(), parsed.pool(Occasion::WelcomeBack).len()), (2, 1));
+        assert_eq!(
+            (
+                parsed.pool(Occasion::Done).len(),
+                parsed.pool(Occasion::WelcomeBack).len()
+            ),
+            (2, 1)
+        );
         for form in ["boss", "captain", "buddy"] {
-            let variant = character_pack::parse(&std::fs::read(dir.join(format!("address/{form}.bin"))).unwrap(), 1 << 21).unwrap();
-            assert_eq!((variant.pool(Occasion::Done).len(), variant.pool(Occasion::WelcomeBack).len()), (1, 0), "{form}");
+            let variant = character_pack::parse(
+                &std::fs::read(dir.join(format!("address/{form}.bin"))).unwrap(),
+                1 << 21,
+            )
+            .unwrap();
+            assert_eq!(
+                (
+                    variant.pool(Occasion::Done).len(),
+                    variant.pool(Occasion::WelcomeBack).len()
+                ),
+                (1, 0),
+                "{form}"
+            );
         }
-        let manifest: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join(MANIFEST)).unwrap()).unwrap();
-        assert_eq!((manifest["name"].as_str(), manifest["voice"].as_str(), manifest["lines"].as_array().map(Vec::len)), (Some("Night Owl"), Some("ada"), Some(3)));
+        let manifest: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join(MANIFEST)).unwrap()).unwrap();
+        assert_eq!(
+            (
+                manifest["name"].as_str(),
+                manifest["voice"].as_str(),
+                manifest["lines"].as_array().map(Vec::len)
+            ),
+            (Some("Night Owl"), Some("ada"), Some(3))
+        );
 
         // A line dropped: nothing to synthesize, its audio goes.
         request.lines.pop();
@@ -1112,17 +1723,30 @@ mod tests {
     fn the_plan_and_a_lost_session_stop_the_job_with_their_reason() {
         let (service, _) = serve(|n, _| match n {
             0 => answer("403 Forbidden", "application/json", br#"{"reason":"plan"}"#),
-            1 => answer("429 Too Many Requests", "application/json", br#"{"reason":"global_cap"}"#),
+            1 => answer(
+                "429 Too Many Requests",
+                "application/json",
+                br#"{"reason":"global_cap"}"#,
+            ),
             _ => answer("401 Unauthorized", "application/json", b"{}"),
         });
-        let (maker, scratch) = maker("making-refused", Some(service), &[], "http://127.0.0.1:9", "http://127.0.0.1:9");
+        let (maker, scratch) = maker(
+            "making-refused",
+            Some(service),
+            &[],
+            "http://127.0.0.1:9",
+            "http://127.0.0.1:9",
+        );
         let request = request("kai", vec![line("done", "Done.")]);
         for reason in ["plan", "global_cap", "signed_out"] {
             assert_eq!(run(&maker, &request).reason, Some(reason));
         }
         assert!(maker.account.token().is_none(), "a 401 forgets the session");
         let again = run(&maker, &request);
-        assert_eq!((again.reason, again.error.as_deref()), (Some("signed_out"), Some("not signed in")));
+        assert_eq!(
+            (again.reason, again.error.as_deref()),
+            (Some("signed_out"), Some("not signed in"))
+        );
         let _ = std::fs::remove_dir_all(scratch);
     }
 
@@ -1134,31 +1758,73 @@ mod tests {
             base64::engine::general_purpose::STANDARD.encode(&spoken()[..2000]),
             base64::engine::general_purpose::STANDARD.encode(&spoken()[2000..])
         );
-        let (volc, volc_requests) = serve(move |_, _| answer("200 OK", "application/json", objects.as_bytes()));
+        let (volc, volc_requests) =
+            serve(move |_, _| answer("200 OK", "application/json", objects.as_bytes()));
         // The service is on port 9, where nothing answers: a line sent there would fail.
-        let keys = [(Provider::ElevenLabs, "sk_own_eleven"), (Provider::Volc, "volc_own")];
-        let (maker, scratch) = maker("making-own", Some("http://127.0.0.1:9".to_owned()), &keys, &eleven, &volc);
+        let keys = [
+            (Provider::ElevenLabs, "sk_own_eleven"),
+            (Provider::Volc, "volc_own"),
+        ];
+        let (maker, scratch) = maker(
+            "making-own",
+            Some("http://127.0.0.1:9".to_owned()),
+            &keys,
+            &eleven,
+            &volc,
+        );
 
-        assert_eq!(run(&maker, &request("hank", vec![line("done", "Done.")])).state, "done");
+        assert_eq!(
+            run(&maker, &request("hank", vec![line("done", "Done.")])).state,
+            "done"
+        );
         let sent = eleven_requests.lock().unwrap()[0].clone();
         assert!(sent.starts_with("POST /v1/text-to-speech/U6jH23hcPh0zH17nf3DT/stream?output_format=pcm_16000 HTTP/1.1\r\n"), "{sent}");
-        assert!(sent.to_ascii_lowercase().contains("xi-api-key: sk_own_eleven") && sent.contains(r#""model_id":"eleven_flash_v2_5""#), "{sent}");
+        assert!(
+            sent.to_ascii_lowercase()
+                .contains("xi-api-key: sk_own_eleven")
+                && sent.contains(r#""model_id":"eleven_flash_v2_5""#),
+            "{sent}"
+        );
         assert!(!sent.contains("tok_session"));
 
-        let made = run(&maker, &request("wanwanxiaohe", vec![line("done", "好了。")]));
+        let made = run(
+            &maker,
+            &request("wanwanxiaohe", vec![line("done", "好了。")]),
+        );
         assert_eq!(made.state, "done", "{made:?}");
         let sent = volc_requests.lock().unwrap()[0].clone();
-        assert!(sent.to_ascii_lowercase().contains("x-api-key: volc_own"), "{sent}");
-        assert!(sent.contains(r#""format":"pcm""#) && sent.contains(r#""sample_rate":16000"#) && sent.contains(r#""speaker":"zh_female_wanwanxiaohe_moon_bigtts""#), "{sent}");
-        let pack = std::fs::read(scratch.join("characters").join(&made.id).join("pack.bin")).unwrap();
-        let line = character_pack::parse(&pack, 1 << 21).unwrap().pool(Occasion::Done)[0];
-        assert!(line.samples > 1590 && line.samples < 1600, "both pieces of the stream, trimmed: {}", line.samples);
+        assert!(
+            sent.to_ascii_lowercase().contains("x-api-key: volc_own"),
+            "{sent}"
+        );
+        assert!(
+            sent.contains(r#""format":"pcm""#)
+                && sent.contains(r#""sample_rate":16000"#)
+                && sent.contains(r#""speaker":"zh_female_wanwanxiaohe_moon_bigtts""#),
+            "{sent}"
+        );
+        let pack =
+            std::fs::read(scratch.join("characters").join(&made.id).join("pack.bin")).unwrap();
+        let line = character_pack::parse(&pack, 1 << 21)
+            .unwrap()
+            .pool(Occasion::Done)[0];
+        assert!(
+            line.samples > 1590 && line.samples < 1600,
+            "both pieces of the stream, trimmed: {}",
+            line.samples
+        );
         let _ = std::fs::remove_dir_all(scratch);
     }
 
     #[test]
     fn a_job_that_panics_ends_as_failed_not_making_forever() {
-        let (maker, scratch) = maker("making-panic", None, &[], "http://127.0.0.1:9", "http://127.0.0.1:9");
+        let (maker, scratch) = maker(
+            "making-panic",
+            None,
+            &[],
+            "http://127.0.0.1:9",
+            "http://127.0.0.1:9",
+        );
         let request = request("ada", vec![line("done", "Done.")]);
         maker.begin(&request).unwrap();
         maker.guard(|| {
@@ -1173,7 +1839,13 @@ mod tests {
 
     #[test]
     fn a_made_character_is_deleted_but_not_while_it_is_being_made_nor_outside_its_directory() {
-        let (maker, scratch) = maker("making-delete", None, &[], "http://127.0.0.1:9", "http://127.0.0.1:9");
+        let (maker, scratch) = maker(
+            "making-delete",
+            None,
+            &[],
+            "http://127.0.0.1:9",
+            "http://127.0.0.1:9",
+        );
         let request = request("ada", vec![line("done", "Done.")]);
         let (id, _) = maker.begin(&request).unwrap();
         let dir = scratch.join("characters").join(&id);
@@ -1197,7 +1869,13 @@ mod tests {
 
     #[test]
     fn one_character_at_a_time_and_only_one_made_here_is_made_again() {
-        let (maker, scratch) = maker("making-busy", None, &[], "http://127.0.0.1:9", "http://127.0.0.1:9");
+        let (maker, scratch) = maker(
+            "making-busy",
+            None,
+            &[],
+            "http://127.0.0.1:9",
+            "http://127.0.0.1:9",
+        );
         let mut request = request("ada", vec![line("done", "Done.")]);
         let (id, _) = maker.begin(&request).unwrap();
         assert!(valid_id(&id) && id.starts_with("night-owl-"), "{id}");
@@ -1205,7 +1883,12 @@ mod tests {
         request.id = Some("../../elsewhere".to_owned());
         assert!(matches!(maker.begin(&request), Err(StartError::Invalid(_))));
         assert!(new_id("小何").unwrap().starts_with("character-"));
-        assert_eq!(new_id("A very long name for a Character indeed").unwrap().len(), 31);
+        assert_eq!(
+            new_id("A very long name for a Character indeed")
+                .unwrap()
+                .len(),
+            31
+        );
         let _ = std::fs::remove_dir_all(scratch);
     }
 
@@ -1219,80 +1902,191 @@ mod tests {
     }
 
     #[test]
-    fn a_volc_voice_of_the_users_own_is_tried_on_each_resource_until_one_speaks_it_and_kept_with_it() {
+    fn a_volc_voice_of_the_users_own_is_tried_on_each_resource_until_one_speaks_it_and_kept_with_it()
+     {
         let objects = volc_objects();
         let (volc, requests) = serve(move |_, request| {
-            if request.to_ascii_lowercase().contains("x-api-resource-id: seed-icl-2.0") {
-                answer("403 Forbidden", "application/json", br#"{"code":45000030,"message":"resource not granted"}"#)
+            if request
+                .to_ascii_lowercase()
+                .contains("x-api-resource-id: seed-icl-2.0")
+            {
+                answer(
+                    "403 Forbidden",
+                    "application/json",
+                    br#"{"code":45000030,"message":"resource not granted"}"#,
+                )
             } else {
                 answer("200 OK", "application/json", objects.as_bytes())
             }
         });
-        let (maker, scratch) = maker("own-volc", Some("http://127.0.0.1:9".to_owned()), &[(Provider::Volc, "volc_own")], "http://127.0.0.1:9", &volc);
+        let (maker, scratch) = maker(
+            "own-volc",
+            Some("http://127.0.0.1:9".to_owned()),
+            &[(Provider::Volc, "volc_own")],
+            "http://127.0.0.1:9",
+            &volc,
+        );
 
-        let (voice, samples) = maker.add_own("volc", " S_me ", "My voice", "All done, {address}.").unwrap();
+        let (voice, samples) = maker
+            .add_own("volc", " S_me ", "My voice", "All done, {address}.")
+            .unwrap();
         assert!(voice.own && voice.id.starts_with("own-") && voice.language.is_empty());
-        assert_eq!((voice.voice.as_str(), voice.resource.as_deref()), ("S_me", Some("seed-icl-1.0")));
-        assert!(samples.len() > 1590 && samples.len() < 1600, "{}", samples.len());
+        assert_eq!(
+            (voice.voice.as_str(), voice.resource.as_deref()),
+            ("S_me", Some("seed-icl-1.0"))
+        );
+        assert!(
+            samples.len() > 1590 && samples.len() < 1600,
+            "{}",
+            samples.len()
+        );
         let sent = requests.lock().unwrap().clone();
         assert_eq!(sent.len(), 2, "2.0 refused, 1.0 spoke it");
-        assert!(sent[1].to_ascii_lowercase().contains("x-api-resource-id: seed-icl-1.0") && sent[1].contains(r#""speaker":"S_me""#));
+        assert!(
+            sent[1]
+                .to_ascii_lowercase()
+                .contains("x-api-resource-id: seed-icl-1.0")
+                && sent[1].contains(r#""speaker":"S_me""#)
+        );
         assert_eq!(text_of(&sent[1]), "All done.");
-        assert!(!maker.keys.status().volc.refused, "a resource not opened is not a refused key");
-        assert!(maker.voices().iter().any(|listed| listed.id == voice.id), "listed after ours");
+        assert!(
+            !maker.keys.status().volc.refused,
+            "a resource not opened is not a refused key"
+        );
+        assert!(
+            maker.voices().iter().any(|listed| listed.id == voice.id),
+            "listed after ours"
+        );
 
         // Made with it: the user's own key on the resource it answered on, in the base preset's language.
-        let made = run(&maker, &request(&voice.id, vec![line("done", "Done, {address}.")]));
+        let made = run(
+            &maker,
+            &request(&voice.id, vec![line("done", "Done, {address}.")]),
+        );
         assert_eq!(made.state, "done", "{made:?}");
         let sent = requests.lock().unwrap().clone();
-        assert!(sent[2..].iter().all(|request| request.to_ascii_lowercase().contains("x-api-resource-id: seed-icl-1.0")));
+        assert!(sent[2..].iter().all(|request| {
+            request
+                .to_ascii_lowercase()
+                .contains("x-api-resource-id: seed-icl-1.0")
+        }));
         let dir = scratch.join("characters").join(&made.id);
-        assert!(dir.join("address").join("boss.bin").is_file(), "Ada's English forms of address");
+        assert!(
+            dir.join("address").join("boss.bin").is_file(),
+            "Ada's English forms of address"
+        );
         assert!(!dir.join("address").join("ge.bin").exists());
         let _ = std::fs::remove_dir_all(scratch);
     }
 
     #[test]
     fn a_voice_of_the_users_own_needs_their_key_and_is_never_sent_to_the_service() {
-        let (eleven, requests) = serve(|_, _| answer("401 Unauthorized", "application/json", br#"{"detail":"invalid key"}"#));
-        let (maker, scratch) = maker("own-no-key", Some("http://127.0.0.1:9".to_owned()), &[], &eleven, "http://127.0.0.1:9");
-        assert!(matches!(maker.add_own("elevenlabs", "abc", "Me", "Hi."), Err(OwnVoiceError::Invalid(why)) if why.contains("no own key")));
-        for bad in [("eleven", "abc", "Me"), ("elevenlabs", "a b", "Me"), ("elevenlabs", "a#b", "Me"), ("elevenlabs", "abc", " ")] {
-            assert!(matches!(maker.add_own(bad.0, bad.1, bad.2, "Hi."), Err(OwnVoiceError::Invalid(_))), "{bad:?}");
+        let (eleven, requests) = serve(|_, _| {
+            answer(
+                "401 Unauthorized",
+                "application/json",
+                br#"{"detail":"invalid key"}"#,
+            )
+        });
+        let (maker, scratch) = maker(
+            "own-no-key",
+            Some("http://127.0.0.1:9".to_owned()),
+            &[],
+            &eleven,
+            "http://127.0.0.1:9",
+        );
+        assert!(
+            matches!(maker.add_own("elevenlabs", "abc", "Me", "Hi."), Err(OwnVoiceError::Invalid(why)) if why.contains("no own key"))
+        );
+        for bad in [
+            ("eleven", "abc", "Me"),
+            ("elevenlabs", "a b", "Me"),
+            ("elevenlabs", "a#b", "Me"),
+            ("elevenlabs", "abc", " "),
+        ] {
+            assert!(
+                matches!(
+                    maker.add_own(bad.0, bad.1, bad.2, "Hi."),
+                    Err(OwnVoiceError::Invalid(_))
+                ),
+                "{bad:?}"
+            );
         }
 
-        maker.keys.set(&[(Provider::ElevenLabs, Some("sk_wrong".to_owned()))]).unwrap();
-        assert!(matches!(maker.add_own("elevenlabs", "abc", "Me", "Hi."), Err(OwnVoiceError::Provider(why)) if why.contains("401")));
+        maker
+            .keys
+            .set(&[(Provider::ElevenLabs, Some("sk_wrong".to_owned()))])
+            .unwrap();
+        assert!(
+            matches!(maker.add_own("elevenlabs", "abc", "Me", "Hi."), Err(OwnVoiceError::Provider(why)) if why.contains("401"))
+        );
         assert!(maker.keys.status().elevenlabs.refused);
-        assert!(maker.own.list().is_empty(), "nothing kept that didn't speak");
+        assert!(
+            maker.own.list().is_empty(),
+            "nothing kept that didn't speak"
+        );
         assert_eq!(requests.lock().unwrap().len(), 1);
 
         // A Character in a voice of the user's own, after the key is gone: it stops, and the service is never asked.
         let own = maker.own.add("elevenlabs", "abc", "Me", None).unwrap();
         maker.keys.set(&[(Provider::ElevenLabs, None)]).unwrap();
         let stopped = run(&maker, &request(&own.id, vec![line("done", "Done.")]));
-        assert_eq!((stopped.state, stopped.reason), ("failed", Some("own_key")), "{stopped:?}");
+        assert_eq!(
+            (stopped.state, stopped.reason),
+            ("failed", Some("own_key")),
+            "{stopped:?}"
+        );
         let _ = std::fs::remove_dir_all(scratch);
     }
 
     #[test]
-    fn a_character_in_a_voice_of_the_users_own_replies_in_it_while_their_key_works_else_in_its_presets() {
-        let (maker, scratch) = maker("own-reply", None, &[(Provider::Volc, "volc_own")], "http://127.0.0.1:9", "http://127.0.0.1:9");
-        let own = maker.own.add("volc", "S_me", "Me", Some("seed-icl-2.0".to_owned())).unwrap();
+    fn a_character_in_a_voice_of_the_users_own_replies_in_it_while_their_key_works_else_in_its_presets()
+     {
+        let (maker, scratch) = maker(
+            "own-reply",
+            None,
+            &[(Provider::Volc, "volc_own")],
+            "http://127.0.0.1:9",
+            "http://127.0.0.1:9",
+        );
+        let own = maker
+            .own
+            .add("volc", "S_me", "Me", Some("seed-icl-2.0".to_owned()))
+            .unwrap();
         let dir = scratch.join("characters");
         std::fs::create_dir_all(dir.join("mine-00000001")).unwrap();
-        let manifest = Request { id: None, name: "Mine".to_owned(), base: "ada".to_owned(), voice: own.id.clone(), lines: vec![line("done", "Done.")] };
-        std::fs::write(dir.join("mine-00000001").join(MANIFEST), serde_json::to_string(&manifest).unwrap()).unwrap();
-        let reply = |maker: &Maker| voice_with(&dir, "mine-00000001", Some((&maker.own, &maker.keys)));
+        let manifest = Request {
+            id: None,
+            name: "Mine".to_owned(),
+            base: "ada".to_owned(),
+            voice: own.id.clone(),
+            lines: vec![line("done", "Done.")],
+        };
+        std::fs::write(
+            dir.join("mine-00000001").join(MANIFEST),
+            serde_json::to_string(&manifest).unwrap(),
+        )
+        .unwrap();
+        let reply =
+            |maker: &Maker| voice_with(&dir, "mine-00000001", Some((&maker.own, &maker.keys)));
 
         assert_eq!(reply(&maker).as_deref(), Some("volc:S_me#seed-icl-2.0"));
         maker.keys.refused(Provider::Volc, true);
-        assert_eq!(reply(&maker), Some(crate::synthesis::voice_for(Some("ada"))));
+        assert_eq!(
+            reply(&maker),
+            Some(crate::synthesis::voice_for(Some("ada")))
+        );
         maker.keys.set(&[(Provider::Volc, None)]).unwrap();
-        assert_eq!(reply(&maker), Some(crate::synthesis::voice_for(Some("ada"))));
+        assert_eq!(
+            reply(&maker),
+            Some(crate::synthesis::voice_for(Some("ada")))
+        );
 
         // Not forgotten while a Character speaks with it.
-        assert_eq!(maker.remove_own(&own.id), Err(OwnVoiceError::InUse(vec!["Mine".to_owned()])));
+        assert_eq!(
+            maker.remove_own(&own.id),
+            Err(OwnVoiceError::InUse(vec!["Mine".to_owned()]))
+        );
         std::fs::remove_dir_all(dir.join("mine-00000001")).unwrap();
         assert_eq!(maker.remove_own(&own.id), Ok(()));
         assert_eq!(maker.remove_own(&own.id), Err(OwnVoiceError::NotFound));
@@ -1314,19 +2108,50 @@ mod tests {
             if number == 0 {
                 answer("200 OK", "application/json", library)
             } else {
-                answer("401 Unauthorized", "application/json", br#"{"detail":{"status":"missing_permissions","message":"voices_read"}}"#)
+                answer(
+                    "401 Unauthorized",
+                    "application/json",
+                    br#"{"detail":{"status":"missing_permissions","message":"voices_read"}}"#,
+                )
             }
         });
-        let (maker, scratch) = maker("own-eleven-list", None, &[(Provider::ElevenLabs, "sk_own")], &eleven, "http://127.0.0.1:9");
+        let (maker, scratch) = maker(
+            "own-eleven-list",
+            None,
+            &[(Provider::ElevenLabs, "sk_own")],
+            &eleven,
+            "http://127.0.0.1:9",
+        );
         let voices = maker.elevenlabs_voices().unwrap();
-        assert_eq!(voices.iter().map(|voice| voice.voice.as_str()).collect::<Vec<_>>(), ["c1", "p1"]);
-        assert_eq!((voices[0].name.as_str(), voices[0].category.as_str()), ("me", "cloned"));
+        assert_eq!(
+            voices
+                .iter()
+                .map(|voice| voice.voice.as_str())
+                .collect::<Vec<_>>(),
+            ["c1", "p1"]
+        );
+        assert_eq!(
+            (voices[0].name.as_str(), voices[0].category.as_str()),
+            ("me", "cloned")
+        );
         let sent = requests.lock().unwrap()[0].clone();
-        assert!(sent.starts_with("GET /v1/voices HTTP/1.1\r\n") && sent.to_ascii_lowercase().contains("xi-api-key: sk_own"), "{sent}");
-        assert!(matches!(maker.elevenlabs_voices(), Err(OwnVoiceError::Provider(why)) if why.contains("missing_permissions")));
-        assert!(!maker.keys.status().elevenlabs.refused, "a key without the voices permission still speaks");
+        assert!(
+            sent.starts_with("GET /v1/voices HTTP/1.1\r\n")
+                && sent.to_ascii_lowercase().contains("xi-api-key: sk_own"),
+            "{sent}"
+        );
+        assert!(
+            matches!(maker.elevenlabs_voices(), Err(OwnVoiceError::Provider(why)) if why.contains("missing_permissions"))
+        );
+        assert!(
+            !maker.keys.status().elevenlabs.refused,
+            "a key without the voices permission still speaks"
+        );
         maker.keys.set(&[(Provider::ElevenLabs, None)]).unwrap();
-        assert!(matches!(maker.elevenlabs_voices(), Err(OwnVoiceError::Invalid(_))));
+        assert!(matches!(
+            maker.elevenlabs_voices(),
+            Err(OwnVoiceError::Invalid(_))
+        ));
         let _ = std::fs::remove_dir_all(scratch);
     }
 }

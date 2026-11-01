@@ -182,7 +182,9 @@ impl Target {
     ];
 
     fn from_argument(argument: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|target| target.argument() == argument)
+        Self::ALL
+            .into_iter()
+            .find(|target| target.argument() == argument)
     }
 
     fn argument(self) -> &'static str {
@@ -236,7 +238,11 @@ fn plan(target: Target, home: &Path, binary: &str, installing: bool) -> Result<C
     let (after, lines) = match target {
         Target::Merged(agent) => {
             let before = read(&path)?;
-            let after = if installing { install(before.clone(), agent, binary) } else { uninstall(before.clone()) };
+            let after = if installing {
+                install(before.clone(), agent, binary)
+            } else {
+                uninstall(before.clone())
+            };
             let lines = describe_change(&before, &after);
             (Contents::Merged(after), lines)
         }
@@ -247,7 +253,12 @@ fn plan(target: Target, home: &Path, binary: &str, installing: bool) -> Result<C
             (Contents::Owned(after), lines)
         }
     };
-    Ok(Change { target, path, after, lines })
+    Ok(Change {
+        target,
+        path,
+        after,
+        lines,
+    })
 }
 
 fn apply(change: &Change, home: &Path) -> Result<(), String> {
@@ -275,7 +286,11 @@ fn is_installed(target: Target, home: &Path, binary: &str) -> bool {
                 root.get("hooks")
                     .and_then(|hooks| hooks.get(*event))
                     .and_then(Value::as_array)
-                    .is_some_and(|groups| groups.iter().any(|group| commands(group).any(|command| command == wanted)))
+                    .is_some_and(|groups| {
+                        groups
+                            .iter()
+                            .any(|group| commands(group).any(|command| command == wanted))
+                    })
             })
         }
         Target::Owned(_) => std::fs::read_to_string(&path).is_ok_and(|text| text.contains(binary)),
@@ -289,7 +304,13 @@ fn describe_change(before: &Map<String, Value>, after: &Map<String, Value>) -> V
             .into_iter()
             .flatten()
             .map(|(event, groups)| {
-                let commands = groups.as_array().into_iter().flatten().flat_map(commands).map(str::to_owned).collect();
+                let commands = groups
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .flat_map(commands)
+                    .map(str::to_owned)
+                    .collect();
                 (event.clone(), commands)
             })
             .collect()
@@ -298,9 +319,20 @@ fn describe_change(before: &Map<String, Value>, after: &Map<String, Value>) -> V
     let names: std::collections::BTreeSet<&String> = earlier.keys().chain(later.keys()).collect();
     let mut lines = Vec::new();
     for event in names {
-        let (old, new) = (earlier.get(event).cloned().unwrap_or_default(), later.get(event).cloned().unwrap_or_default());
-        lines.extend(new.iter().filter(|command| !old.contains(command)).map(|command| format!("+ {event}: {command}")));
-        lines.extend(old.iter().filter(|command| !new.contains(command)).map(|command| format!("- {event}: {command}")));
+        let (old, new) = (
+            earlier.get(event).cloned().unwrap_or_default(),
+            later.get(event).cloned().unwrap_or_default(),
+        );
+        lines.extend(
+            new.iter()
+                .filter(|command| !old.contains(command))
+                .map(|command| format!("+ {event}: {command}")),
+        );
+        lines.extend(
+            old.iter()
+                .filter(|command| !new.contains(command))
+                .map(|command| format!("- {event}: {command}")),
+        );
     }
     lines
 }
@@ -310,27 +342,42 @@ fn describe_owned_file(before: Option<&str>, after: Option<&str>) -> Vec<String>
         return Vec::new();
     }
     let lines = |text: Option<&str>, sign: char| -> Vec<String> {
-        text.unwrap_or_default().lines().filter(|line| !line.is_empty()).map(|line| format!("{sign} {line}")).collect()
+        text.unwrap_or_default()
+            .lines()
+            .filter(|line| !line.is_empty())
+            .map(|line| format!("{sign} {line}"))
+            .collect()
     };
     [lines(before, '-'), lines(after, '+')].concat()
 }
 
 fn home() -> Result<PathBuf, String> {
-    std::env::var_os("HOME").map(PathBuf::from).ok_or_else(|| "HOME is not set".to_owned())
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .ok_or_else(|| "HOME is not set".to_owned())
 }
 
 /// The path written into configs: this binary, wherever it was installed.
 fn binary() -> Result<String, String> {
-    let binary = std::env::current_exe().map_err(|error| format!("cannot find this binary: {error}"))?;
-    binary.to_str().map(str::to_owned).ok_or_else(|| "this binary's path is not valid UTF-8".to_owned())
+    let binary =
+        std::env::current_exe().map_err(|error| format!("cannot find this binary: {error}"))?;
+    binary
+        .to_str()
+        .map(str::to_owned)
+        .ok_or_else(|| "this binary's path is not valid UTF-8".to_owned())
 }
 
 /// `vibebuddy-hook install|uninstall [agent]`: every agent that has run here, or just the one named.
 pub fn run(installing: bool, only: Option<&str>) -> Result<(), String> {
     let (home, binary) = (home()?, binary()?);
     let targets: Vec<Target> = match only {
-        Some(argument) => vec![Target::from_argument(argument).ok_or_else(|| format!("unknown agent {argument}"))?],
-        None => Target::ALL.into_iter().filter(|target| target.dir(&home).is_dir()).collect(),
+        Some(argument) => vec![
+            Target::from_argument(argument).ok_or_else(|| format!("unknown agent {argument}"))?,
+        ],
+        None => Target::ALL
+            .into_iter()
+            .filter(|target| target.dir(&home).is_dir())
+            .collect(),
     };
     if targets.is_empty() {
         println!(
@@ -339,11 +386,18 @@ pub fn run(installing: bool, only: Option<&str>) -> Result<(), String> {
     }
     for target in targets {
         if !target.dir(&home).is_dir() {
-            return Err(format!("{} wasn't found on this computer", target.display_name()));
+            return Err(format!(
+                "{} wasn't found on this computer",
+                target.display_name()
+            ));
         }
         let change = plan(target, &home, &binary, installing)?;
         if change.lines.is_empty() {
-            println!("{}: nothing to change in {}", target.display_name(), change.path.display());
+            println!(
+                "{}: nothing to change in {}",
+                target.display_name(),
+                change.path.display()
+            );
             continue;
         }
         apply(&change, &home)?;
@@ -392,9 +446,11 @@ pub fn status() -> Result<String, String> {
 
 /// `vibebuddy-hook plan install|uninstall <agent>`: the change, as JSON, without writing it.
 pub fn preview(installing: bool, argument: &str) -> Result<String, String> {
-    let target = Target::from_argument(argument).ok_or_else(|| format!("unknown agent {argument}"))?;
+    let target =
+        Target::from_argument(argument).ok_or_else(|| format!("unknown agent {argument}"))?;
     let change = plan(target, &home()?, &binary()?, installing)?;
-    serde_json::to_string(&json!({ "config": change.path, "lines": change.lines })).map_err(|error| error.to_string())
+    serde_json::to_string(&json!({ "config": change.path, "lines": change.lines }))
+        .map_err(|error| error.to_string())
 }
 
 /// A missing file is an empty config; a broken one is an error, never something to overwrite.
@@ -500,12 +556,18 @@ mod tests {
 
     #[test]
     fn the_diff_names_each_event_as_the_mac_does() {
-        let before = object(json!({ "hooks": { "Stop": [{ "hooks": [{ "command": "other-tool" }] }] } }));
+        let before =
+            object(json!({ "hooks": { "Stop": [{ "hooks": [{ "command": "other-tool" }] }] } }));
         let after = install(before.clone(), Agent::Codex, BINARY);
         let lines = describe_change(&before, &after);
         assert_eq!(lines.len(), Agent::Codex.events().len());
         assert!(lines.contains(&format!("+ Stop: \"{BINARY}\" codex")));
-        assert_eq!(describe_change(&after, &uninstall(after.clone())).first().map(|line| &line[..2]), Some("- "));
+        assert_eq!(
+            describe_change(&after, &uninstall(after.clone()))
+                .first()
+                .map(|line| &line[..2]),
+            Some("- ")
+        );
         assert!(describe_change(&after, &after).is_empty());
     }
 
@@ -518,7 +580,8 @@ mod tests {
 
     #[test]
     fn installed_means_every_event_runs_this_binary() {
-        let home = std::env::temp_dir().join(format!("vibebuddy-hook-status-{}", std::process::id()));
+        let home =
+            std::env::temp_dir().join(format!("vibebuddy-hook-status-{}", std::process::id()));
         let target = Target::Merged(Agent::Claude);
         let path = target.path(&home);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();

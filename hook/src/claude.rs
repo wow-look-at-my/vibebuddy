@@ -12,7 +12,14 @@ pub const ENDPOINT: &str = "http://127.0.0.1:7331/v1/claude-hooks";
 const BUNDLE_ID: &str = "com.anthropic.claudefordesktop";
 /// Only Code sessions started by the app have this variable; its value is the desktop session id.
 const DESKTOP_SESSION_ENV: &str = "CLAUDE_CODE_HOST_SESSION_ID";
-const ALLOWED_FIELDS: [&str; 6] = ["session_id", "prompt_id", "hook_event_name", "cwd", "agent_id", "agent_type"];
+const ALLOWED_FIELDS: [&str; 6] = [
+    "session_id",
+    "prompt_id",
+    "hook_event_name",
+    "cwd",
+    "agent_id",
+    "agent_type",
+];
 
 pub fn sanitized_payload(source: &Value) -> Option<Map<String, Value>> {
     let source = source.as_object()?;
@@ -28,11 +35,18 @@ pub fn sanitized_payload(source: &Value) -> Option<Map<String, Value>> {
     if payload.get("hook_event_name").and_then(Value::as_str) == Some("Stop")
         && requires_user_input(source.get("last_assistant_message").and_then(Value::as_str))
     {
-        payload.insert("response_kind".to_owned(), Value::String("input_required".to_owned()));
+        payload.insert(
+            "response_kind".to_owned(),
+            Value::String("input_required".to_owned()),
+        );
     }
-    let desktop_session = std::env::var(DESKTOP_SESSION_ENV).ok().filter(|value| !value.is_empty());
+    let desktop_session = std::env::var(DESKTOP_SESSION_ENV)
+        .ok()
+        .filter(|value| !value.is_empty());
     let surface = resolve_surface(surface::detect(BUNDLE_ID), desktop_session.as_deref());
-    if surface == Surface::App && let Some(id) = desktop_session {
+    if surface == Surface::App
+        && let Some(id) = desktop_session
+    {
         payload.insert("desktop_session_id".to_owned(), Value::String(id));
     }
     surface::write_into(&mut payload, &surface);
@@ -56,7 +70,12 @@ mod tests {
     /// The surface comes from environment variables, so in a test process it depends on where the test runs, unrelated to the filter under test.
     /// The decision itself is covered by resolve_surface and the pure-function tests in the surface module.
     fn without_surface(mut payload: Map<String, Value>) -> Map<String, Value> {
-        for key in ["surface", "host_bundle_id", "host_pids", "desktop_session_id"] {
+        for key in [
+            "surface",
+            "host_bundle_id",
+            "host_pids",
+            "desktop_session_id",
+        ] {
             payload.remove(key);
         }
         payload
@@ -102,7 +121,10 @@ mod tests {
 
     #[test]
     fn an_app_session_carries_the_desktop_id_it_was_told() {
-        assert_eq!(resolve_surface(Surface::App, Some("local_abc")), Surface::App);
+        assert_eq!(
+            resolve_surface(Surface::App, Some("local_abc")),
+            Surface::App
+        );
     }
 
     #[test]
@@ -117,7 +139,10 @@ mod tests {
     #[test]
     fn a_terminal_session_is_left_alone() {
         let ghostty = Surface::Host("com.mitchellh.ghostty".to_owned(), None);
-        assert_eq!(resolve_surface(ghostty, None), Surface::Host("com.mitchellh.ghostty".to_owned(), None));
+        assert_eq!(
+            resolve_surface(ghostty, None),
+            Surface::Host("com.mitchellh.ghostty".to_owned(), None)
+        );
         assert_eq!(resolve_surface(Surface::Headless, None), Surface::Headless);
     }
 
