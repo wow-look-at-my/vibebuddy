@@ -29,6 +29,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Test
         run: cargo test --workspace --locked
+      - name: Firmware core with updates off
+        run: cargo test -p vibebuddy-firmware-core --no-default-features --lib --locked disabled_build
       - name: Clippy
         # Errors fail the check; existing warnings are reported, not fatal.
         run: cargo clippy --workspace --all-targets --locked
