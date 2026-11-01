@@ -1,4 +1,4 @@
-# Checks every pull request, and main after it merges: the tests that were otherwise only run by hand.
+# Checks every pull request, and master after it merges: the tests that were otherwise only run by hand.
 # It builds nothing for release and publishes nothing: no secrets, no signing, no uploads. The device firmware
 # (Xtensa toolchain) is left to release-firmware.yml; its logic is in firmware-rs/core, tested here on the host.
 name: ci
@@ -6,7 +6,7 @@ name: ci
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [master]
 
 permissions:
   contents: read
