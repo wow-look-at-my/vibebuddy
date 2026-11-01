@@ -158,6 +158,9 @@ pub struct Activity {
     pub state: String,
 }
 
+/// The compile-time switch for every update path of the Linux app.
+pub const UPDATES_COMPILED_IN: bool = false;
+
 /// The daemon's view of updates; which firmware to offer is its call, as on the Mac.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
 #[serde(default)]

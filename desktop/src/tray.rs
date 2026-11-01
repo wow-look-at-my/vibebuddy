@@ -95,7 +95,7 @@ impl ksni::Tray for Tray {
             .into()
         };
         let daemon_down = self.menu.icon == FaceIcon::DaemonDown;
-        vec![
+        let mut items = vec![
             if daemon_down {
                 action(self.menu.device_line.clone(), TrayEvent::RestartDaemon)
             } else {
@@ -105,11 +105,20 @@ impl ksni::Tray for Tray {
             line(&self.menu.today_line),
             MenuItem::Separator,
             action(tr("Settings…", &[]), TrayEvent::OpenSettings),
-            action(tr("Check for Updates…", &[]), TrayEvent::CheckForUpdates),
-            action(tr("Report a Problem…", &[]), TrayEvent::ReportProblem),
-            // systemd keeps the daemon running, so unlike on the Mac, quitting leaves the box online.
-            action(tr("Quit", &[]), TrayEvent::Quit),
-        ]
+        ];
+        if crate::status::UPDATES_COMPILED_IN {
+            items.push(action(
+                tr("Check for Updates…", &[]),
+                TrayEvent::CheckForUpdates,
+            ));
+        }
+        items.push(action(
+            tr("Report a Problem…", &[]),
+            TrayEvent::ReportProblem,
+        ));
+        // systemd keeps the daemon running, so unlike on the Mac, quitting leaves the box online.
+        items.push(action(tr("Quit", &[]), TrayEvent::Quit));
+        items
     }
 }
 
