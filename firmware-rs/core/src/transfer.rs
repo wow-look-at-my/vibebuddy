@@ -148,7 +148,8 @@ impl Transfer {
     }
 
     /// Starts a transfer, or resumes the same one. Returns the offset to send from once the slot is erased for it;
-    /// None while erasing, and [`Self::erase_step`] gives the offset when done.
+    /// None while erasing, and [`Self::erase_step`] gives the offset when done. A firmware image is refused unless
+    /// the `firmware-update` feature is on, so nothing reaches an OTA slot or otadata.
     pub fn begin(
         &mut self,
         flash: &mut dyn Flash,
@@ -156,6 +157,9 @@ impl Transfer {
         size: u32,
         sha256: [u8; 32],
     ) -> Result<Option<u32>, Error> {
+        if kind == Kind::Firmware && !cfg!(feature = "firmware-update") {
+            return Err(Error::Unsupported);
+        }
         if let Some(image) = &self.image
             && image.kind == kind
             && image.size == size
@@ -360,11 +364,9 @@ mod tests {
     fn flash() -> MemoryFlash {
         let mut flash = MemoryFlash::new(0xa14000);
         let mut table = Vec::new();
-        for (label, kind, subtype, offset, size) in [
-            ("ota_0", 0u8, 0x10u8, 0x10000u32, 0x400000u32),
-            ("ota_1", 0, 0x11, 0x610000, 0x400000),
-            ("otadata", 1, 0x00, 0xa10000, 0x2000),
-        ] {
+        for (label, kind, subtype, offset, size) in
+            [("ota_0", 0u8, 0x10u8, 0x10000u32, 0x400000u32), ("ota_1", 0, 0x11, 0x610000, 0x400000), ("otadata", 1, 0x00, 0xa10000, 0x2000)]
+        {
             let mut entry = [0u8; 32];
             entry[0..2].copy_from_slice(&[0xAA, 0x50]);
             entry[2] = kind;
@@ -560,5 +562,18 @@ mod tests {
             "no OTA layout"
         );
         assert_eq!(transfer.end(&mut flash), Err(Error::Sequence));
+    }
+
+    #[cfg(not(feature = "firmware-update"))]
+    #[test]
+    fn disabled_build_refuses_a_firmware_image_and_writes_nothing() {
+        let mut flash = flash();
+        let before = flash.bytes.clone();
+        let image = test_image(10_000);
+        let mut transfer = Transfer::new();
+        assert_eq!(transfer.begin(&mut flash, Kind::Firmware, image.len() as u32, sha(&image)), Err(Error::Unsupported));
+        assert!(!transfer.active());
+        assert_eq!(transfer.end(&mut flash), Err(Error::Sequence));
+        assert!(flash.bytes == before, "no slot or otadata was touched");
     }
 }
