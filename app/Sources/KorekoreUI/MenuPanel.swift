@@ -138,7 +138,9 @@ public struct KorekoreMenuPanel: View {
     private var items: some View {
         VStack(spacing: 0) {
             item(0, String(localized: "Settings…"), key: "⌘,", action: actions.settings)
-            item(1, String(localized: "Check for updates…"), action: actions.checkForUpdates)
+            if UpdateSwitch.compiledIn {
+                item(1, String(localized: "Check for updates…"), action: actions.checkForUpdates)
+            }
             item(2, String(localized: "Report a problem…"), action: actions.reportProblem)
             item(3, String(localized: "Quit korekore (the box goes offline)"), key: "⌘Q", action: actions.quit)
         }

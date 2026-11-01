@@ -12,7 +12,7 @@ struct KorekoreGeneralPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 // Nothing stops working; the App just says, every time, that it's too old (ADR-0010).
-                if model.updates?.unsupportedApp == true {
+                if UpdateSwitch.compiledIn, model.updates?.unsupportedApp == true {
                     KCard(fill: Theme.Colors.cream, outline: Theme.Colors.korePinkText) {
                         KNote(String(localized: "This version of korekore is no longer supported. It keeps working; update to keep getting firmware for the box."),
                               color: Theme.Colors.ink)
@@ -47,28 +47,30 @@ struct KorekoreGeneralPage: View {
                         }
                     }
                 }
-                Text("Updates").font(.rounded(15)).padding(.leading, 4)
-                KRows {
-                    KRow(String(localized: "Check for updates")) {
-                        KToggle(String(localized: "Check for updates"),
-                                isOn: Binding(get: { model.status?.config.checkUpdates ?? model.updates?.enabled ?? false }, set: { model.setCheckUpdates($0) }))
-                            .disabled(model.status == nil)
-                    }
-                    KDivider()
-                    HStack(spacing: 12) {
-                        updateLine.frame(maxWidth: .infinity, alignment: .leading)
-                        if let app = model.updates?.app {
-                            if model.updater.available {
-                                Button(String(localized: "Install \(app.version)…")) { model.installApp(app) }.kButton(.sun)
-                            } else {
-                                Button(String(localized: "Download \(app.version)")) { model.installApp(app) }.kButton(.sun)
-                            }
+                if UpdateSwitch.compiledIn {
+                    Text("Updates").font(.rounded(15)).padding(.leading, 4)
+                    KRows {
+                        KRow(String(localized: "Check for updates")) {
+                            KToggle(String(localized: "Check for updates"),
+                                    isOn: Binding(get: { model.status?.config.checkUpdates ?? model.updates?.enabled ?? false }, set: { model.setCheckUpdates($0) }))
+                                .disabled(model.status == nil)
                         }
-                        Button(String(localized: "Check now")) { model.checkForUpdates() }.kButton()
-                            .disabled(!(model.updates?.enabled ?? false))
+                        KDivider()
+                        HStack(spacing: 12) {
+                            updateLine.frame(maxWidth: .infinity, alignment: .leading)
+                            if let app = model.updates?.app {
+                                if model.updater.available {
+                                    Button(String(localized: "Install \(app.version)…")) { model.installApp(app) }.kButton(.sun)
+                                } else {
+                                    Button(String(localized: "Download \(app.version)")) { model.installApp(app) }.kButton(.sun)
+                                }
+                            }
+                            Button(String(localized: "Check now")) { model.checkForUpdates() }.kButton()
+                                .disabled(!(model.updates?.enabled ?? false))
+                        }
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 16)
                     }
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 16)
                 }
                 KCard(padding: EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16)) {
                     HStack(spacing: 14) {
