@@ -622,6 +622,25 @@ mod tests {
     }
 
     #[test]
+    fn the_shipped_configuration_has_no_update_source() {
+        let url = "https://example.invalid/manifest.json";
+        // SAFETY: no other test reads this variable.
+        unsafe { std::env::set_var("VIBEBUDDY_MANIFEST_URL", url) };
+        let configured = Source::configured().map(|source| source.url);
+        unsafe { std::env::remove_var("VIBEBUDDY_MANIFEST_URL") };
+        assert_eq!(configured.as_deref(), COMPILED_IN.then_some(url));
+        assert_eq!(MANIFEST_URL.is_some(), COMPILED_IN);
+        assert!(!enabled_by_default() || COMPILED_IN);
+        let updates = Updates::new(configured.map(|url| Source { url, key: keys().1 }), None);
+        let status = updates.status(&DeviceState::default(), COMPILED_IN);
+        assert_eq!(status.enabled, COMPILED_IN);
+        assert!(status.app.is_none() && status.firmware.is_none());
+        if !COMPILED_IN {
+            assert_eq!(updates.relay_url(), None);
+        }
+    }
+
+    #[test]
     fn an_older_manifest_never_replaces_a_newer_one() {
         let mut updates = Updates::new(None, None);
         updates

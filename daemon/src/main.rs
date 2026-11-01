@@ -3928,6 +3928,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn update_checks_follow_the_compile_time_switch_not_the_config() {
+        let state = test_state(Arc::new(RecordingTransport::default()));
+        state.config.lock().await.check_updates = Some(true);
+        assert_eq!(state.update_checks_enabled().await, updates::COMPILED_IN);
+        let (status, Json(response)) = post_check_updates(State(state.clone())).await;
+        if !updates::COMPILED_IN {
+            assert_eq!(status, StatusCode::CONFLICT);
+            assert!(!response.accepted);
+        }
+        let snapshot = state.snapshot().await;
+        assert!(
+            !snapshot.updates.enabled,
+            "a test state has no update source"
+        );
+        assert!(snapshot.updates.app.is_none() && snapshot.updates.firmware.is_none());
+    }
+
+    #[tokio::test]
     async fn a_screenshot_is_assembled_from_shot_lines_into_a_png() {
         let transport = Arc::new(RecordingTransport::default());
         let state = test_state(transport.clone());
