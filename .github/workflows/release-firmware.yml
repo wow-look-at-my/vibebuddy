@@ -117,6 +117,7 @@ jobs:
             --latest=false
 
   manifest:
+    if: false
     # The new firmware goes into the update manifest, next to the latest App.
     needs: publish
     uses: ./.github/workflows/update-manifest.yml

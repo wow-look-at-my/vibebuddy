@@ -1303,6 +1303,10 @@ impl crate::App {
         let updates = self.updates();
         let offer = updates.and_then(|updates| updates.firmware.as_ref());
         let reason: Element<'_, Message> = match updates {
+            _ if !status::UPDATES_COMPILED_IN => note(tr(
+                "This build doesn't download firmware. Use Flash from file… on the Device page.",
+                &[],
+            )),
             Some(updates) if updates.enabled => match (&updates.error, offer) {
                 (Some(error), _) => tag(
                     tr("Couldn't get the firmware: %@", &[error]),
@@ -1324,7 +1328,10 @@ impl crate::App {
                     Some(Message::CheckForUpdatesNow),
                 )
             }))
-            .push(link(tr("Releases", &[]), Message::OpenReleases))
+            .push(
+                status::UPDATES_COMPILED_IN
+                    .then(|| link(tr("Releases", &[]), Message::OpenReleases)),
+            )
             .spacing(6)
             .into()
     }
@@ -1843,15 +1850,18 @@ impl crate::App {
                         .map(|offer| self.restart_panel(offer)),
                 )
                 .push(
-                    container(
-                        text(tr("Updates", &[]))
-                            .font(bold())
-                            .size(15)
-                            .color(theme::INK),
-                    )
-                    .padding(Padding::ZERO.left(4)),
+                    status::UPDATES_COMPILED_IN.then(|| -> Element<'_, Message> {
+                        container(
+                            text(tr("Updates", &[]))
+                                .font(bold())
+                                .size(15)
+                                .color(theme::INK),
+                        )
+                        .padding(Padding::ZERO.left(4))
+                        .into()
+                    }),
                 )
-                .push(updates_card)
+                .push(status::UPDATES_COMPILED_IN.then_some(updates_card))
                 .push(upgrade)
                 .push(about)
                 .spacing(14),

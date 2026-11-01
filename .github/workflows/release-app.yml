@@ -219,6 +219,7 @@ jobs:
             --notes-file notes.md
 
   manifest:
+    if: false
     # The new App version goes into the update manifest, next to every released firmware.
     needs: publish
     uses: ./.github/workflows/update-manifest.yml
