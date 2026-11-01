@@ -11,6 +11,8 @@ use alloc::vec::Vec;
 use core::ffi::CStr;
 use core::sync::atomic::{AtomicU32, Ordering};
 
+use edge_ws::{FrameHeader, FrameType};
+use embassy_executor::Spawner;
 use embassy_futures::select::{Either, Either4, select, select4};
 use embassy_net::dns::DnsQueryType;
 use embassy_net::tcp::TcpSocket;
@@ -20,11 +22,11 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Instant, Ticker, Timer};
-use edge_ws::{FrameHeader, FrameType};
-use esp_hal::rng::Rng;
+use esp_hal::rng::{Rng, Trng};
 use mbedtls_rs::io::Write as _;
 use mbedtls_rs::sys::hook::wall_clock::MbedtlsWallClock;
 use mbedtls_rs::{Certificate, ClientSessionConfig, Session, SessionConfig, Tls, X509};
+use vibebuddy_firmware_core::firmware::Firmware;
 use vibebuddy_firmware_core::relay_box;
 
 const TIME_HOST: &str = "time.cloudflare.com";
@@ -36,6 +38,23 @@ const PING_EVERY: Duration = Duration::from_secs(30);
 const DEAD_AFTER: Duration = Duration::from_secs(75);
 /// Largest frame accepted from the Relay; it caps its own at 8 KiB.
 const MAX_FRAME: usize = 8 * 1024 + 16;
+
+/// TLS for the Relay (ADR-0012): mbedtls with the TRNG, embassy's clock for timeouts, and the SNTP wall
+/// clock for certificate dates. The task waits for Wi-Fi and the box's id.
+pub fn start(spawner: &Spawner, stack: Stack<'static>, trng: &'static mut Trng, firmware: &Firmware) {
+    static TIMER: mbedtls_rs::sys::hook::backend::embassy::timer::EmbassyTimer = mbedtls_rs::sys::hook::backend::embassy::timer::EmbassyTimer;
+    static CLOCK: WallClock = WallClock;
+    // SAFETY: both hooks are statics, installed before any TLS session starts.
+    unsafe {
+        mbedtls_rs::sys::hook::timer::hook_timer(Some(&TIMER));
+        mbedtls_rs::sys::hook::wall_clock::hook_wall_clock(Some(&CLOCK));
+    }
+    let Ok(tls) = Tls::new(trng) else { return };
+    let Some(link) = firmware.link() else { return };
+    BOX_ID.signal(vibebuddy_firmware_core::link::encode(&link.public_key()));
+    URL.signal(firmware.relay_url().into());
+    spawner.spawn(task(stack, tls).expect("Relay task"));
+}
 
 /// What the Relay task tells the main loop.
 pub enum RelayIn {
@@ -210,11 +229,7 @@ async fn session(stack: Stack<'static>, tls: &Tls<'static>, host: &str, box_id: 
     socket.connect((IpAddress::Ipv4(address), 443)).await.map_err(|_| "connect")?;
     let roots = CStr::from_bytes_with_nul(ROOTS.as_bytes()).map_err(|_| "roots")?;
     let server_name = CString::new(host).map_err(|_| "host")?;
-    let config = ClientSessionConfig {
-        ca_chain: Some(Certificate::new(X509::PEM(roots)).map_err(|_| "roots")?),
-        server_name: Some(&server_name),
-        ..ClientSessionConfig::new()
-    };
+    let config = ClientSessionConfig { ca_chain: Some(Certificate::new(X509::PEM(roots)).map_err(|_| "roots")?), server_name: Some(&server_name), ..ClientSessionConfig::new() };
     let mut session = Session::new(tls.reference(), socket, &SessionConfig::Client(config)).map_err(|_| "tls")?;
     session.connect().await.map_err(|_| "tls handshake")?;
 
@@ -268,7 +283,9 @@ async fn session(stack: Stack<'static>, tls: &Tls<'static>, host: &str, box_id: 
                 }
                 FrameType::Ping => send_frame(&mut session, FrameType::Pong, &payload).await?,
                 // 4005: the Relay no longer speaks this protocol version; only a firmware update helps.
-                FrameType::Close if payload.get(..2) == Some(&4005u16.to_be_bytes()) => return Err(UPGRADE),
+                FrameType::Close if payload.get(..2) == Some(&4005u16.to_be_bytes()) => {
+                    return Err(UPGRADE);
+                }
                 FrameType::Close => return Err("closed by the relay"),
                 _ => {}
             }

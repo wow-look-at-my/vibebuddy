@@ -12,7 +12,7 @@ pub struct Config {
     pub voice: Option<String>,
     /// Whether the user is notified when the link has trouble: by the app on macOS, by the daemon elsewhere.
     pub notify_link: bool,
-    /// Whether to check for updates; None follows the build: on in releases, off when built from source (ADR-0010).
+    /// Whether to check for updates (ADR-0010). Only read when `updates::COMPILED_IN` is true; otherwise it is off.
     pub check_updates: Option<bool>,
     /// Whether to reach the box through the Relay when neither the cable nor the local network does (ADR-0012).
     pub relay: bool,
@@ -103,7 +103,9 @@ mod tests {
 
     #[test]
     fn a_config_from_before_the_relay_switch_keeps_the_relay_on() {
-        let config: Config = serde_json::from_str(r#"{"voice":null,"notify_link":true,"check_updates":null}"#).unwrap();
+        let config: Config =
+            serde_json::from_str(r#"{"voice":null,"notify_link":true,"check_updates":null}"#)
+                .unwrap();
         assert!(config.relay);
     }
 

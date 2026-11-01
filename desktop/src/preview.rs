@@ -9,10 +9,11 @@ use tokio::sync::Notify;
 
 const RATE: usize = 24_000;
 const STEPS: [i32; 89] = [
-    7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66, 73, 80, 88, 97, 107, 118,
-    130, 143, 157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408, 449, 494, 544, 598, 658, 724, 796, 876, 963, 1060,
-    1166, 1282, 1411, 1552, 1707, 1878, 2066, 2272, 2499, 2749, 3024, 3327, 3660, 4026, 4428, 4871, 5358, 5894, 6484,
-    7132, 7845, 8630, 9493, 10442, 11487, 12635, 13899, 15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767,
+    7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66,
+    73, 80, 88, 97, 107, 118, 130, 143, 157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408, 449,
+    494, 544, 598, 658, 724, 796, 876, 963, 1060, 1166, 1282, 1411, 1552, 1707, 1878, 2066, 2272,
+    2499, 2749, 3024, 3327, 3660, 4026, 4428, 4871, 5358, 5894, 6484, 7132, 7845, 8630, 9493,
+    10442, 11487, 12635, 13899, 15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767,
 ];
 const INDEX_CHANGE: [i32; 16] = [-1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8];
 
@@ -38,11 +39,15 @@ pub fn pcm(pack: &[u8]) -> Option<Vec<u8>> {
             let lines = u16_at(pack, 54);
             // The five ordinary occasions come first in the table.
             (0..usize::from(pack[53]).min(5))
-                .filter(|occasion| u16_at(pack, 58 + occasion * 4) > 0 && u16_at(pack, 56 + occasion * 4) < lines)
+                .filter(|occasion| {
+                    u16_at(pack, 58 + occasion * 4) > 0 && u16_at(pack, 56 + occasion * 4) < lines
+                })
                 .map(|occasion| {
                     let first = u16_at(pack, 56 + occasion * 4);
-                    let (offset, samples) = (u32_at(pack, 128 + first * 8), u32_at(pack, 132 + first * 8));
-                    pack.get(offset..offset + samples.div_ceil(2)).map(|bytes| decode(bytes, samples))
+                    let (offset, samples) =
+                        (u32_at(pack, 128 + first * 8), u32_at(pack, 132 + first * 8));
+                    pack.get(offset..offset + samples.div_ceil(2))
+                        .map(|bytes| decode(bytes, samples))
                 })
                 .collect::<Option<_>>()?
         }
@@ -73,7 +78,12 @@ fn decode(bytes: &[u8], samples: usize) -> Vec<u8> {
             if nibble & 1 != 0 {
                 diff += step >> 2;
             }
-            predictor = (if nibble & 8 != 0 { predictor - diff } else { predictor + diff }).clamp(-32768, 32767);
+            predictor = (if nibble & 8 != 0 {
+                predictor - diff
+            } else {
+                predictor + diff
+            })
+            .clamp(-32768, 32767);
             index = (index + INDEX_CHANGE[nibble as usize]).clamp(0, 88);
             input.push(predictor);
         }
@@ -84,10 +94,21 @@ fn decode(bytes: &[u8], samples: usize) -> Vec<u8> {
 /// A line the user's own voice said when tried: a 16 kHz mono 16-bit WAV, as 24 kHz stereo PCM. None for anything
 /// else.
 pub fn wav(wav: &[u8]) -> Option<Vec<u8>> {
-    if wav.len() < 44 || &wav[..4] != b"RIFF" || &wav[8..12] != b"WAVE" || u32_at(wav, 24) != 16_000 || u16_at(wav, 22) != 1 {
+    if wav.len() < 44
+        || &wav[..4] != b"RIFF"
+        || &wav[8..12] != b"WAVE"
+        || u32_at(wav, 24) != 16_000
+        || u16_at(wav, 22) != 1
+    {
         return None;
     }
-    let input: Vec<i32> = wav.get(44..)?.as_chunks::<2>().0.iter().map(|pair| i32::from(i16::from_le_bytes(*pair))).collect();
+    let input: Vec<i32> = wav
+        .get(44..)?
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| i32::from(i16::from_le_bytes(*pair)))
+        .collect();
     Some(upsample(&input))
 }
 
@@ -114,9 +135,26 @@ fn upsample(input: &[i32]) -> Vec<u8> {
 /// Plays `pcm` until it ends or `stop` is notified.
 pub async fn play(pcm: Vec<u8>, stop: Arc<Notify>) -> Result<(), String> {
     let players: [&[&str]; 3] = [
-        &["pw-play", "--rate", "24000", "--channels", "2", "--format", "s16", "-"],
-        &["paplay", "--raw", "--rate=24000", "--channels=2", "--format=s16le"],
-        &["aplay", "-q", "-t", "raw", "-f", "S16_LE", "-r", "24000", "-c", "2"],
+        &[
+            "pw-play",
+            "--rate",
+            "24000",
+            "--channels",
+            "2",
+            "--format",
+            "s16",
+            "-",
+        ],
+        &[
+            "paplay",
+            "--raw",
+            "--rate=24000",
+            "--channels=2",
+            "--format=s16le",
+        ],
+        &[
+            "aplay", "-q", "-t", "raw", "-f", "S16_LE", "-r", "24000", "-c", "2",
+        ],
     ];
     for player in players {
         let spawned = tokio::process::Command::new(player[0])
@@ -156,7 +194,11 @@ mod tests {
         // 4 samples of ADPCM become 6 stereo frames of 4 bytes.
         assert_eq!(decode(&[0x77, 0x77], 4).len(), 6 * 4);
         let silence = decode(&[0x00, 0x00], 4);
-        assert!(silence.chunks(2).all(|sample| i16::from_le_bytes([sample[0], sample[1]]).abs() < 8));
+        assert!(
+            silence
+                .chunks(2)
+                .all(|sample| i16::from_le_bytes([sample[0], sample[1]]).abs() < 8)
+        );
     }
 
     #[test]
@@ -178,13 +220,23 @@ mod tests {
     fn every_voice_a_character_is_made_with_has_a_preview() {
         let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
         let voices = std::fs::read_to_string(repo.join("characters/voices.tsv")).unwrap();
-        let ids: Vec<&str> = voices.lines().filter(|line| !line.is_empty() && !line.starts_with('#')).filter_map(|line| line.split('\t').next()).collect();
+        let ids: Vec<&str> = voices
+            .lines()
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .filter_map(|line| line.split('\t').next())
+            .collect();
         assert!(ids.len() >= 8);
         for id in ids {
             match crate::making::preview_of(id) {
                 // The robot's pack is built from the built-in lines when installing.
                 "robot" => assert!(repo.join("voices/jessica/done.pcm").is_file(), "{id}"),
-                preset => assert!(pcm(&std::fs::read(repo.join(format!("characters/{preset}/pack.bin"))).unwrap()).is_some(), "{id}"),
+                preset => assert!(
+                    pcm(
+                        &std::fs::read(repo.join(format!("characters/{preset}/pack.bin"))).unwrap()
+                    )
+                    .is_some(),
+                    "{id}"
+                ),
             }
         }
     }
@@ -192,7 +244,11 @@ mod tests {
     #[test]
     fn a_tried_line_plays_at_the_preview_rate() {
         let mut wav = b"RIFF\0\0\0\0WAVEfmt \x10\0\0\0\x01\0\x01\0\x80\x3e\0\0\0\x7d\0\0\x02\0\x10\0data\x08\0\0\0".to_vec();
-        wav.extend([1i16, 2, 3, 4].iter().flat_map(|sample| sample.to_le_bytes()));
+        wav.extend(
+            [1i16, 2, 3, 4]
+                .iter()
+                .flat_map(|sample| sample.to_le_bytes()),
+        );
         assert_eq!(super::wav(&wav).map(|pcm| pcm.len()), Some(6 * 4));
         assert_eq!(super::wav(b"RIFF....WAVE"), None);
     }

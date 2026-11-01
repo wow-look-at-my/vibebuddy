@@ -56,7 +56,10 @@ impl Look {
         if bytes[4] as i32 != WIDTH || bytes[5] as i32 != HEIGHT || bytes[6] as usize != FRAMES {
             return None;
         }
-        let mut look = Box::new(Look { palette: [0; COLORS], frames: [[0; FRAME_BYTES]; FRAMES] });
+        let mut look = Box::new(Look {
+            palette: [0; COLORS],
+            frames: [[0; FRAME_BYTES]; FRAMES],
+        });
         for (index, color) in look.palette.iter_mut().enumerate() {
             *color = u16::from_le_bytes([bytes[8 + index * 2], bytes[9 + index * 2]]);
         }
@@ -70,18 +73,39 @@ impl Look {
     fn index(&self, frame: Frame, x: i32, y: i32) -> u8 {
         let at = (y * WIDTH + x) as usize;
         let byte = self.frames[frame as usize][at / 2];
-        if at.is_multiple_of(2) { byte & 15 } else { byte >> 4 }
+        if at.is_multiple_of(2) {
+            byte & 15
+        } else {
+            byte >> 4
+        }
     }
 
     /// Draws a frame with its top-left corner at (left, top) on screen, at 2×. `mirror` flips it
     /// left to right; `gray` draws it in grays.
-    pub fn draw(&self, canvas: &mut Canvas, frame: Frame, left: i32, top: i32, mirror: bool, gray_out: bool) {
+    pub fn draw(
+        &self,
+        canvas: &mut Canvas,
+        frame: Frame,
+        left: i32,
+        top: i32,
+        mirror: bool,
+        gray_out: bool,
+    ) {
         self.draw_scaled(canvas, frame, left, top, SCALE, mirror, gray_out);
     }
 
     /// `draw` at another whole-number scale; the korekore screens draw a look at 1× or 2×.
     #[allow(clippy::too_many_arguments, reason = "draw's arguments and the scale")]
-    pub fn draw_scaled(&self, canvas: &mut Canvas, frame: Frame, left: i32, top: i32, scale: i32, mirror: bool, gray_out: bool) {
+    pub fn draw_scaled(
+        &self,
+        canvas: &mut Canvas,
+        frame: Frame,
+        left: i32,
+        top: i32,
+        scale: i32,
+        mirror: bool,
+        gray_out: bool,
+    ) {
         for y in 0..HEIGHT {
             for x in 0..WIDTH {
                 let index = self.index(frame, if mirror { WIDTH - 1 - x } else { x }, y);
@@ -98,7 +122,9 @@ impl Look {
     /// The topmost row any frame paints, so marks such as `!?` sit just above the head.
     pub fn head_row(&self) -> i32 {
         (0..HEIGHT)
-            .find(|&y| (0..WIDTH).any(|x| (0..FRAMES).any(|f| self.index(FRAME_ORDER[f], x, y) != 0)))
+            .find(|&y| {
+                (0..WIDTH).any(|x| (0..FRAMES).any(|f| self.index(FRAME_ORDER[f], x, y) != 0))
+            })
             .unwrap_or(0)
     }
 }
@@ -119,7 +145,8 @@ pub(crate) mod tests {
         bytes[..4].copy_from_slice(b"LOOK");
         bytes[4..8].copy_from_slice(&[WIDTH as u8, HEIGHT as u8, FRAMES as u8, 0]);
         for index in 0..COLORS {
-            bytes[8 + index * 2..10 + index * 2].copy_from_slice(&((index as u16) << 11).to_le_bytes());
+            bytes[8 + index * 2..10 + index * 2]
+                .copy_from_slice(&((index as u16) << 11).to_le_bytes());
         }
         for frame in 0..FRAMES {
             let color = frame as u8 + 1;
@@ -149,13 +176,25 @@ pub(crate) mod tests {
         // Frame Happy is color 3; its left half is painted from row 10 down.
         assert_eq!(pixel(&screen, 100, 20 + 20), 3 << 11);
         assert_eq!(pixel(&screen, 101, 21 + 20), 3 << 11);
-        assert_eq!(pixel(&screen, 100, 20 + 18), 0, "transparent above the head");
-        assert_eq!(pixel(&screen, 100 + 2 * WIDTH - 1, 20 + 40), 0, "the right half is empty");
+        assert_eq!(
+            pixel(&screen, 100, 20 + 18),
+            0,
+            "transparent above the head"
+        );
+        assert_eq!(
+            pixel(&screen, 100 + 2 * WIDTH - 1, 20 + 40),
+            0,
+            "the right half is empty"
+        );
 
         let mut screen = vec![0u8; SCREEN_BYTES];
         let mut canvas = Canvas::new(&mut screen);
         look.draw(&mut canvas, Frame::Normal, 100, 20, true, false);
-        assert_eq!(pixel(&screen, 100, 60), 0, "mirrored: the left is empty now");
+        assert_eq!(
+            pixel(&screen, 100, 60),
+            0,
+            "mirrored: the left is empty now"
+        );
         assert_eq!(pixel(&screen, 100 + 2 * WIDTH - 1, 60), 1 << 11);
     }
 

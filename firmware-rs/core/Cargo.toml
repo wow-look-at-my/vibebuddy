@@ -8,9 +8,12 @@ license.workspace = true
 # storage formats, chip register sequences. no_std, compiled once for the device and once for the Mac;
 # `cargo test` on the Mac runs the whole chain.
 [features]
-# For on-device acceptance testing: squeezes leisure's five minutes into five seconds and the pomodoro's
-# 25 minutes into 25 seconds.
+default = ["firmware-update"]
+# For on-device acceptance testing: squeezes leisure's minutes into a few seconds and the pomodoro's
+# minutes into many seconds.
 fast-clock = []
+# Taking a firmware image over a link (transfer.rs, ADR-0016). On for host tests; the device build decides for itself.
+firmware-update = []
 
 [dependencies]
 # The box's pairing key (link.rs). No default features: no std, no OS randomness; the seed comes from the device.

@@ -34,13 +34,22 @@ impl Flash for MemoryFlash {
     }
     fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), FlashError> {
         let start = offset as usize;
-        for (cell, byte) in self.0.get_mut(start..start + bytes.len()).ok_or(FlashError)?.iter_mut().zip(bytes) {
+        for (cell, byte) in self
+            .0
+            .get_mut(start..start + bytes.len())
+            .ok_or(FlashError)?
+            .iter_mut()
+            .zip(bytes)
+        {
             *cell &= byte;
         }
         Ok(())
     }
     fn erase(&mut self, from: u32, to: u32) -> Result<(), FlashError> {
-        self.0.get_mut(from as usize..to as usize).ok_or(FlashError)?.fill(0xFF);
+        self.0
+            .get_mut(from as usize..to as usize)
+            .ok_or(FlashError)?
+            .fill(0xFF);
         Ok(())
     }
 }
@@ -93,15 +102,23 @@ impl Board for SimulatedBoard {
         if let Some((conn, lines)) = &mut self.peer
             && let Some(stream) = self.conns.get_mut(conn)
         {
-            lines.lines(bytes, |_| true, |line| {
-                let _ = stream.write_all(format!("{line}\n").as_bytes());
-            });
+            lines.lines(
+                bytes,
+                |_| true,
+                |line| {
+                    let _ = stream.write_all(format!("{line}\n").as_bytes());
+                },
+            );
         }
         // Through the Relay, every line goes as one data message.
         if let (Some(lines), Some(relay)) = (&mut self.relay_peer, &self.relay) {
-            lines.lines(bytes, |_| true, |line| {
-                let _ = relay.send(relay_box::data(line));
-            });
+            lines.lines(
+                bytes,
+                |_| true,
+                |line| {
+                    let _ = relay.send(relay_box::data(line));
+                },
+            );
         }
     }
 
@@ -194,10 +211,13 @@ fn flash_with_partitions() -> MemoryFlash {
 
 /// Accepts connections on `port`, numbering them, and reads each on its own thread.
 fn listen(port: u16, sender: mpsc::Sender<Input>) {
-    let listener = TcpListener::bind(("127.0.0.1", port)).unwrap_or_else(|error| panic!("can't listen on {port}: {error}"));
+    let listener = TcpListener::bind(("127.0.0.1", port))
+        .unwrap_or_else(|error| panic!("can't listen on {port}: {error}"));
     std::thread::spawn(move || {
         for (conn, stream) in (1u32..).zip(listener.incoming().flatten()) {
-            let Ok(mut reader) = stream.try_clone() else { continue };
+            let Ok(mut reader) = stream.try_clone() else {
+                continue;
+            };
             if sender.send(Input::Opened(conn, stream)).is_err() {
                 break;
             }
@@ -205,7 +225,10 @@ fn listen(port: u16, sender: mpsc::Sender<Input>) {
             std::thread::spawn(move || {
                 let mut chunk = [0u8; 256];
                 while let Ok(count @ 1..) = reader.read(&mut chunk) {
-                    if sender.send(Input::Received(conn, chunk[..count].to_vec())).is_err() {
+                    if sender
+                        .send(Input::Received(conn, chunk[..count].to_vec()))
+                        .is_err()
+                    {
                         return;
                     }
                 }
@@ -217,7 +240,12 @@ fn listen(port: u16, sender: mpsc::Sender<Input>) {
 
 /// Keeps a socket to the Relay open as the box, reconnecting with backoff. The main loop signs and decides;
 /// this thread only moves text both ways and sends pings.
-fn relay(url: String, box_id: String, sender: mpsc::Sender<Input>, outgoing: mpsc::Receiver<String>) {
+fn relay(
+    url: String,
+    box_id: String,
+    sender: mpsc::Sender<Input>,
+    outgoing: mpsc::Receiver<String>,
+) {
     use tungstenite::Message;
     std::thread::spawn(move || {
         let mut backoff = Duration::from_secs(1);
@@ -242,9 +270,13 @@ fn relay(url: String, box_id: String, sender: mpsc::Sender<Input>, outgoing: mps
             loop {
                 match socket.read() {
                     Ok(Message::Text(text)) => {
-                        let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else { continue };
+                        let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+                            continue;
+                        };
                         let input = match value["t"].as_str() {
-                            Some("challenge") => Input::RelayChallenge(value["nonce"].as_str().unwrap_or_default().to_owned()),
+                            Some("challenge") => Input::RelayChallenge(
+                                value["nonce"].as_str().unwrap_or_default().to_owned(),
+                            ),
                             _ => Input::RelayMessage(value),
                         };
                         if sender.send(input).is_err() {
@@ -253,7 +285,11 @@ fn relay(url: String, box_id: String, sender: mpsc::Sender<Input>, outgoing: mps
                     }
                     Ok(Message::Close(_)) => break,
                     Ok(_) => {}
-                    Err(tungstenite::Error::Io(error)) if matches!(error.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
+                    Err(tungstenite::Error::Io(error))
+                        if matches!(
+                            error.kind(),
+                            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                        ) => {}
                     Err(_) => break,
                 }
                 while let Ok(text) = outgoing.try_recv() {
@@ -289,7 +325,13 @@ fn main() {
         }
     });
     let arguments: Vec<String> = std::env::args().collect();
-    let option = |name: &str| arguments.iter().position(|argument| argument == name).and_then(|index| arguments.get(index + 1)).cloned();
+    let option = |name: &str| {
+        arguments
+            .iter()
+            .position(|argument| argument == name)
+            .and_then(|index| arguments.get(index + 1))
+            .cloned()
+    };
     if let Some(port) = option("--tcp") {
         listen(port.parse().expect("--tcp takes a port"), sender.clone());
     }
@@ -304,7 +346,11 @@ fn main() {
         relay: None,
         relay_peer: None,
     };
-    let build = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../device/build/build.txt")).unwrap_or_else(|_| "simulator".to_owned());
+    let build = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../device/build/build.txt"
+    ))
+    .unwrap_or_else(|_| "simulator".to_owned());
     let mut firmware = Firmware::new(1, board.now_ms(), build.trim().as_bytes(), "0.0.0");
     firmware.boot(&mut board);
     let mut relay_box = RelayBox::new();
@@ -328,7 +374,9 @@ fn main() {
                     firmware.lan_closed(&mut board, conn);
                 }
                 Input::RelayChallenge(nonce) => {
-                    if let (Some(hello), Some(relay)) = (relay_box.hello(&firmware, &nonce), &board.relay) {
+                    if let (Some(hello), Some(relay)) =
+                        (relay_box.hello(&firmware, &nonce), &board.relay)
+                    {
                         let _ = relay.send(hello);
                     }
                 }

@@ -55,7 +55,9 @@ fn entries(flash: &mut dyn Flash, otadata: Region) -> Result<[Option<(u32, u32)>
 /// flash, which leaves otadata blank and boots `ota_0`.
 fn running_entry(entries: &[Option<(u32, u32)>; 2]) -> Option<(u32, u32)> {
     (0..2u32)
-        .filter_map(|sector| entries[sector as usize].map(|(sequence, state)| (sector, sequence, state)))
+        .filter_map(|sector| {
+            entries[sector as usize].map(|(sequence, state)| (sector, sequence, state))
+        })
         .filter(|&(_, _, state)| !matches!(state, STATE_INVALID | STATE_ABORTED))
         .max_by_key(|&(_, sequence, _)| sequence)
         .map(|(sector, sequence, _)| (sector, sequence))
@@ -76,7 +78,12 @@ pub fn running_slot(flash: &mut dyn Flash, otadata: Region) -> Result<usize, Fla
 /// to go back to; its sequence is the next above every entry that selects `slot`.
 pub fn select(flash: &mut dyn Flash, otadata: Region, slot: usize) -> Result<(), FlashError> {
     let entries = entries(flash, otadata)?;
-    let newest = entries.iter().flatten().map(|&(sequence, _)| sequence).max().unwrap_or(0);
+    let newest = entries
+        .iter()
+        .flatten()
+        .map(|&(sequence, _)| sequence)
+        .max()
+        .unwrap_or(0);
     let mut sequence = newest + 1;
     if slot_of(sequence) != slot {
         sequence += 1;
@@ -94,7 +101,10 @@ pub fn select(flash: &mut dyn Flash, otadata: Region, slot: usize) -> Result<(),
 /// The newest entry was given up on: the last update didn't confirm itself and the box went back.
 pub fn rolled_back(flash: &mut dyn Flash, otadata: Region) -> Result<bool, FlashError> {
     let entries = entries(flash, otadata)?;
-    let newest = entries.iter().flatten().max_by_key(|&&(sequence, _)| sequence);
+    let newest = entries
+        .iter()
+        .flatten()
+        .max_by_key(|&&(sequence, _)| sequence);
     Ok(newest.is_some_and(|&(_, state)| matches!(state, STATE_INVALID | STATE_ABORTED)))
 }
 
@@ -112,7 +122,9 @@ pub fn confirm(flash: &mut dyn Flash, otadata: Region) -> Result<Confirmed, Flas
             current = Some((sector, sequence));
         }
     }
-    let Some((sector, _)) = current else { return Ok(Confirmed::Nothing) };
+    let Some((sector, _)) = current else {
+        return Ok(Confirmed::Nothing);
+    };
     let offset = otadata.offset + sector * SECTOR_BYTES;
     let mut entry = [0u8; ENTRY_BYTES];
     flash.read(offset, &mut entry)?;
@@ -133,7 +145,10 @@ mod tests {
     use super::*;
     use crate::storage::tests::MemoryFlash;
 
-    const OTADATA: Region = Region { offset: 0x2000, size: 0x2000 };
+    const OTADATA: Region = Region {
+        offset: 0x2000,
+        size: 0x2000,
+    };
 
     fn entry(sequence: u32, state: u32) -> [u8; ENTRY_BYTES] {
         let mut entry = [0xFFu8; ENTRY_BYTES];
@@ -149,7 +164,10 @@ mod tests {
     }
 
     fn state(flash: &MemoryFlash, sector: u32) -> u32 {
-        word(&flash.bytes[(OTADATA.offset + sector * SECTOR_BYTES) as usize..], 24)
+        word(
+            &flash.bytes[(OTADATA.offset + sector * SECTOR_BYTES) as usize..],
+            24,
+        )
     }
 
     #[test]
@@ -171,9 +189,16 @@ mod tests {
         put(&mut flash, 0, &entry(1, STATE_VALID));
         put(&mut flash, 1, &entry(2, STATE_PENDING_VERIFY));
         assert_eq!(confirm(&mut flash, OTADATA), Ok(Confirmed::Now));
-        assert_eq!((state(&flash, 0), state(&flash, 1)), (STATE_VALID, STATE_VALID));
+        assert_eq!(
+            (state(&flash, 0), state(&flash, 1)),
+            (STATE_VALID, STATE_VALID)
+        );
         assert_eq!(word(&flash.bytes[0x3000..], 0), 2, "the sequence stays");
-        assert_eq!(confirm(&mut flash, OTADATA), Ok(Confirmed::Nothing), "only once");
+        assert_eq!(
+            confirm(&mut flash, OTADATA),
+            Ok(Confirmed::Nothing),
+            "only once"
+        );
     }
 
     #[test]
@@ -190,7 +215,11 @@ mod tests {
         let mut flash = MemoryFlash::new(0x4000);
         assert_eq!(running_slot(&mut flash, OTADATA), Ok(0));
         select(&mut flash, OTADATA, 1).unwrap();
-        assert_eq!(word(&flash.bytes[0x2000..], 0), 2, "sequence 2 selects ota_1");
+        assert_eq!(
+            word(&flash.bytes[0x2000..], 0),
+            2,
+            "sequence 2 selects ota_1"
+        );
         assert_eq!(state(&flash, 0), STATE_NEW);
         // The bootloader boots it; it confirms itself.
         assert_eq!(confirm(&mut flash, OTADATA), Ok(Confirmed::Now));
@@ -199,7 +228,10 @@ mod tests {
         // The next update goes back to ota_0, in the other sector, leaving the running entry alone.
         select(&mut flash, OTADATA, 0).unwrap();
         assert_eq!(word(&flash.bytes[0x3000..], 0), 3);
-        assert_eq!((state(&flash, 0), state(&flash, 1)), (STATE_VALID, STATE_NEW));
+        assert_eq!(
+            (state(&flash, 0), state(&flash, 1)),
+            (STATE_VALID, STATE_NEW)
+        );
         assert_eq!(rolled_back(&mut flash, OTADATA), Ok(false));
     }
 
@@ -211,8 +243,16 @@ mod tests {
         assert_eq!(rolled_back(&mut flash, OTADATA), Ok(true));
         assert_eq!(running_slot(&mut flash, OTADATA), Ok(0), "back on ota_0");
         select(&mut flash, OTADATA, 1).unwrap();
-        assert_eq!(word(&flash.bytes[0x3000..], 0), 4, "above the aborted 2, and selecting ota_1");
-        assert_eq!(state(&flash, 0), STATE_VALID, "the running entry stays to go back to");
+        assert_eq!(
+            word(&flash.bytes[0x3000..], 0),
+            4,
+            "above the aborted 2, and selecting ota_1"
+        );
+        assert_eq!(
+            state(&flash, 0),
+            STATE_VALID,
+            "the running entry stays to go back to"
+        );
         assert_eq!(rolled_back(&mut flash, OTADATA), Ok(false));
     }
 

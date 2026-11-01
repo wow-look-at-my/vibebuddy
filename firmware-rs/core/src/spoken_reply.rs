@@ -96,7 +96,15 @@ impl Default for ReplyPlayer {
 
 impl ReplyPlayer {
     pub const fn new() -> Self {
-        Self { replies: VecDeque::new(), floor: 0, decoder: None, pcm: Vec::new(), pcm_read: 0, pcm_len: 0, sounding: false }
+        Self {
+            replies: VecDeque::new(),
+            floor: 0,
+            decoder: None,
+            pcm: Vec::new(),
+            pcm_read: 0,
+            pcm_len: 0,
+            sounding: false,
+        }
     }
 
     pub fn apply(&mut self, audio: ReplyAudio) {
@@ -127,7 +135,14 @@ impl ReplyPlayer {
             Some(at) if self.replies[at].index == index => at,
             found => {
                 let at = found.unwrap_or(self.replies.len());
-                let reply = Reply { index, next_seq: 0, bytes: Vec::new(), read: 0, ended: false, dropped: false };
+                let reply = Reply {
+                    index,
+                    next_seq: 0,
+                    bytes: Vec::new(),
+                    read: 0,
+                    ended: false,
+                    dropped: false,
+                };
                 self.replies.insert(at, reply);
                 at
             }
@@ -144,7 +159,9 @@ impl ReplyPlayer {
             reply.ended = true;
             return;
         };
-        if reply.bytes.len() + data.len() > MAX_REPLY_BYTES || reply.bytes.try_reserve(data.len()).is_err() {
+        if reply.bytes.len() + data.len() > MAX_REPLY_BYTES
+            || reply.bytes.try_reserve(data.len()).is_err()
+        {
             return self.drop_reply(at);
         }
         reply.bytes.extend_from_slice(data);
@@ -295,9 +312,16 @@ mod tests {
 
     fn send(player: &mut ReplyPlayer, reply: u32, pieces: &[Vec<u8>]) {
         for (seq, data) in pieces.iter().enumerate() {
-            player.apply(ReplyAudio::Chunk { reply, seq: seq as u32, data: data.clone() });
+            player.apply(ReplyAudio::Chunk {
+                reply,
+                seq: seq as u32,
+                data: data.clone(),
+            });
         }
-        player.apply(ReplyAudio::End { reply, seq: pieces.len() as u32 });
+        player.apply(ReplyAudio::End {
+            reply,
+            seq: pieces.len() as u32,
+        });
     }
 
     /// Everything the player has to give, pulled in pieces the size the audio task uses.
@@ -324,27 +348,50 @@ mod tests {
     #[test]
     fn a_zeroed_decoder_decodes_like_a_new_one() {
         let zeroed = new_decoder().unwrap();
-        assert_eq!(one_shot(FIXTURE, (*zeroed).clone()), one_shot(FIXTURE, Decoder::new()));
+        assert_eq!(
+            one_shot(FIXTURE, (*zeroed).clone()),
+            one_shot(FIXTURE, Decoder::new())
+        );
     }
 
     #[test]
     fn odd_chunks_pulled_as_they_come_give_the_same_pcm_as_one_go() {
         let expected = one_shot(FIXTURE, Decoder::new());
-        for (sizes, piece) in [(&[1usize, 7, 333, 577][..], 1000usize), (&[576], 4), (&[97, 1500], 1004), (&[FIXTURE.len()], 3000)] {
+        for (sizes, piece) in [
+            (&[1usize, 7, 333, 577][..], 1000usize),
+            (&[576], 4),
+            (&[97, 1500], 1004),
+            (&[FIXTURE.len()], 3000),
+        ] {
             let mut player = ReplyPlayer::new();
             let pieces = chunks(FIXTURE, sizes);
             let mut out = Vec::new();
             let mut buffer = vec![0u8; piece];
             // The audio task pulls between chunks, so the player runs dry and waits along the way.
             for (seq, data) in pieces.iter().enumerate() {
-                player.apply(ReplyAudio::Chunk { reply: 0, seq: seq as u32, data: data.clone() });
+                player.apply(ReplyAudio::Chunk {
+                    reply: 0,
+                    seq: seq as u32,
+                    data: data.clone(),
+                });
                 let count = player.fill(&mut buffer);
                 out.extend_from_slice(&buffer[..count]);
             }
-            player.apply(ReplyAudio::End { reply: 0, seq: pieces.len() as u32 });
+            player.apply(ReplyAudio::End {
+                reply: 0,
+                seq: pieces.len() as u32,
+            });
             out.extend(drain(&mut player, piece));
-            assert!(out == expected, "chunks {sizes:?}, pulled {piece} at a time: {} bytes, expected {}", out.len(), expected.len());
-            assert!(!player.pending() && player.decoder.is_none() && player.pcm.is_empty(), "everything is let go of");
+            assert!(
+                out == expected,
+                "chunks {sizes:?}, pulled {piece} at a time: {} bytes, expected {}",
+                out.len(),
+                expected.len()
+            );
+            assert!(
+                !player.pending() && player.decoder.is_none() && player.pcm.is_empty(),
+                "everything is let go of"
+            );
         }
     }
 
@@ -352,17 +399,36 @@ mod tests {
     fn a_reply_starts_with_300_ms_buffered_without_waiting_for_its_end() {
         let mut player = ReplyPlayer::new();
         let mut buffer = [0u8; 1000];
-        player.apply(ReplyAudio::Chunk { reply: 0, seq: 0, data: FIXTURE[..START_BYTES - 1].to_vec() });
+        player.apply(ReplyAudio::Chunk {
+            reply: 0,
+            seq: 0,
+            data: FIXTURE[..START_BYTES - 1].to_vec(),
+        });
         assert_eq!(player.fill(&mut buffer), 0, "not yet");
         assert!(!player.speaking() && player.pending());
-        player.apply(ReplyAudio::Chunk { reply: 0, seq: 1, data: FIXTURE[START_BYTES - 1..START_BYTES].to_vec() });
+        player.apply(ReplyAudio::Chunk {
+            reply: 0,
+            seq: 1,
+            data: FIXTURE[START_BYTES - 1..START_BYTES].to_vec(),
+        });
         assert_eq!(player.fill(&mut buffer), 1000);
         assert!(player.speaking());
         // It plays until less than a frame's lookahead is left, then waits quietly instead of stuttering.
         let played = drain(&mut player, 1000).len() + 1000;
-        assert!(played < one_shot(&FIXTURE[..START_BYTES], Decoder::new()).len() && !player.speaking(), "{played}");
-        player.apply(ReplyAudio::Chunk { reply: 0, seq: 2, data: FIXTURE[START_BYTES..START_BYTES + 100].to_vec() });
-        assert_eq!(player.fill(&mut buffer), 0, "a little more isn't enough to start again");
+        assert!(
+            played < one_shot(&FIXTURE[..START_BYTES], Decoder::new()).len() && !player.speaking(),
+            "{played}"
+        );
+        player.apply(ReplyAudio::Chunk {
+            reply: 0,
+            seq: 2,
+            data: FIXTURE[START_BYTES..START_BYTES + 100].to_vec(),
+        });
+        assert_eq!(
+            player.fill(&mut buffer),
+            0,
+            "a little more isn't enough to start again"
+        );
         // A short reply that ends below the threshold plays at once.
         let mut short = ReplyPlayer::new();
         send(&mut short, 0, &[FIXTURE[..600].to_vec()]);
@@ -376,13 +442,27 @@ mod tests {
         let expected_whole = one_shot(FIXTURE, Decoder::new());
         let mut player = ReplyPlayer::new();
         // Reply 1 comes in whole before reply 0's end, but waits its turn.
-        player.apply(ReplyAudio::Chunk { reply: 0, seq: 0, data: first[..100].to_vec() });
+        player.apply(ReplyAudio::Chunk {
+            reply: 0,
+            seq: 0,
+            data: first[..100].to_vec(),
+        });
         send(&mut player, 1, &chunks(FIXTURE, &[768]));
-        player.apply(ReplyAudio::Chunk { reply: 0, seq: 1, data: first[100..].to_vec() });
+        player.apply(ReplyAudio::Chunk {
+            reply: 0,
+            seq: 1,
+            data: first[100..].to_vec(),
+        });
         player.apply(ReplyAudio::End { reply: 0, seq: 2 });
         let out = drain(&mut player, 1000);
-        assert!(out[..expected_first.len()] == expected_first[..], "reply 0 first");
-        assert!(out[expected_first.len()..] == expected_whole[..], "then reply 1, from a fresh decoder");
+        assert!(
+            out[..expected_first.len()] == expected_first[..],
+            "reply 0 first"
+        );
+        assert!(
+            out[expected_first.len()..] == expected_whole[..],
+            "then reply 1, from a fresh decoder"
+        );
     }
 
     #[test]
@@ -405,15 +485,26 @@ mod tests {
         let mut player = ReplyPlayer::new();
         for (seq, data) in pieces.iter().enumerate() {
             if seq != 3 {
-                player.apply(ReplyAudio::Chunk { reply: 0, seq: seq as u32, data: data.clone() });
+                player.apply(ReplyAudio::Chunk {
+                    reply: 0,
+                    seq: seq as u32,
+                    data: data.clone(),
+                });
             }
         }
-        player.apply(ReplyAudio::End { reply: 0, seq: pieces.len() as u32 });
+        player.apply(ReplyAudio::End {
+            reply: 0,
+            seq: pieces.len() as u32,
+        });
         send(&mut player, 1, &pieces);
         let played = drain(&mut player, 1000);
         assert!(played.ends_with(&expected), "the next reply plays whole");
         let first = played.len() - expected.len();
-        assert!(first > expected.len() * 3 / 4 && first < expected.len(), "{first} of {}", expected.len());
+        assert!(
+            first > expected.len() * 3 / 4 && first < expected.len(),
+            "{first} of {}",
+            expected.len()
+        );
 
         // A chunk that comes after a later one was taken is ignored; the reply carries on.
         let mut player = ReplyPlayer::new();
@@ -421,14 +512,28 @@ mod tests {
             if seq == 5 {
                 continue;
             }
-            player.apply(ReplyAudio::Chunk { reply: 0, seq: seq as u32, data: data.clone() });
+            player.apply(ReplyAudio::Chunk {
+                reply: 0,
+                seq: seq as u32,
+                data: data.clone(),
+            });
             if seq == 6 {
-                player.apply(ReplyAudio::Chunk { reply: 0, seq: 5, data: pieces[5].clone() });
+                player.apply(ReplyAudio::Chunk {
+                    reply: 0,
+                    seq: 5,
+                    data: pieces[5].clone(),
+                });
             }
         }
-        player.apply(ReplyAudio::End { reply: 0, seq: pieces.len() as u32 });
+        player.apply(ReplyAudio::End {
+            reply: 0,
+            seq: pieces.len() as u32,
+        });
         let played = drain(&mut player, 1000).len();
-        assert!(played > expected.len() * 3 / 4 && played < expected.len(), "{played}");
+        assert!(
+            played > expected.len() * 3 / 4 && played < expected.len(),
+            "{played}"
+        );
     }
 
     #[test]
@@ -460,7 +565,11 @@ mod tests {
         let mut player = ReplyPlayer::new();
         let piece = vec![0u8; 64 * 1024];
         for seq in 0..5 {
-            player.apply(ReplyAudio::Chunk { reply: 0, seq, data: piece.clone() });
+            player.apply(ReplyAudio::Chunk {
+                reply: 0,
+                seq,
+                data: piece.clone(),
+            });
         }
         assert!(player.replies[0].dropped && player.replies[0].bytes.capacity() == 0);
     }

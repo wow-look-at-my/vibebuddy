@@ -23,7 +23,11 @@ pub struct Voice {
 impl Voice {
     /// The provider as the UI names it.
     pub fn provider_name(&self) -> String {
-        if self.provider == "volc" { tr("Volcano Engine", &[]) } else { "ElevenLabs".to_owned() }
+        if self.provider == "volc" {
+            tr("Volcano Engine", &[])
+        } else {
+            "ElevenLabs".to_owned()
+        }
     }
 }
 
@@ -42,7 +46,9 @@ pub fn preview_of(id: &str) -> &str {
 /// Voices in `language` first, then the rest of ours, then the user's own; the daemon's order otherwise kept.
 pub fn sorted(voices: &[Voice], language: Option<&str>) -> Vec<Voice> {
     let (own, ours): (Vec<Voice>, Vec<Voice>) = voices.iter().cloned().partition(|voice| voice.own);
-    let (mut first, rest): (Vec<Voice>, Vec<Voice>) = ours.into_iter().partition(|voice| Some(voice.language.as_str()) == language);
+    let (mut first, rest): (Vec<Voice>, Vec<Voice>) = ours
+        .into_iter()
+        .partition(|voice| Some(voice.language.as_str()) == language);
     first.extend(rest);
     first.extend(own);
     first
@@ -61,7 +67,11 @@ pub struct ProviderVoice {
 impl std::fmt::Display for ProviderVoice {
     /// As the menu lists it: the account's own by name, ElevenLabs' stock ones marked.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.category == "premade" { write!(f, "{}", tr("%@ · stock", &[&self.name])) } else { write!(f, "{}", self.name) }
+        if self.category == "premade" {
+            write!(f, "{}", tr("%@ · stock", &[&self.name]))
+        } else {
+            write!(f, "{}", self.name)
+        }
     }
 }
 
@@ -121,7 +131,11 @@ impl Making {
     }
 
     pub fn progress(&self) -> f32 {
-        if self.total == 0 { 0.0 } else { self.done as f32 / self.total as f32 }
+        if self.total == 0 {
+            0.0
+        } else {
+            self.done as f32 / self.total as f32
+        }
     }
 
     /// Why it stopped, said for the user; `provider` names the voice's provider. None unless it failed.
@@ -130,14 +144,38 @@ impl Making {
             return None;
         }
         Some(match self.reason.as_deref() {
-            Some("plan") if !Plan::SHOWN => tr("Set your own key for %@ on the Account tab first.", &[&provider]),
-            Some("plan") => tr("Making a Character with VibeBuddy's voices needs the Paid plan, or your own key for %@.", &[&provider]),
-            Some("monthly") => tr("This month's Characters on the Paid plan are used up. The lines made so far are kept: resume next month, or with your own key for %@.", &[&provider]),
-            Some("global_cap") => tr("VibeBuddy's voices are paused for today. The lines made so far are kept: resume tomorrow.", &[]),
-            Some("signed_out") => tr("Sign in on the Account tab, or set your own key for %@ there, then resume.", &[&provider]),
-            Some("own_key") => tr("%@ refused your own key. Set another one on the Account tab, then resume.", &[&provider]),
-            Some("internal") => tr("Making the Character stopped unexpectedly. Resume to try again.", &[]),
-            _ => tr("Making the Character failed: %@", &[&self.error.as_deref().unwrap_or_default()]),
+            Some("plan") if !Plan::SHOWN => tr(
+                "Set your own key for %@ on the Account tab first.",
+                &[&provider],
+            ),
+            Some("plan") => tr(
+                "Making a Character with VibeBuddy's voices needs the Paid plan, or your own key for %@.",
+                &[&provider],
+            ),
+            Some("monthly") => tr(
+                "This month's Characters on the Paid plan are used up. The lines made so far are kept: resume next month, or with your own key for %@.",
+                &[&provider],
+            ),
+            Some("global_cap") => tr(
+                "VibeBuddy's voices are paused for today. The lines made so far are kept: resume tomorrow.",
+                &[],
+            ),
+            Some("signed_out") => tr(
+                "Sign in on the Account tab, or set your own key for %@ there, then resume.",
+                &[&provider],
+            ),
+            Some("own_key") => tr(
+                "%@ refused your own key. Set another one on the Account tab, then resume.",
+                &[&provider],
+            ),
+            Some("internal") => tr(
+                "Making the Character stopped unexpectedly. Resume to try again.",
+                &[],
+            ),
+            _ => tr(
+                "Making the Character failed: %@",
+                &[&self.error.as_deref().unwrap_or_default()],
+            ),
         })
     }
 }
@@ -158,7 +196,13 @@ pub enum Readiness {
 
 impl Readiness {
     pub fn of(voice: &Voice, keys: Option<&VoiceKeys>, account: &Account) -> Readiness {
-        let key = keys.map(|keys| if voice.provider == "volc" { &keys.volc } else { &keys.elevenlabs });
+        let key = keys.map(|keys| {
+            if voice.provider == "volc" {
+                &keys.volc
+            } else {
+                &keys.elevenlabs
+            }
+        });
         if key.is_some_and(|key| key.set && !key.refused) {
             Readiness::OwnKey
         } else if voice.own || !Plan::SHOWN {
@@ -180,10 +224,22 @@ impl Readiness {
 
     pub fn explanation(self, provider: &str) -> String {
         match self {
-            Readiness::OwnKey => tr("Made with your own key for %@, billed to your account there.", &[&provider]),
-            Readiness::PaidPlan => tr("Without your own key for %@, making a Character with VibeBuddy's voices needs the Paid plan.", &[&provider]),
-            Readiness::SignIn => tr("Sign in on the Account tab for the Paid plan, or set your own key for %@ there.", &[&provider]),
-            Readiness::OwnKeyOnly => tr("Set your own key for %@ on the Account tab first.", &[&provider]),
+            Readiness::OwnKey => tr(
+                "Made with your own key for %@, billed to your account there.",
+                &[&provider],
+            ),
+            Readiness::PaidPlan => tr(
+                "Without your own key for %@, making a Character with VibeBuddy's voices needs the Paid plan.",
+                &[&provider],
+            ),
+            Readiness::SignIn => tr(
+                "Sign in on the Account tab for the Paid plan, or set your own key for %@ there.",
+                &[&provider],
+            ),
+            Readiness::OwnKeyOnly => tr(
+                "Set your own key for %@ on the Account tab first.",
+                &[&provider],
+            ),
         }
     }
 }
@@ -195,7 +251,13 @@ const MAX_NAME: usize = 64;
 
 /// Whether line `index` can go: not when it is the last of its occasion.
 pub fn can_remove(index: usize, lines: &[Line]) -> bool {
-    lines.get(index).is_some_and(|line| lines.iter().filter(|other| other.occasion == line.occasion).count() > 1)
+    lines.get(index).is_some_and(|line| {
+        lines
+            .iter()
+            .filter(|other| other.occasion == line.occasion)
+            .count()
+            > 1
+    })
 }
 
 /// What stops these from being made, said for the user; None when they can be. `occasions` are the preset's.
@@ -207,18 +269,30 @@ pub fn problem(name: &str, lines: &[Line], occasions: &[String]) -> Option<Strin
     if lines.len() > MAX_LINES {
         return Some(tr("A Character has at most 110 lines.", &[]));
     }
-    if let Some(occasion) = occasions.iter().find(|occasion| !lines.iter().any(|line| &line.occasion == *occasion)) {
-        return Some(tr("Keep at least one line for “%@”.", &[&occasion_name(occasion)]));
+    if let Some(occasion) = occasions
+        .iter()
+        .find(|occasion| !lines.iter().any(|line| &line.occasion == *occasion))
+    {
+        return Some(tr(
+            "Keep at least one line for “%@”.",
+            &[&occasion_name(occasion)],
+        ));
     }
     for line in lines {
         if line.text.trim().is_empty() {
-            return Some(tr("A line for “%@” is empty.", &[&occasion_name(&line.occasion)]));
+            return Some(tr(
+                "A line for “%@” is empty.",
+                &[&occasion_name(&line.occasion)],
+            ));
         }
         if line.text.encode_utf16().count() > MAX_TEXT || line.text.contains(['\n', '\r', '\t']) {
             return Some(tr("Each line is one row of at most 1000 characters.", &[]));
         }
         if line.text.replace("{address}", "").contains(['{', '}']) {
-            return Some(tr("Only {address} goes in braces: it is where the form of address is said.", &[]));
+            return Some(tr(
+                "Only {address} goes in braces: it is where the form of address is said.",
+                &[],
+            ));
         }
     }
     None
@@ -254,7 +328,8 @@ pub fn directory(id: &str) -> Option<std::path::PathBuf> {
 
 /// The look a made Character wears: the one the user brought for it, else its base preset's.
 pub async fn look_of(made: &MadeCharacter) -> Option<Vec<u8>> {
-    if let Some(look) = directory(&made.id).and_then(|dir| std::fs::read(dir.join("look.bin")).ok()) {
+    if let Some(look) = directory(&made.id).and_then(|dir| std::fs::read(dir.join("look.bin")).ok())
+    {
         return Some(look);
     }
     crate::character::Pack::parse(&crate::assets::read_pack(&made.base).await.ok()?)?.look
@@ -264,19 +339,28 @@ pub async fn look_of(made: &MadeCharacter) -> Option<Vec<u8>> {
 /// plan: nothing is synthesized again.
 pub async fn pack_of(made: &MadeCharacter, form: Option<&str>) -> Result<Vec<u8>, String> {
     let dir = directory(&made.id).ok_or("no config directory")?;
-    let pack = tokio::fs::read(dir.join("pack.bin")).await.map_err(|_| tr("“%@” isn't finished yet.", &[&made.name]))?;
+    let pack = tokio::fs::read(dir.join("pack.bin"))
+        .await
+        .map_err(|_| tr("“%@” isn't finished yet.", &[&made.name]))?;
     let variant = match form {
-        Some(form) => tokio::fs::read(dir.join("address").join(format!("{form}.bin"))).await.ok(),
+        Some(form) => tokio::fs::read(dir.join("address").join(format!("{form}.bin")))
+            .await
+            .ok(),
         None => None,
     };
-    crate::character::made(&pack, variant.as_deref(), look_of(made).await, &made.id).ok_or_else(|| tr("“%@” isn't finished yet.", &[&made.name]))
+    crate::character::made(&pack, variant.as_deref(), look_of(made).await, &made.id)
+        .ok_or_else(|| tr("“%@” isn't finished yet.", &[&made.name]))
 }
 
 /// What was asked for a made Character, to make the rest of it after its job stopped.
 pub fn manifest(id: &str) -> Result<Request, String> {
-    let path = directory(id).ok_or("no config directory")?.join("manifest.json");
-    let text = std::fs::read_to_string(&path).map_err(|error| format!("{}: {error}", path.display()))?;
-    let mut request: Request = serde_json::from_str(&text).map_err(|error| format!("{}: {error}", path.display()))?;
+    let path = directory(id)
+        .ok_or("no config directory")?
+        .join("manifest.json");
+    let text =
+        std::fs::read_to_string(&path).map_err(|error| format!("{}: {error}", path.display()))?;
+    let mut request: Request =
+        serde_json::from_str(&text).map_err(|error| format!("{}: {error}", path.display()))?;
     request.id = Some(id.to_owned());
     Ok(request)
 }
@@ -287,68 +371,187 @@ mod tests {
     use crate::status::VoiceKey;
 
     fn line(occasion: &str, text: &str) -> Line {
-        Line { occasion: occasion.to_owned(), text: text.to_owned() }
+        Line {
+            occasion: occasion.to_owned(),
+            text: text.to_owned(),
+        }
     }
 
     #[test]
     fn edited_lines_keep_a_line_per_occasion_and_their_form_of_address() {
-        let lines = vec![line("done", "Done, {address}."), line("done", "Nice."), line("failed", "Oops.")];
+        let lines = vec![
+            line("done", "Done, {address}."),
+            line("done", "Nice."),
+            line("failed", "Oops."),
+        ];
         let occasions = ["done".to_owned(), "failed".to_owned()];
         assert_eq!(problem("Owl", &lines, &occasions), None);
         assert!(can_remove(0, &lines) && !can_remove(2, &lines) && !can_remove(3, &lines));
-        assert!(problem("Owl", &lines[..2], &occasions).is_some(), "an occasion without a line");
+        assert!(
+            problem("Owl", &lines[..2], &occasions).is_some(),
+            "an occasion without a line"
+        );
         assert!(problem("  ", &lines, &occasions).is_some(), "no name");
-        assert!(problem(&"x".repeat(65), &lines, &occasions).is_some(), "a name too long");
+        assert!(
+            problem(&"x".repeat(65), &lines, &occasions).is_some(),
+            "a name too long"
+        );
         for bad in [" ", "Two\nrows", "Hey {adress}.", &"x".repeat(1001)] {
-            let edited: Vec<Line> = std::iter::once(line("done", bad)).chain(lines.iter().cloned()).collect();
+            let edited: Vec<Line> = std::iter::once(line("done", bad))
+                .chain(lines.iter().cloned())
+                .collect();
             assert!(problem("Owl", &edited, &occasions).is_some(), "{bad:.20}");
         }
-        let many: Vec<Line> = std::iter::repeat_n(lines[1].clone(), 110).chain([lines[2].clone()]).collect();
-        assert!(problem("Owl", &many, &occasions).is_some(), "too many lines");
+        let many: Vec<Line> = std::iter::repeat_n(lines[1].clone(), 110)
+            .chain([lines[2].clone()])
+            .collect();
+        assert!(
+            problem("Owl", &many, &occasions).is_some(),
+            "too many lines"
+        );
     }
 
     #[test]
     fn without_an_own_key_for_its_provider_a_voice_needs_the_paid_plan() {
-        let voice = |provider: &str| Voice { id: "v".to_owned(), provider: provider.to_owned(), language: "en".to_owned(), name: "V".to_owned(), own: false };
-        let keys = VoiceKeys { elevenlabs: VoiceKey { set: true, refused: false }, volc: VoiceKey { set: true, refused: true } };
-        let signed_in = Account { available: true, signed_in: true, ..Account::default() };
-        let signed_out = Account { available: true, ..Account::default() };
-        assert_eq!(Readiness::of(&voice("elevenlabs"), Some(&keys), &Account::default()), Readiness::OwnKey);
-        let (paid_plan, sign_in) = if Plan::SHOWN { (Readiness::PaidPlan, Readiness::SignIn) } else { (Readiness::OwnKeyOnly, Readiness::OwnKeyOnly) };
-        assert_eq!(Readiness::of(&voice("volc"), Some(&keys), &signed_in), paid_plan, "a refused key doesn't count");
+        let voice = |provider: &str| Voice {
+            id: "v".to_owned(),
+            provider: provider.to_owned(),
+            language: "en".to_owned(),
+            name: "V".to_owned(),
+            own: false,
+        };
+        let keys = VoiceKeys {
+            elevenlabs: VoiceKey {
+                set: true,
+                refused: false,
+            },
+            volc: VoiceKey {
+                set: true,
+                refused: true,
+            },
+        };
+        let signed_in = Account {
+            available: true,
+            signed_in: true,
+            ..Account::default()
+        };
+        let signed_out = Account {
+            available: true,
+            ..Account::default()
+        };
+        assert_eq!(
+            Readiness::of(&voice("elevenlabs"), Some(&keys), &Account::default()),
+            Readiness::OwnKey
+        );
+        let (paid_plan, sign_in) = if Plan::SHOWN {
+            (Readiness::PaidPlan, Readiness::SignIn)
+        } else {
+            (Readiness::OwnKeyOnly, Readiness::OwnKeyOnly)
+        };
+        assert_eq!(
+            Readiness::of(&voice("volc"), Some(&keys), &signed_in),
+            paid_plan,
+            "a refused key doesn't count"
+        );
         assert_eq!(Readiness::of(&voice("volc"), None, &signed_out), sign_in);
-        assert_eq!(Readiness::of(&voice("volc"), None, &Account::default()), Readiness::OwnKeyOnly);
+        assert_eq!(
+            Readiness::of(&voice("volc"), None, &Account::default()),
+            Readiness::OwnKeyOnly
+        );
         assert!(!Readiness::SignIn.can_start() && Readiness::PaidPlan.can_start());
         // A voice of the user's own: only their own key speaks it, whatever the plan.
-        let own = Voice { own: true, ..voice("volc") };
-        let signed_in = Account { available: true, signed_in: true, ..Account::default() };
+        let own = Voice {
+            own: true,
+            ..voice("volc")
+        };
+        let signed_in = Account {
+            available: true,
+            signed_in: true,
+            ..Account::default()
+        };
         assert_eq!(Readiness::of(&own, None, &signed_in), Readiness::OwnKeyOnly);
     }
 
     #[test]
     fn a_voice_of_the_users_own_reads_and_comes_after_ours() {
         let voices: Vec<Voice> = serde_json::from_str(r#"[{"id":"own-1a2b3c4d","provider":"volc","voice":"S_me","language":"","gender":"","name":"Me","own":true},{"id":"ada","provider":"elevenlabs","voice":"t","language":"en","gender":"female","name":"Ada"}]"#).unwrap();
-        assert!(voices[0].own && !voices[1].own, "a voice without own is ours");
-        assert_eq!(sorted(&voices, None).iter().map(|voice| voice.id.as_str()).collect::<Vec<_>>(), ["ada", "own-1a2b3c4d"]);
+        assert!(
+            voices[0].own && !voices[1].own,
+            "a voice without own is ours"
+        );
+        assert_eq!(
+            sorted(&voices, None)
+                .iter()
+                .map(|voice| voice.id.as_str())
+                .collect::<Vec<_>>(),
+            ["ada", "own-1a2b3c4d"]
+        );
         let library: Vec<ProviderVoice> = serde_json::from_str(r#"[{"voice":"c1","name":"me","category":"cloned"},{"voice":"p1","name":"Rachel","category":"premade"}]"#).unwrap();
         assert_eq!(library[0].to_string(), "me");
-        assert!(library[1].to_string().starts_with("Rachel"), "a stock voice keeps its name");
+        assert!(
+            library[1].to_string().starts_with("Rachel"),
+            "a stock voice keeps its name"
+        );
     }
 
     #[test]
     fn the_daemons_answers_read_and_a_new_character_is_sent_without_an_id() {
         let made: Vec<MadeCharacter> = serde_json::from_str(r#"[{"id":"owl-1a2b3c4d","name":"Owl","base":"ada","voice":"luna","lines":55,"complete":false}]"#).unwrap();
-        assert_eq!(made[0], MadeCharacter { id: "owl-1a2b3c4d".to_owned(), name: "Owl".to_owned(), base: "ada".to_owned(), voice: "luna".to_owned(), lines: 55, complete: false });
+        assert_eq!(
+            made[0],
+            MadeCharacter {
+                id: "owl-1a2b3c4d".to_owned(),
+                name: "Owl".to_owned(),
+                base: "ada".to_owned(),
+                voice: "luna".to_owned(),
+                lines: 55,
+                complete: false
+            }
+        );
         let voices: Vec<Voice> = serde_json::from_str(r#"[{"id":"ada","provider":"elevenlabs","voice":"t","language":"en","gender":"female","name":"Ada"},{"id":"wanwanxiaohe","provider":"volc","voice":"z","language":"zh","gender":"female","name":"Xiaohe"}]"#).unwrap();
-        assert_eq!(sorted(&voices, Some("zh")).iter().map(|voice| voice.id.as_str()).collect::<Vec<_>>(), ["wanwanxiaohe", "ada"]);
-        let request = Request { id: None, name: "Owl".to_owned(), base: "ada".to_owned(), voice: "luna".to_owned(), lines: vec![line("done", "Done.")] };
+        assert_eq!(
+            sorted(&voices, Some("zh"))
+                .iter()
+                .map(|voice| voice.id.as_str())
+                .collect::<Vec<_>>(),
+            ["wanwanxiaohe", "ada"]
+        );
+        let request = Request {
+            id: None,
+            name: "Owl".to_owned(),
+            base: "ada".to_owned(),
+            voice: "luna".to_owned(),
+            lines: vec![line("done", "Done.")],
+        };
         let sent = serde_json::to_string(&request).unwrap();
-        assert!(!sent.contains("\"id\"") && sent.contains(r#""occasion":"done""#), "{sent}");
+        assert!(
+            !sent.contains("\"id\"") && sent.contains(r#""occasion":"done""#),
+            "{sent}"
+        );
         let manifest: Request = serde_json::from_str(r#"{"name":"Owl","base":"ada","voice":"luna","lines":[{"occasion":"done","text":"Done."}]}"#).unwrap();
         assert_eq!(manifest, request);
-        let failed = Making { state: "failed".to_owned(), reason: Some("plan".to_owned()), done: 2, total: 6, ..Making::default() };
+        let failed = Making {
+            state: "failed".to_owned(),
+            reason: Some("plan".to_owned()),
+            done: 2,
+            total: 6,
+            ..Making::default()
+        };
         // In whichever language the UI is, it names the provider.
-        assert!(!failed.running() && failed.explanation("ElevenLabs").unwrap().contains("ElevenLabs"));
-        assert_eq!(Making { state: "done".to_owned(), ..Making::default() }.explanation("ElevenLabs"), None);
+        assert!(
+            !failed.running()
+                && failed
+                    .explanation("ElevenLabs")
+                    .unwrap()
+                    .contains("ElevenLabs")
+        );
+        assert_eq!(
+            Making {
+                state: "done".to_owned(),
+                ..Making::default()
+            }
+            .explanation("ElevenLabs"),
+            None
+        );
     }
 }

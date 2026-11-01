@@ -9,16 +9,26 @@ use crate::i18n::{self, tr};
 
 /// Where to look, in order: `$XDG_DATA_HOME`, then each of `$XDG_DATA_DIRS`.
 fn data_dirs() -> Vec<PathBuf> {
-    search_dirs(std::env::var_os("XDG_DATA_HOME"), std::env::var_os("HOME"), std::env::var_os("XDG_DATA_DIRS"))
+    search_dirs(
+        std::env::var_os("XDG_DATA_HOME"),
+        std::env::var_os("HOME"),
+        std::env::var_os("XDG_DATA_DIRS"),
+    )
 }
 
-fn search_dirs(data_home: Option<OsString>, home: Option<OsString>, data_dirs: Option<OsString>) -> Vec<PathBuf> {
+fn search_dirs(
+    data_home: Option<OsString>,
+    home: Option<OsString>,
+    data_dirs: Option<OsString>,
+) -> Vec<PathBuf> {
     let home_dir = data_home
         .map(PathBuf::from)
         .filter(|dir| dir.is_absolute())
         .or_else(|| home.map(|home| PathBuf::from(home).join(".local/share")));
     // The spec's default when the variable is unset or empty.
-    let system = data_dirs.filter(|dirs| !dirs.is_empty()).unwrap_or_else(|| "/usr/local/share:/usr/share".into());
+    let system = data_dirs
+        .filter(|dirs| !dirs.is_empty())
+        .unwrap_or_else(|| "/usr/local/share:/usr/share".into());
     home_dir
         .into_iter()
         .chain(std::env::split_paths(&system).filter(|dir| dir.is_absolute()))
@@ -54,14 +64,46 @@ pub struct FormOfAddress {
 }
 
 pub const FORMS_OF_ADDRESS: [FormOfAddress; 8] = [
-    FormOfAddress { id: "laoban", words: "老板", language: Language::Chinese },
-    FormOfAddress { id: "dalao", words: "大佬", language: Language::Chinese },
-    FormOfAddress { id: "ge", words: "哥", language: Language::Chinese },
-    FormOfAddress { id: "jie", words: "姐", language: Language::Chinese },
-    FormOfAddress { id: "qin", words: "亲", language: Language::Chinese },
-    FormOfAddress { id: "boss", words: "boss", language: Language::English },
-    FormOfAddress { id: "captain", words: "captain", language: Language::English },
-    FormOfAddress { id: "buddy", words: "buddy", language: Language::English },
+    FormOfAddress {
+        id: "laoban",
+        words: "老板",
+        language: Language::Chinese,
+    },
+    FormOfAddress {
+        id: "dalao",
+        words: "大佬",
+        language: Language::Chinese,
+    },
+    FormOfAddress {
+        id: "ge",
+        words: "哥",
+        language: Language::Chinese,
+    },
+    FormOfAddress {
+        id: "jie",
+        words: "姐",
+        language: Language::Chinese,
+    },
+    FormOfAddress {
+        id: "qin",
+        words: "亲",
+        language: Language::Chinese,
+    },
+    FormOfAddress {
+        id: "boss",
+        words: "boss",
+        language: Language::English,
+    },
+    FormOfAddress {
+        id: "captain",
+        words: "captain",
+        language: Language::English,
+    },
+    FormOfAddress {
+        id: "buddy",
+        words: "buddy",
+        language: Language::English,
+    },
 ];
 
 /// The Mac app's `VoiceCatalogEntry.all`, with the same English keys for names and tags.
@@ -141,7 +183,11 @@ fn catalog() -> Vec<Voice> {
 
 /// The voices whose pack was installed, those in the UI's language first.
 pub fn voices() -> Vec<Voice> {
-    let preferred = if i18n::is_chinese() { Language::Chinese } else { Language::English };
+    let preferred = if i18n::is_chinese() {
+        Language::Chinese
+    } else {
+        Language::English
+    };
     let mut voices: Vec<Voice> = catalog()
         .into_iter()
         .filter_map(|mut voice| {
@@ -160,7 +206,10 @@ pub fn voices() -> Vec<Voice> {
 
 /// `id` as the catalog's own string, if the catalog has it.
 pub fn voice_id(id: &str) -> Option<&'static str> {
-    catalog().into_iter().find(|voice| voice.id == id).map(|voice| voice.id)
+    catalog()
+        .into_iter()
+        .find(|voice| voice.id == id)
+        .map(|voice| voice.id)
 }
 
 pub fn voice_name(id: &str) -> String {
@@ -173,17 +222,28 @@ pub fn voice_name(id: &str) -> String {
     if id == "robot" {
         return "VibeBuddy".to_owned();
     }
-    catalog().into_iter().find(|voice| voice.id == id).map(|voice| voice.name).unwrap_or_else(|| id.to_owned())
+    catalog()
+        .into_iter()
+        .find(|voice| voice.id == id)
+        .map(|voice| voice.name)
+        .unwrap_or_else(|| id.to_owned())
 }
 
 /// The voice to offer when the UI switches language, as the Mac's `switchSuggestion`: none when the box already
 /// speaks `language` or its voice is unknown ("builtin" is Jessica, English); otherwise the first installed voice in
 /// `language`, in catalog order.
 pub fn voice_switch(box_voice: &str, language: Language) -> Option<Voice> {
-    switch_among(catalog(), box_voice, language, |id| find_voice_pack(id).is_some())
+    switch_among(catalog(), box_voice, language, |id| {
+        find_voice_pack(id).is_some()
+    })
 }
 
-fn switch_among(catalog: Vec<Voice>, box_voice: &str, language: Language, installed: impl Fn(&str) -> bool) -> Option<Voice> {
+fn switch_among(
+    catalog: Vec<Voice>,
+    box_voice: &str,
+    language: Language,
+    installed: impl Fn(&str) -> bool,
+) -> Option<Voice> {
     let current = if box_voice == "builtin" {
         Language::English
     } else {
@@ -192,7 +252,9 @@ fn switch_among(catalog: Vec<Voice>, box_voice: &str, language: Language, instal
     if current == language {
         return None;
     }
-    catalog.into_iter().find(|voice| voice.language == language && installed(voice.id))
+    catalog
+        .into_iter()
+        .find(|voice| voice.language == language && installed(voice.id))
 }
 
 fn voice_pack(dir: &Path, id: &str) -> PathBuf {
@@ -200,33 +262,58 @@ fn voice_pack(dir: &Path, id: &str) -> PathBuf {
 }
 
 fn find_voice_pack(id: &str) -> Option<PathBuf> {
-    data_dirs().into_iter().map(|dir| voice_pack(&dir, id)).find(|path| path.is_file())
+    data_dirs()
+        .into_iter()
+        .map(|dir| voice_pack(&dir, id))
+        .find(|path| path.is_file())
 }
 
 /// An installed pack as it is, such as the robot with the built-in voice's lines (voices/robot.bin).
 pub async fn read_pack(id: &str) -> Result<Vec<u8>, String> {
-    let path = find_voice_pack(id).ok_or_else(|| format!("no voice pack named {id} is installed"))?;
-    tokio::fs::read(&path).await.map_err(|error| format!("{}: {error}", path.display()))
+    let path =
+        find_voice_pack(id).ok_or_else(|| format!("no voice pack named {id} is installed"))?;
+    tokio::fs::read(&path)
+        .await
+        .map_err(|error| format!("{}: {error}", path.display()))
 }
 
 /// The language a box Character speaks, from the id the box reports; None for one the catalog doesn't know.
 pub fn language_of(id: &str) -> Option<Language> {
-    catalog().into_iter().find(|voice| voice.id == id).map(|voice| voice.language)
+    catalog()
+        .into_iter()
+        .find(|voice| voice.id == id)
+        .map(|voice| voice.language)
 }
 
 /// Character `id` as the box should get it: its pack, with the lines of the form of address picked for
 /// its language swapped in when one is (installed as voices/<id>.<form>.bin next to the pack).
-pub async fn read_character(id: &str, form: Option<&str>) -> Result<crate::character::Pack, String> {
-    let path = find_voice_pack(id).ok_or_else(|| format!("no voice pack named {id} is installed"))?;
-    let data = tokio::fs::read(&path).await.map_err(|error| format!("{}: {error}", path.display()))?;
-    let pack = crate::character::Pack::parse(&data).ok_or_else(|| format!("{} is not a Character pack", path.display()))?;
+pub async fn read_character(
+    id: &str,
+    form: Option<&str>,
+) -> Result<crate::character::Pack, String> {
+    let path =
+        find_voice_pack(id).ok_or_else(|| format!("no voice pack named {id} is installed"))?;
+    let data = tokio::fs::read(&path)
+        .await
+        .map_err(|error| format!("{}: {error}", path.display()))?;
+    let pack = crate::character::Pack::parse(&data)
+        .ok_or_else(|| format!("{} is not a Character pack", path.display()))?;
     let variant = form.and_then(|form| {
-        data_dirs().into_iter().map(|dir| dir.join("voices").join(format!("{id}.{form}.bin"))).find(|path| path.is_file())
+        data_dirs()
+            .into_iter()
+            .map(|dir| dir.join("voices").join(format!("{id}.{form}.bin")))
+            .find(|path| path.is_file())
     });
-    Ok(match variant.and_then(|path| std::fs::read(path).ok()).as_deref().and_then(crate::character::Pack::parse) {
-        Some(variant) => pack.with_address(&variant),
-        None => pack,
-    })
+    Ok(
+        match variant
+            .and_then(|path| std::fs::read(path).ok())
+            .as_deref()
+            .and_then(crate::character::Pack::parse)
+        {
+            Some(variant) => pack.with_address(&variant),
+            None => pack,
+        },
+    )
 }
 
 #[cfg(test)]
@@ -235,18 +322,35 @@ mod tests {
 
     #[test]
     fn the_users_copy_comes_before_the_systems() {
-        let dirs = search_dirs(None, Some("/home/me".into()), Some("/usr/local/share:/usr/share".into()));
+        let dirs = search_dirs(
+            None,
+            Some("/home/me".into()),
+            Some("/usr/local/share:/usr/share".into()),
+        );
         assert_eq!(
             dirs,
-            ["/home/me/.local/share/vibebuddy", "/usr/local/share/vibebuddy", "/usr/share/vibebuddy"].map(PathBuf::from)
+            [
+                "/home/me/.local/share/vibebuddy",
+                "/usr/local/share/vibebuddy",
+                "/usr/share/vibebuddy"
+            ]
+            .map(PathBuf::from)
         );
     }
 
     #[test]
     fn unset_or_empty_data_dirs_fall_back_to_the_spec_default() {
-        let expected = ["/xdg/vibebuddy", "/usr/local/share/vibebuddy", "/usr/share/vibebuddy"].map(PathBuf::from);
+        let expected = [
+            "/xdg/vibebuddy",
+            "/usr/local/share/vibebuddy",
+            "/usr/share/vibebuddy",
+        ]
+        .map(PathBuf::from);
         assert_eq!(search_dirs(Some("/xdg".into()), None, None), expected);
-        assert_eq!(search_dirs(Some("/xdg".into()), None, Some("".into())), expected);
+        assert_eq!(
+            search_dirs(Some("/xdg".into()), None, Some("".into())),
+            expected
+        );
     }
 
     #[test]
@@ -255,17 +359,27 @@ mod tests {
         let switch = |voice, language, installed: &dyn Fn(&str) -> bool| {
             switch_among(catalog(), voice, language, installed).map(|voice| voice.id)
         };
-        assert_eq!(switch("builtin", Language::Chinese, &all), Some("wanwanxiaohe"));
+        assert_eq!(
+            switch("builtin", Language::Chinese, &all),
+            Some("wanwanxiaohe")
+        );
         assert_eq!(switch("wanwanxiaohe", Language::English, &all), Some("ada"));
         assert_eq!(switch("ada", Language::English, &all), None);
         assert_eq!(switch("someone-else", Language::English, &all), None);
-        assert_eq!(switch("wanwanxiaohe", Language::English, &|id: &str| id == "luna"), Some("luna"));
+        assert_eq!(
+            switch("wanwanxiaohe", Language::English, &|id: &str| id == "luna"),
+            Some("luna")
+        );
         assert_eq!(switch("builtin", Language::Chinese, &|_: &str| false), None);
     }
 
     #[test]
     fn relative_entries_are_ignored() {
-        let dirs = search_dirs(Some("relative".into()), None, Some("share:/opt/share".into()));
+        let dirs = search_dirs(
+            Some("relative".into()),
+            None,
+            Some("share:/opt/share".into()),
+        );
         assert_eq!(dirs, [PathBuf::from("/opt/share/vibebuddy")]);
     }
 }

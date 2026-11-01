@@ -145,7 +145,7 @@ final class AppModel: ObservableObject {
 
     /// One notification per new firmware version, only while the box is there to take it and once it's downloaded.
     private func notifyNewFirmware(_ status: Status) {
-        guard status.device.connected, Firmware.updateAvailable(status.updates), let offer = status.updates?.firmware,
+        guard UpdateSwitch.compiledIn, status.device.connected, Firmware.updateAvailable(status.updates), let offer = status.updates?.firmware,
               UserDefaults.standard.string(forKey: Self.notifiedFirmwareKey) != offer.version else { return }
         UserDefaults.standard.set(offer.version, forKey: Self.notifiedFirmwareKey)
         Notifier.notify(title: String(localized: "Box firmware \(offer.version) is available"),
@@ -207,19 +207,21 @@ final class AppModel: ObservableObject {
     }
 
     func setCheckUpdates(_ enabled: Bool) {
-        guard var config = status?.config else { return }
+        guard UpdateSwitch.compiledIn, var config = status?.config else { return }
         config.checkUpdates = enabled
         run { _ = try await self.client.putConfig(config) }
     }
 
     /// The daemon reads the manifest (firmware, and the App on Linux); on the Mac, Sparkle checks the App with its own window.
     func checkForUpdates() {
+        guard UpdateSwitch.compiledIn else { return }
         run { try await self.client.checkForUpdates() }
         updater.checkForUpdates()
     }
 
     /// Installs a newer App: Sparkle when this build has it, otherwise the download page.
     func installApp(_ offer: AppOffer) {
+        guard UpdateSwitch.compiledIn else { return }
         if updater.available {
             updater.checkForUpdates()
         } else if let url = URL(string: offer.url) {
@@ -462,7 +464,7 @@ final class AppModel: ObservableObject {
 
     var updates: UpdateStatus? { status?.updates }
     var offeredFirmware: FirmwareOffer? { updates?.firmware }
-    var firmwareUpdateAvailable: Bool { Firmware.updateAvailable(updates) }
+    var firmwareUpdateAvailable: Bool { UpdateSwitch.compiledIn && Firmware.updateAvailable(updates) }
     /// The offered firmware is on disk, so a box (including a factory one) can be flashed with it.
     var firmwareDownloaded: Bool { Firmware.files(of: offeredFirmware) != nil }
 

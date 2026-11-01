@@ -52,7 +52,10 @@ pub enum Output {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum State {
     /// Sent `link.noise` at this time; the ephemeral key waits for the computer's first message.
-    Waiting { ephemeral: [u8; 32], since: u32 },
+    Waiting {
+        ephemeral: [u8; 32],
+        since: u32,
+    },
     Linked,
 }
 
@@ -90,17 +93,21 @@ impl Lan {
 
     /// The computer linked over the network right now.
     pub fn linked_key(&self) -> Option<[u8; 32]> {
-        self.owner.filter(|owner| owner.gone_since.is_none() && owner.conn.is_some()).map(|owner| owner.key)
+        self.owner
+            .filter(|owner| owner.gone_since.is_none() && owner.conn.is_some())
+            .map(|owner| owner.key)
     }
 
     /// A computer is linked through the Relay right now.
     pub fn relay_link_active(&self) -> bool {
-        self.owner.is_some_and(|owner| owner.conn.is_none() && owner.gone_since.is_none())
+        self.owner
+            .is_some_and(|owner| owner.conn.is_none() && owner.gone_since.is_none())
     }
 
     /// A computer talked over the cable in the last [`USB_QUIET_MS`].
     pub fn cable_in_use(&self, now: u32) -> bool {
-        self.usb_at.is_some_and(|at| now.wrapping_sub(at) < USB_QUIET_MS)
+        self.usb_at
+            .is_some_and(|at| now.wrapping_sub(at) < USB_QUIET_MS)
     }
 
     /// A computer linked through the Relay, or that link ended. The Relay decides that link (ADR-0012); this
@@ -108,7 +115,13 @@ impl Lan {
     /// computer move to the local network.
     pub fn relay_linked(&mut self, key: Option<[u8; 32]>, now: u32) {
         match key {
-            Some(key) => self.owner = Some(Owner { key, conn: None, gone_since: None }),
+            Some(key) => {
+                self.owner = Some(Owner {
+                    key,
+                    conn: None,
+                    gone_since: None,
+                })
+            }
             None => {
                 if let Some(owner) = &mut self.owner
                     && owner.conn.is_none()
@@ -121,14 +134,33 @@ impl Lan {
     }
 
     /// A new connection. `ephemeral` must be fresh randomness: the box's ephemeral key for this session.
-    pub fn opened(&mut self, link: &Link, conn: Conn, ephemeral: [u8; 32], now: u32) -> Vec<Output> {
-        self.sessions.push(Session { conn, state: State::Waiting { ephemeral, since: now }, partial: Vec::new(), opener: None, sealer: None });
+    pub fn opened(
+        &mut self,
+        link: &Link,
+        conn: Conn,
+        ephemeral: [u8; 32],
+        now: u32,
+    ) -> Vec<Output> {
+        self.sessions.push(Session {
+            conn,
+            state: State::Waiting {
+                ephemeral,
+                since: now,
+            },
+            partial: Vec::new(),
+            opener: None,
+            sealer: None,
+        });
         alloc::vec![Output::Send(conn, noise::opener(&link.public_key()))]
     }
 
     /// The sealer for a connection that just became the peer ([`Output::Peer`]).
     pub fn take_sealer(&mut self, conn: Conn) -> Option<Sealer> {
-        self.sessions.iter_mut().find(|session| session.conn == conn)?.sealer.take()
+        self.sessions
+            .iter_mut()
+            .find(|session| session.conn == conn)?
+            .sealer
+            .take()
     }
 
     /// Bytes read from a connection.
@@ -136,12 +168,22 @@ impl Lan {
         let mut out = Vec::new();
         let mut rest = bytes;
         while !rest.is_empty() {
-            let Some(session) = self.sessions.iter_mut().find(|session| session.conn == conn) else { break };
+            let Some(session) = self
+                .sessions
+                .iter_mut()
+                .find(|session| session.conn == conn)
+            else {
+                break;
+            };
             let (piece, line_ended) = match rest.iter().position(|&byte| byte == b'\n') {
                 Some(end) => (&rest[..end], true),
                 None => (rest, false),
             };
-            rest = if line_ended { &rest[piece.len() + 1..] } else { &[] };
+            rest = if line_ended {
+                &rest[piece.len() + 1..]
+            } else {
+                &[]
+            };
             if session.partial.len() + piece.len() > MAX_LINE_BYTES {
                 out.extend(self.drop_conn(conn, now));
                 out.push(Output::Close(conn));
@@ -156,7 +198,11 @@ impl Lan {
                 line.pop();
             }
             match session.state {
-                State::Linked => match session.opener.as_mut().and_then(|opener| opener.open(&line)) {
+                State::Linked => match session
+                    .opener
+                    .as_mut()
+                    .and_then(|opener| opener.open(&line))
+                {
                     Some(line) => out.push(Output::Line(line)),
                     // Tampered, replayed or lost: the session is over, and the computer starts a new one.
                     None => {
@@ -165,7 +211,9 @@ impl Lan {
                         break;
                     }
                 },
-                State::Waiting { ephemeral, .. } => out.extend(self.handshake(link, conn, ephemeral, &line, now)),
+                State::Waiting { ephemeral, .. } => {
+                    out.extend(self.handshake(link, conn, ephemeral, &line, now))
+                }
             }
         }
         out
@@ -225,7 +273,14 @@ impl Lan {
         }
     }
 
-    fn handshake(&mut self, link: &Link, conn: Conn, ephemeral: [u8; 32], line: &[u8], now: u32) -> Vec<Output> {
+    fn handshake(
+        &mut self,
+        link: &Link,
+        conn: Conn,
+        ephemeral: [u8; 32],
+        line: &[u8],
+        now: u32,
+    ) -> Vec<Output> {
         let refuse = |code: &str| alloc::vec![Output::Send(conn, error(code)), Output::Close(conn)];
         let accepted = match noise::accept(link, ephemeral, line) {
             Ok(accepted) => accepted,
@@ -233,34 +288,68 @@ impl Lan {
             Err(Refused::Auth) => return self.refused(conn, refuse("auth")),
         };
         let key = accepted.computer;
-        let takeover = serde_json::from_slice::<Value>(&accepted.payload).is_ok_and(|payload| payload.get("takeover") == Some(&Value::Bool(true)));
+        let takeover = serde_json::from_slice::<Value>(&accepted.payload)
+            .is_ok_and(|payload| payload.get("takeover") == Some(&Value::Bool(true)));
         let mut sealer = accepted.sealer;
         let mut out = alloc::vec![Output::Send(conn, accepted.reply)];
-        let usb_in_use = self.usb_at.is_some_and(|at| now.wrapping_sub(at) < USB_QUIET_MS);
+        let usb_in_use = self
+            .usb_at
+            .is_some_and(|at| now.wrapping_sub(at) < USB_QUIET_MS);
         let free = match self.owner {
             None => true,
-            Some(owner) => owner.key == key || owner.gone_since.is_some_and(|since| now.wrapping_sub(since) >= GRACE_MS),
+            Some(owner) => {
+                owner.key == key
+                    || owner
+                        .gone_since
+                        .is_some_and(|since| now.wrapping_sub(since) >= GRACE_MS)
+            }
         };
         if usb_in_use || !(free || takeover) {
             let (reason, owner) = match self.owner {
                 _ if usb_in_use => ("usb", ""),
-                Some(owner) => ("linked", link.paired.iter().find(|paired| paired.key == owner.key).map_or("", |paired| paired.name.as_str())),
+                Some(owner) => (
+                    "linked",
+                    link.paired
+                        .iter()
+                        .find(|paired| paired.key == owner.key)
+                        .map_or("", |paired| paired.name.as_str()),
+                ),
                 None => ("linked", ""),
             };
             let busy = serde_json::to_string(&serde_json::json!({"version": 1, "event": "link.busy", "reason": reason, "owner": owner})).unwrap_or_default();
-            out.extend(sealer.seal(busy.as_bytes()).map(|line| Output::Send(conn, line)));
+            out.extend(
+                sealer
+                    .seal(busy.as_bytes())
+                    .map(|line| Output::Send(conn, line)),
+            );
             out.push(Output::Close(conn));
             return self.refused(conn, out);
         }
 
-        if let Some(previous) = self.owner.and_then(|owner| owner.conn).filter(|&previous| previous != conn) {
+        if let Some(previous) = self
+            .owner
+            .and_then(|owner| owner.conn)
+            .filter(|&previous| previous != conn)
+        {
             out.push(Output::SendPeer(unlinked("takeover")));
             out.push(Output::Close(previous));
             self.sessions.retain(|session| session.conn != previous);
         }
-        self.owner = Some(Owner { key, conn: Some(conn), gone_since: None });
-        out.extend(sealer.seal(br#"{"version":1,"event":"link.welcome"}"#).map(|line| Output::Send(conn, line)));
-        if let Some(session) = self.sessions.iter_mut().find(|session| session.conn == conn) {
+        self.owner = Some(Owner {
+            key,
+            conn: Some(conn),
+            gone_since: None,
+        });
+        out.extend(
+            sealer
+                .seal(br#"{"version":1,"event":"link.welcome"}"#)
+                .map(|line| Output::Send(conn, line)),
+        );
+        if let Some(session) = self
+            .sessions
+            .iter_mut()
+            .find(|session| session.conn == conn)
+        {
             session.state = State::Linked;
             session.opener = Some(accepted.opener);
             session.sealer = Some(sealer);
@@ -313,7 +402,9 @@ mod tests {
         }
 
         fn public(&self) -> [u8; 32] {
-            SigningKey::from_bytes(&self.seed).verifying_key().to_bytes()
+            SigningKey::from_bytes(&self.seed)
+                .verifying_key()
+                .to_bytes()
         }
 
         /// Answers the box's `link.noise` with the first handshake message.
@@ -322,7 +413,8 @@ mod tests {
             assert_eq!(value["event"], "link.noise");
             let box_key = link::decode::<32>(value["box"].as_str().unwrap()).unwrap();
             let payload = alloc::format!(r#"{{"takeover":{takeover}}}"#);
-            let (initiator, line) = Initiator::start(self.seed, &box_key, [5; 32], payload.as_bytes()).unwrap();
+            let (initiator, line) =
+                Initiator::start(self.seed, &box_key, [5; 32], payload.as_bytes()).unwrap();
             (initiator, alloc::format!("{line}\n").into_bytes())
         }
     }
@@ -352,30 +444,57 @@ mod tests {
     }
 
     fn event(line: &str) -> String {
-        serde_json::from_str::<Value>(line).unwrap()["event"].as_str().unwrap().to_string()
+        serde_json::from_str::<Value>(line).unwrap()["event"]
+            .as_str()
+            .unwrap()
+            .to_string()
     }
 
     fn setup(computers: &[&Computer]) -> (Lan, Link) {
         let mut link = Link::new([1; 32]);
         for (index, computer) in computers.iter().enumerate() {
-            link.pair(computer.public(), if index == 0 { "a" } else { "b" }).unwrap();
+            link.pair(computer.public(), if index == 0 { "a" } else { "b" })
+                .unwrap();
         }
         (Lan::new(), link)
     }
 
     /// Opens a connection and says hello; returns what came back, the sealed lines opened.
-    fn connect(lan: &mut Lan, link: &Link, conn: Conn, computer: &Computer, takeover: bool, now: u32) -> (Vec<Output>, Received) {
+    fn connect(
+        lan: &mut Lan,
+        link: &Link,
+        conn: Conn,
+        computer: &Computer,
+        takeover: bool,
+        now: u32,
+    ) -> (Vec<Output>, Received) {
         let opened = lan.opened(link, conn, [conn as u8; 32], now);
-        let Output::Send(_, line) = &opened[0] else { panic!() };
+        let Output::Send(_, line) = &opened[0] else {
+            panic!()
+        };
         let (initiator, hello) = computer.hello(line, takeover);
         let out = lan.received(link, conn, &hello, now);
         let mut lines = sent(&out, conn).into_iter();
         let first = lines.next().unwrap();
         let Some((sealer, mut opener)) = initiator.finish(first.as_bytes()) else {
-            return (out, Received { lines: std::vec![first], session: None });
+            return (
+                out,
+                Received {
+                    lines: std::vec![first],
+                    session: None,
+                },
+            );
         };
-        let lines = lines.map(|line| String::from_utf8(opener.open(line.as_bytes()).unwrap()).unwrap()).collect();
-        (out, Received { lines, session: Some((sealer, opener)) })
+        let lines = lines
+            .map(|line| String::from_utf8(opener.open(line.as_bytes()).unwrap()).unwrap())
+            .collect();
+        (
+            out,
+            Received {
+                lines,
+                session: Some((sealer, opener)),
+            },
+        )
     }
 
     fn first_event(received: &Received) -> String {
@@ -390,12 +509,22 @@ mod tests {
         assert_eq!(received.lines, [r#"{"version":1,"event":"link.welcome"}"#]);
         assert!(out.contains(&Output::Peer(Some(1))));
         assert_eq!(lan.linked_key(), Some(a.public()));
-        assert!(lan.take_sealer(1).is_some(), "the device layer gets the box's half");
+        assert!(
+            lan.take_sealer(1).is_some(),
+            "the device layer gets the box's half"
+        );
 
         let (mut sealer, _) = received.session.unwrap();
-        let line = sealer.seal(br#"{"version":1,"event":"device.hello"}"#).unwrap();
+        let line = sealer
+            .seal(br#"{"version":1,"event":"device.hello"}"#)
+            .unwrap();
         let out = lan.received(&link, 1, alloc::format!("{line}\n").as_bytes(), 10);
-        assert_eq!(out, [Output::Line(br#"{"version":1,"event":"device.hello"}"#.to_vec())]);
+        assert_eq!(
+            out,
+            [Output::Line(
+                br#"{"version":1,"event":"device.hello"}"#.to_vec()
+            )]
+        );
     }
 
     #[test]
@@ -403,7 +532,12 @@ mod tests {
         let a = Computer::new(2);
         let (mut lan, link) = setup(&[&a]);
         connect(&mut lan, &link, 1, &a, false, 0);
-        let out = lan.received(&link, 1, b"{\"version\":1,\"event\":\"device.volume\",\"level\":20}\n", 10);
+        let out = lan.received(
+            &link,
+            1,
+            b"{\"version\":1,\"event\":\"device.volume\",\"level\":20}\n",
+            10,
+        );
         assert!(!out.iter().any(|output| matches!(output, Output::Line(_))));
         assert!(out.contains(&Output::Close(1)));
         assert_eq!(lan.linked_key(), None);
@@ -419,7 +553,12 @@ mod tests {
         assert!(out.contains(&Output::Close(1)));
 
         lan.opened(&link, 2, [2; 32], 0);
-        let out = lan.received(&link, 2, b"{\"version\":1,\"event\":\"device.volume\",\"level\":20}\n", 0);
+        let out = lan.received(
+            &link,
+            2,
+            b"{\"version\":1,\"event\":\"device.volume\",\"level\":20}\n",
+            0,
+        );
         assert_eq!(sent(&out, 2), [error("bad_message")]);
         assert!(!out.iter().any(|output| matches!(output, Output::Line(_))));
         assert_eq!(lan.linked_key(), None);
@@ -433,17 +572,30 @@ mod tests {
         connect(&mut lan, &link, 1, &a, false, 0);
         let (_, busy) = connect(&mut lan, &link, 2, &b, false, 1000);
         assert_eq!(first_event(&busy), "link.busy");
-        assert!(busy.lines[0].contains(r#""owner":"a""#), "names who has the box");
+        assert!(
+            busy.lines[0].contains(r#""owner":"a""#),
+            "names who has the box"
+        );
 
         let (out, _) = connect(&mut lan, &link, 3, &b, true, 2000);
-        assert_eq!(sent_to_peer(&out), [unlinked("takeover")], "sealed for a, which is still the peer");
+        assert_eq!(
+            sent_to_peer(&out),
+            [unlinked("takeover")],
+            "sealed for a, which is still the peer"
+        );
         assert!(out.contains(&Output::Close(1)));
         assert_eq!(lan.linked_key(), Some(b.public()));
 
         // b goes away; a may come back only after the grace period, unless it takes over.
         lan.closed(3, 5000);
-        assert_eq!(first_event(&connect(&mut lan, &link, 4, &a, false, 5000 + GRACE_MS - 1).1), "link.busy");
-        assert_eq!(first_event(&connect(&mut lan, &link, 5, &a, false, 5000 + GRACE_MS).1), "link.welcome");
+        assert_eq!(
+            first_event(&connect(&mut lan, &link, 4, &a, false, 5000 + GRACE_MS - 1).1),
+            "link.busy"
+        );
+        assert_eq!(
+            first_event(&connect(&mut lan, &link, 5, &a, false, 5000 + GRACE_MS).1),
+            "link.welcome"
+        );
     }
 
     #[test]
@@ -452,7 +604,10 @@ mod tests {
         let (mut lan, link) = setup(&[&a]);
         connect(&mut lan, &link, 1, &a, false, 0);
         assert_eq!(lan.closed(1, 100), [Output::Peer(None)]);
-        assert_eq!(first_event(&connect(&mut lan, &link, 2, &a, false, 200).1), "link.welcome");
+        assert_eq!(
+            first_event(&connect(&mut lan, &link, 2, &a, false, 200).1),
+            "link.welcome"
+        );
     }
 
     #[test]
@@ -464,8 +619,14 @@ mod tests {
         assert_eq!(sent_to_peer(&out), [unlinked("usb")]);
         assert!(out.contains(&Output::Peer(None)));
         let busy = &connect(&mut lan, &link, 2, &a, true, 200).1.lines[0];
-        assert!(busy.contains(r#""reason":"usb""#), "not even a takeover while the cable talks: {busy}");
-        assert_eq!(first_event(&connect(&mut lan, &link, 3, &a, false, 100 + USB_QUIET_MS).1), "link.welcome");
+        assert!(
+            busy.contains(r#""reason":"usb""#),
+            "not even a takeover while the cable talks: {busy}"
+        );
+        assert_eq!(
+            first_event(&connect(&mut lan, &link, 3, &a, false, 100 + USB_QUIET_MS).1),
+            "link.welcome"
+        );
     }
 
     #[test]
@@ -474,8 +635,15 @@ mod tests {
         let b = Computer::new(3);
         let (mut lan, link) = setup(&[&a, &b]);
         lan.relay_linked(Some(a.public()), 0);
-        assert_eq!(first_event(&connect(&mut lan, &link, 1, &b, false, 10).1), "link.busy");
-        assert_eq!(first_event(&connect(&mut lan, &link, 2, &a, false, 20).1), "link.welcome", "the same computer moves to the network");
+        assert_eq!(
+            first_event(&connect(&mut lan, &link, 1, &b, false, 10).1),
+            "link.busy"
+        );
+        assert_eq!(
+            first_event(&connect(&mut lan, &link, 2, &a, false, 20).1),
+            "link.welcome",
+            "the same computer moves to the network"
+        );
     }
 
     #[test]
@@ -484,7 +652,10 @@ mod tests {
         let (mut lan, link) = setup(&[&a]);
         lan.opened(&link, 1, [1; 32], 0);
         assert!(lan.poll(HANDSHAKE_MS - 1).is_empty());
-        assert_eq!(lan.poll(HANDSHAKE_MS), [Output::Send(1, error("timeout")), Output::Close(1)]);
+        assert_eq!(
+            lan.poll(HANDSHAKE_MS),
+            [Output::Send(1, error("timeout")), Output::Close(1)]
+        );
     }
 
     #[test]
@@ -498,7 +669,10 @@ mod tests {
         let bytes = alloc::format!("{x}\r\n{y}\n").into_bytes();
         let (head, tail) = bytes.split_at(5);
         assert!(lan.received(&link, 1, head, 0).is_empty());
-        assert_eq!(lan.received(&link, 1, tail, 0), [Output::Line(b"x".to_vec()), Output::Line(b"y".to_vec())]);
+        assert_eq!(
+            lan.received(&link, 1, tail, 0),
+            [Output::Line(b"x".to_vec()), Output::Line(b"y".to_vec())]
+        );
     }
 
     #[test]

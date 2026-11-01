@@ -1,12 +1,12 @@
 # Firmware releases on their own (ADR-0010). A firmware-vX.Y.Z tag builds the three images, publishes
 # VibeBuddy-firmware-vX.Y.Z.zip as its own GitHub Release and rebuilds the update manifest, which is how installed Apps
-# find it. Commits to main that touch the firmware only build it, keeping the zip as a 7-day artifact for self-testing.
+# find it. Commits to master that touch the firmware only build it, keeping the zip as a 7-day artifact for self-testing.
 name: release-firmware
 
 on:
   push:
     tags: ["firmware-v[0-9]+.[0-9]+.[0-9]+"]
-    branches: [main]
+    branches: [master]
     paths:
       - "firmware-rs/**"
       - "protocol/**"
@@ -18,7 +18,7 @@ on:
       - ".github/workflows/release-firmware.yml"
   workflow_dispatch:
 
-# Tag releases must not be cancelled by later pushes; consecutive pushes to main keep only the latest run.
+# Tag releases must not be cancelled by later pushes; consecutive pushes to master keep only the latest run.
 concurrency:
   group: release-firmware-${{ github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
@@ -117,6 +117,7 @@ jobs:
             --latest=false
 
   manifest:
+    if: false
     # The new firmware goes into the update manifest, next to the latest App.
     needs: publish
     uses: ./.github/workflows/update-manifest.yml

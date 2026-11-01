@@ -83,14 +83,19 @@ pub struct TmuxPane {
 
 impl TmuxPane {
     pub fn from_hook(socket: Option<String>, pane: Option<String>) -> Option<Self> {
-        Some(Self { socket: socket?, pane: pane? })
+        Some(Self {
+            socket: socket?,
+            pane: pane?,
+        })
     }
 }
 
 impl Default for Surface {
     /// Old state files were written by versions that only supported desktop apps; read them back as App to keep the old behavior.
     fn default() -> Self {
-        Self::App { desktop_session_id: None }
+        Self::App {
+            desktop_session_id: None,
+        }
     }
 }
 
@@ -108,7 +113,12 @@ impl Surface {
         match kind {
             // Claims a host but gave no bundle id: nowhere to go, and falling back to App would jump to the wrong place.
             Some("host") => match host_bundle_id {
-                Some(bundle_id) => Self::Host { bundle_id, ttys: host_ttys.unwrap_or_default(), tmux, focus_url },
+                Some(bundle_id) => Self::Host {
+                    bundle_id,
+                    ttys: host_ttys.unwrap_or_default(),
+                    tmux,
+                    focus_url,
+                },
                 None => Self::Headless,
             },
             Some("headless") => Self::Headless,
@@ -387,9 +397,13 @@ impl ActivityTracker {
     /// and dedup keeps this computer quiet while nothing changes here. Idle when nothing runs. It never speaks: the box
     /// spoke when the state came, perhaps on another link.
     pub fn current_screen(&mut self) -> Event {
-        let mut current = self.activity_snapshot().unwrap_or_else(|| event("agent.idle", "", ""));
+        let mut current = self
+            .activity_snapshot()
+            .unwrap_or_else(|| event("agent.idle", "", ""));
         self.last_visible = Some(current.clone());
-        current.extra.insert("suppress_audio".to_owned(), json!(true));
+        current
+            .extra
+            .insert("suppress_audio".to_owned(), json!(true));
         current
     }
 
@@ -419,11 +433,17 @@ impl ActivityTracker {
             }
         };
         // A task waiting for an answer is the most urgent; go there first.
-        push(self.waiting_activity().and_then(|waiting| waiting.source.clone()));
+        push(
+            self.waiting_activity()
+                .and_then(|waiting| waiting.source.clone()),
+        );
         // The item whose end was announced has left the card stack and is no longer visible; tasks still running
         // stay on screen, so they never needed K2's help to find.
         push(self.recently_announced.clone());
-        push(self.focused_activity().and_then(|activity| activity.source.clone()));
+        push(
+            self.focused_activity()
+                .and_then(|activity| activity.source.clone()),
+        );
         push(self.last_source.clone());
         sources
     }
@@ -492,7 +512,12 @@ impl ActivityTracker {
         let now = chrono::Local::now().naive_local();
         let busy_hours = occasions::long_session_hours(self.today().busy_seconds);
         let long_session_due = busy_hours > self.stats.long_session_hours;
-        if let Some(occasion) = occasions::done_occasion(now, self.stats.done, self.stats.late_night, long_session_due) {
+        if let Some(occasion) = occasions::done_occasion(
+            now,
+            self.stats.done,
+            self.stats.late_night,
+            long_session_due,
+        ) {
             if occasion == "late_night_done" {
                 self.spend_late_night(now);
             }
@@ -500,7 +525,9 @@ impl ActivityTracker {
                 self.stats.long_session_hours = busy_hours;
                 self.save_stats();
             }
-            announced.extra.insert("occasion".to_owned(), json!(occasion));
+            announced
+                .extra
+                .insert("occasion".to_owned(), json!(occasion));
         }
         Some(announced)
     }
@@ -522,7 +549,9 @@ impl ActivityTracker {
             self.pending_say = Some(greeting);
         } else if quiet.is_some_and(|quiet| quiet >= occasions::WELCOME_BACK_QUIET) {
             let mut welcome = Event::named("buddy.say");
-            welcome.extra.insert("occasion".to_owned(), json!("welcome_back"));
+            welcome
+                .extra
+                .insert("occasion".to_owned(), json!("welcome_back"));
             self.pending_say = Some(welcome);
             self.save_stats();
         }
@@ -549,7 +578,9 @@ impl ActivityTracker {
         self.stats.last_activity = Some(now);
         self.save_stats();
         let mut greeting = Event::named("buddy.say");
-        greeting.extra.insert("occasion".to_owned(), json!(occasions::greeting(now)));
+        greeting
+            .extra
+            .insert("occasion".to_owned(), json!(occasions::greeting(now)));
         Some(greeting)
     }
 
@@ -721,7 +752,9 @@ impl ActivityTracker {
     /// the user should see what's still running.
     fn attach_tasks(&self, visible: &mut Event) {
         let activities = self.card_order();
-        visible.extra.insert("tasks_total".to_owned(), json!(activities.len()));
+        visible
+            .extra
+            .insert("tasks_total".to_owned(), json!(activities.len()));
         visible.extra.insert(
             "tasks".to_owned(),
             json!(
@@ -752,7 +785,12 @@ impl ActivityTracker {
     /// The card stack, its timers and its ids all follow it.
     fn card_order(&self) -> Vec<(&String, &Activity)> {
         let mut activities: Vec<(&String, &Activity)> = self.activities.iter().collect();
-        activities.sort_by_key(|(_, activity)| (activity.status != ActivityStatus::InputRequired, std::cmp::Reverse(activity.sequence)));
+        activities.sort_by_key(|(_, activity)| {
+            (
+                activity.status != ActivityStatus::InputRequired,
+                std::cmp::Reverse(activity.sequence),
+            )
+        });
         activities
     }
 
@@ -812,7 +850,10 @@ impl ActivityTracker {
     /// Where a tapped card leads (ADR-0019): the source of the activity whose `card_id` the box named. None when
     /// that activity has ended since, or has no source to open.
     pub fn card_source(&self, card: &str) -> Option<ActivitySource> {
-        self.activities.iter().find(|(key, _)| card_id(key) == card).and_then(|(_, activity)| activity.source.clone())
+        self.activities
+            .iter()
+            .find(|(key, _)| card_id(key) == card)
+            .and_then(|(_, activity)| activity.source.clone())
     }
 
     /// Stamp the fields that only mean something at send time: card timers and today's stats.
@@ -894,7 +935,9 @@ impl ActivityTracker {
                         ActivityStatus::InputRequired => "needs_input",
                     },
                     host,
-                    state_for_s: now.saturating_duration_since(activity.status_since).as_secs(),
+                    state_for_s: now
+                        .saturating_duration_since(activity.status_since)
+                        .as_secs(),
                     last_event_s: now.saturating_duration_since(activity.updated_at).as_secs(),
                     delegated: activity.child,
                 }
@@ -1047,7 +1090,9 @@ fn format_duration(seconds: u64) -> String {
 /// A task card's id: short, so the box can send it back on a tap, and the same for an activity as long as it lasts.
 /// FNV-1a of the activity's key; a clash between the few cards on screen is unlikely, and would only open the other one.
 fn card_id(key: &str) -> String {
-    let hash = key.bytes().fold(0x811c_9dc5_u32, |hash, byte| (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193));
+    let hash = key.bytes().fold(0x811c_9dc5_u32, |hash, byte| {
+        (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193)
+    });
     format!("{hash:08x}")
 }
 
@@ -1067,7 +1112,11 @@ fn event(name: &str, session_id: &str, title: &str) -> Event {
 /// `prefix` tells which agent is running; `fallback` is for when the working directory is unavailable.
 /// Two agents may work in the same directory, and only the prefix tells the user which window to switch to.
 pub fn project_title(prefix: &str, cwd: Option<&str>, fallback: &str) -> String {
-    display_title(prefix, project_name(cwd).as_deref().unwrap_or(fallback), fallback)
+    display_title(
+        prefix,
+        project_name(cwd).as_deref().unwrap_or(fallback),
+        fallback,
+    )
 }
 
 /// Name of the project the working directory belongs to (the project root's directory name).
@@ -1193,7 +1242,13 @@ mod tests {
         let mut tracker = ActivityTracker::default();
         let build = id("ci", "ci:1");
         tracker.observe(&build, "CI:BUILD", ActivityStatus::Working);
-        tracker.associate_source(&build, ActivitySource::GitHubActions { repo: "o/r".to_owned(), run_id: 1 });
+        tracker.associate_source(
+            &build,
+            ActivitySource::GitHubActions {
+                repo: "o/r".to_owned(),
+                run_id: 1,
+            },
+        );
         let waiting = id("thread", "thread:turn");
         tracker.note_project(&waiting, "VIBE-BUDDY");
         tracker.require_input(&waiting, "CX:REVIEW");
@@ -1228,11 +1283,23 @@ mod tests {
         let done = id("a", "a:1");
         tracker.note_project(&done, "VIBE-BUDDY");
         tracker.observe(&done, "CX:REVIEW", ActivityStatus::Working);
-        tracker.associate_source(&done, ActivitySource::Codex { thread_id: "a".to_owned(), surface: Surface::default() });
+        tracker.associate_source(
+            &done,
+            ActivitySource::Codex {
+                thread_id: "a".to_owned(),
+                surface: Surface::default(),
+            },
+        );
         tracker.finish(&done, "CX:REVIEW");
         let failed = id("ci", "ci:1");
         tracker.observe(&failed, "CI:BUILD", ActivityStatus::Working);
-        tracker.associate_source(&failed, ActivitySource::GitHubActions { repo: "o/r".to_owned(), run_id: 1 });
+        tracker.associate_source(
+            &failed,
+            ActivitySource::GitHubActions {
+                repo: "o/r".to_owned(),
+                run_id: 1,
+            },
+        );
         tracker.fail(&failed, "CI:BUILD");
         let stopped = id("b", "b:1");
         tracker.observe(&stopped, "CC:DOCS", ActivityStatus::Working);
@@ -1252,8 +1319,11 @@ mod tests {
         tracker.finish(&id("x", "x:1"), "CX:GHOST");
 
         let report = tracker.report();
-        let ended: Vec<(&str, Ending)> =
-            report.recently_ended.iter().map(|ended| (ended.title.as_str(), ended.ended)).collect();
+        let ended: Vec<(&str, Ending)> = report
+            .recently_ended
+            .iter()
+            .map(|ended| (ended.title.as_str(), ended.ended))
+            .collect();
         assert_eq!(
             ended,
             [
@@ -1265,7 +1335,10 @@ mod tests {
             ]
         );
         assert_eq!(report.recently_ended[4].agent, "codex");
-        assert_eq!(report.recently_ended[4].project.as_deref(), Some("VIBE-BUDDY"));
+        assert_eq!(
+            report.recently_ended[4].project.as_deref(),
+            Some("VIBE-BUDDY")
+        );
         assert_eq!(report.recently_ended[3].agent, "github-actions");
         assert_eq!(report.recently_ended[2].agent, "unknown");
         assert!(report.recently_ended.iter().all(|ended| ended.ended_s < 5));
@@ -1309,7 +1382,9 @@ mod tests {
         let newer = id("newer", "newer:1");
         tracker.require_input(&newer, "CX:NEWER");
 
-        let snapshot = tracker.activity_snapshot().expect("there should be a visible activity");
+        let snapshot = tracker
+            .activity_snapshot()
+            .expect("there should be a visible activity");
         let tasks = snapshot.extra["tasks"].as_array().expect("cards");
         let older_card = tasks[1]["id"].as_str().expect("every card has an id");
         assert_eq!(tasks[1]["title"], "CC:OLDER");
@@ -1317,8 +1392,16 @@ mod tests {
         assert_eq!(older_card.len(), 8);
         // Not K2's choice, which would be the one waiting for input: the card that was tapped.
         assert_eq!(tracker.card_source(older_card), Some(codex));
-        assert_eq!(tracker.card_source(tasks[0]["id"].as_str().unwrap()), None, "no source to open");
-        assert_eq!(tracker.card_source("00000000"), None, "gone, or never there");
+        assert_eq!(
+            tracker.card_source(tasks[0]["id"].as_str().unwrap()),
+            None,
+            "no source to open"
+        );
+        assert_eq!(
+            tracker.card_source("00000000"),
+            None,
+            "gone, or never there"
+        );
     }
 
     #[test]
@@ -1516,11 +1599,20 @@ mod tests {
         let parent = id("session", "session:turn");
         tracker.observe(&parent, "CC:MAIN", ActivityStatus::Working);
         tracker.observe_child(&id("session", "session:turn:agent"), "CC:MAIN");
-        tracker.activities.get_mut(&parent.key).expect("parent should be tracked").updated_at += CHILD_TTL;
+        tracker
+            .activities
+            .get_mut(&parent.key)
+            .expect("parent should be tracked")
+            .updated_at += CHILD_TTL;
 
         tracker.sweep_expired_at(Instant::now() + CHILD_TTL + Duration::from_secs(1));
-        let done = tracker.finish(&parent, "CC:MAIN").expect("finishing should be visible");
-        assert_eq!(done.extra.get("announcement").and_then(|v| v.as_str()), Some("done"));
+        let done = tracker
+            .finish(&parent, "CC:MAIN")
+            .expect("finishing should be visible");
+        assert_eq!(
+            done.extra.get("announcement").and_then(|v| v.as_str()),
+            Some("done")
+        );
     }
 
     #[test]
@@ -1575,7 +1667,9 @@ mod tests {
             .sweep_expired_at(Instant::now() + WORKING_TTL + Duration::from_secs(1))
             .expect("clearing expired tasks should refresh the card stack");
         assert_eq!(refreshed.event, "task.start");
-        let tasks = refreshed.extra["tasks"].as_array().expect("tasks should be an array");
+        let tasks = refreshed.extra["tasks"]
+            .as_array()
+            .expect("tasks should be an array");
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0]["title"], "FRESH");
     }
@@ -1603,7 +1697,10 @@ mod tests {
         // Make BETA the current visible state, then drop it, forcing the remaining snapshot to differ from the last one.
         let emitted = tracker.discard(&other, "INTERRUPTED");
         let emitted = emitted.expect("after dropping, should refresh to the remaining activities");
-        assert_eq!(emitted.event, "task.start", "must not report idle while activities remain");
+        assert_eq!(
+            emitted.event, "task.start",
+            "must not report idle while activities remain"
+        );
     }
 
     #[test]
@@ -1617,7 +1714,9 @@ mod tests {
             .expect("activity should exist")
             .status_since = Instant::now() - Duration::from_secs(600);
 
-        let mut snapshot = tracker.activity_snapshot().expect("there should be a visible activity");
+        let mut snapshot = tracker
+            .activity_snapshot()
+            .expect("there should be a visible activity");
         tracker.stamp_live_fields(&mut snapshot);
 
         assert_eq!(
@@ -1650,7 +1749,10 @@ mod tests {
     fn a_new_link_gets_the_whole_screen_even_when_nothing_changed() {
         let mut tracker = ActivityTracker::default();
         let idle = tracker.current_screen();
-        assert_eq!(idle.event, "agent.idle", "nothing runs: the box drops any cards it kept from another computer");
+        assert_eq!(
+            idle.event, "agent.idle",
+            "nothing runs: the box drops any cards it kept from another computer"
+        );
 
         let turn = id("s", "s:1");
         tracker.observe(&turn, "ALPHA", ActivityStatus::Working);
@@ -1658,8 +1760,17 @@ mod tests {
         let screen = tracker.current_screen();
         assert_eq!(screen.event, "agent.input_required");
         assert_eq!(screen.extra["tasks"].as_array().map(Vec::len), Some(1));
-        assert_eq!(screen.extra["suppress_audio"], json!(true), "the box spoke when the state came");
-        assert!(tracker.observe(&turn, "ALPHA", ActivityStatus::InputRequired).is_none(), "and it is the new dedup baseline");
+        assert_eq!(
+            screen.extra["suppress_audio"],
+            json!(true),
+            "the box spoke when the state came"
+        );
+        assert!(
+            tracker
+                .observe(&turn, "ALPHA", ActivityStatus::InputRequired)
+                .is_none(),
+            "and it is the new dedup baseline"
+        );
     }
 
     #[test]
@@ -1668,7 +1779,9 @@ mod tests {
         let broken = id("ci", "ci:1");
         tracker.observe(&broken, "CI:ALPHA", ActivityStatus::Working);
 
-        let failed = tracker.fail(&broken, "CI:ALPHA").expect("failure should be visible");
+        let failed = tracker
+            .fail(&broken, "CI:ALPHA")
+            .expect("failure should be visible");
         assert_eq!(failed.event, "task.error");
         assert_eq!(failed.title.as_deref(), Some("CI:ALPHA"));
     }
@@ -1680,7 +1793,9 @@ mod tests {
         let broken = id("ci", "ci:1");
         tracker.observe(&broken, "CI:ALPHA", ActivityStatus::Working);
 
-        let failed = tracker.fail(&broken, "CI:ALPHA").expect("failure should be visible");
+        let failed = tracker
+            .fail(&broken, "CI:ALPHA")
+            .expect("failure should be visible");
         assert_eq!(
             failed
                 .extra
@@ -1699,11 +1814,19 @@ mod tests {
             let turn = id("s", &format!("s:{turn}"));
             tracker.observe(&turn, "ALPHA", ActivityStatus::Working);
             let done = tracker.finish(&turn, "ALPHA").expect("a done is announced");
-            occasions.push(done.extra.get("occasion").and_then(|value| value.as_str()).map(str::to_owned));
+            occasions.push(
+                done.extra
+                    .get("occasion")
+                    .and_then(|value| value.as_str())
+                    .map(str::to_owned),
+            );
         }
         // Late at night the first done is the late-night one instead; either way the 5th is a milestone.
         let first = occasions[0].as_deref();
-        assert!(matches!(first, Some("first_done" | "late_night_done")), "{first:?}");
+        assert!(
+            matches!(first, Some("first_done" | "late_night_done")),
+            "{first:?}"
+        );
         assert_eq!(occasions[1..4], [None, None, None]);
         assert_eq!(occasions[4].as_deref(), Some("milestone"));
     }
@@ -1711,14 +1834,33 @@ mod tests {
     #[test]
     fn the_greeting_is_said_once_a_day() {
         let mut tracker = ActivityTracker::default();
-        let morning = NaiveDate::from_ymd_opt(2026, 10, 6).unwrap().and_hms_opt(9, 0, 0).unwrap();
-        let greeting = tracker.daily_greeting_at(morning).expect("the first link of the day");
+        let morning = NaiveDate::from_ymd_opt(2026, 10, 6)
+            .unwrap()
+            .and_hms_opt(9, 0, 0)
+            .unwrap();
+        let greeting = tracker
+            .daily_greeting_at(morning)
+            .expect("the first link of the day");
         assert_eq!(greeting.event, "buddy.say");
-        assert_eq!(greeting.extra.get("occasion"), Some(&json!("greeting_morning")));
-        assert!(tracker.daily_greeting_at(morning + Duration::from_secs(3600)).is_none(), "the box restarted");
-        let next_evening = NaiveDate::from_ymd_opt(2026, 10, 7).unwrap().and_hms_opt(20, 0, 0).unwrap();
+        assert_eq!(
+            greeting.extra.get("occasion"),
+            Some(&json!("greeting_morning"))
+        );
+        assert!(
+            tracker
+                .daily_greeting_at(morning + Duration::from_secs(3600))
+                .is_none(),
+            "the box restarted"
+        );
+        let next_evening = NaiveDate::from_ymd_opt(2026, 10, 7)
+            .unwrap()
+            .and_hms_opt(20, 0, 0)
+            .unwrap();
         let greeting = tracker.daily_greeting_at(next_evening).expect("a new day");
-        assert_eq!(greeting.extra.get("occasion"), Some(&json!("greeting_evening")));
+        assert_eq!(
+            greeting.extra.get("occasion"),
+            Some(&json!("greeting_evening"))
+        );
     }
 
     #[test]
@@ -1727,9 +1869,18 @@ mod tests {
         let day = NaiveDate::from_ymd_opt(2026, 10, 6).unwrap();
         let say = |tracker: &mut ActivityTracker, hour, minute| {
             tracker.note_activity(day.and_hms_opt(hour, minute, 0).unwrap());
-            tracker.take_say().and_then(|say| say.extra.get("occasion").and_then(|o| o.as_str()).map(str::to_owned))
+            tracker.take_say().and_then(|say| {
+                say.extra
+                    .get("occasion")
+                    .and_then(|o| o.as_str())
+                    .map(str::to_owned)
+            })
         };
-        assert_eq!(say(&mut tracker, 9, 0).as_deref(), Some("greeting_morning"), "the box was plugged in all night");
+        assert_eq!(
+            say(&mut tracker, 9, 0).as_deref(),
+            Some("greeting_morning"),
+            "the box was plugged in all night"
+        );
         assert_eq!(say(&mut tracker, 9, 5), None);
         assert_eq!(say(&mut tracker, 11, 59), None, "under three hours");
         assert_eq!(say(&mut tracker, 15, 30).as_deref(), Some("welcome_back"));
@@ -1739,7 +1890,11 @@ mod tests {
         // however long the night was.
         let mut tracker = ActivityTracker::default();
         tracker.stats.last_activity = Some(day.and_hms_opt(1, 0, 0).unwrap());
-        assert!(tracker.daily_greeting_at(day.and_hms_opt(8, 50, 0).unwrap()).is_some());
+        assert!(
+            tracker
+                .daily_greeting_at(day.and_hms_opt(8, 50, 0).unwrap())
+                .is_some()
+        );
         assert_eq!(say(&mut tracker, 9, 0), None);
     }
 
@@ -1776,7 +1931,11 @@ mod tests {
         let seen = tracker.recent_workspaces();
 
         let _ = std::fs::remove_dir_all(&base);
-        assert_eq!(seen, vec![repo], "subdirectories should map to the project root, non-repo paths should be ignored");
+        assert_eq!(
+            seen,
+            vec![repo],
+            "subdirectories should map to the project root, non-repo paths should be ignored"
+        );
     }
 
     #[test]
@@ -1796,7 +1955,10 @@ mod tests {
             "CC:POMODORO-TIMER-FEATURE"
         );
         // Chinese titles are blank in the device font; fall back to the next candidate, then to the project name.
-        let chinese = [Some("制定两周交易计划".to_owned()), Some("PR 96".to_owned())];
+        let chinese = [
+            Some("制定两周交易计划".to_owned()),
+            Some("PR 96".to_owned()),
+        ];
         assert_eq!(
             card_title("CX:", &chinese, Some("eros-training-infra"), "CODEX"),
             "CX:PR 96"
@@ -1850,7 +2012,10 @@ mod tests {
 
         let title = project_title("CC:", nested.to_str(), "CLAUDE");
         let _ = std::fs::remove_dir_all(&base);
-        assert_eq!(title, "CC:MY-PROJECT", "a subdirectory should not become the task card title");
+        assert_eq!(
+            title, "CC:MY-PROJECT",
+            "a subdirectory should not become the task card title"
+        );
     }
 
     #[test]
@@ -1868,7 +2033,10 @@ mod tests {
 
         let title = project_title("CC:", worktree.to_str(), "CLAUDE");
         let _ = std::fs::remove_dir_all(&base);
-        assert_eq!(title, "CC:MY-PROJECT", "a worktree should show the main repo name");
+        assert_eq!(
+            title, "CC:MY-PROJECT",
+            "a worktree should show the main repo name"
+        );
     }
 
     #[test]

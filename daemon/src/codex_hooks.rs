@@ -3,12 +3,13 @@
 //! This only translates: task-card aggregation, dedup, announcements and expiry live in [`crate::activity`].
 //! The adapter holds no state, because the device has one screen and all agents share one aggregator.
 
-use vibebuddy_protocol::Event;
 use serde::Deserialize;
+use vibebuddy_protocol::Event;
 
 use crate::activity::{
-    ActivityId, ActivitySource, ActivityStatus, ActivityTracker, card_title, display_title,
-    project_name, Surface, TmuxPane};
+    ActivityId, ActivitySource, ActivityStatus, ActivityTracker, Surface, TmuxPane, card_title,
+    display_title, project_name,
+};
 use crate::session_titles::{SessionTitles, git_branch};
 
 /// Prefix on task cards that tells agents apart.
@@ -56,7 +57,10 @@ pub fn apply(
     // First line: the Codex thread's name (user-given, or the branch the thread recorded), else
     // the local branch, else the project name.
     let project = project_name(cwd);
-    let thread_id = hook.thread_id.clone().unwrap_or_else(|| hook.session_id.clone());
+    let thread_id = hook
+        .thread_id
+        .clone()
+        .unwrap_or_else(|| hook.session_id.clone());
     // Codex's background sessions (the ones that generate ambient suggestions after a turn) fire
     // the same hooks: no working directory, and absent from the thread table. They aren't user activity:
     // no card, no announcement, and certainly not a K2 target, since opening one gives a blank session.
@@ -70,7 +74,14 @@ pub fn apply(
     }
     let candidates = [titles.codex(&thread_id), cwd.and_then(git_branch)];
     let title = card_title(PREFIX, &candidates, project.as_deref(), FALLBACK_TITLE);
-    tracker.note_project(&id, &display_title("", project.as_deref().unwrap_or(FALLBACK_TITLE), FALLBACK_TITLE));
+    tracker.note_project(
+        &id,
+        &display_title(
+            "",
+            project.as_deref().unwrap_or(FALLBACK_TITLE),
+            FALLBACK_TITLE,
+        ),
+    );
     let source = ActivitySource::Codex {
         thread_id: hook
             .thread_id
@@ -197,7 +208,8 @@ mod tests {
             host_focus_url: None,
             host_pids: None,
         };
-        let event = apply(&mut tracker, &mut titles, known).expect("known thread should be visible");
+        let event =
+            apply(&mut tracker, &mut titles, known).expect("known thread should be visible");
         assert_eq!(event.title.as_deref(), Some("CX:REVIEW"));
     }
 
@@ -301,7 +313,8 @@ mod tests {
         }))
         .expect("Stop payload awaiting an answer should parse");
 
-        let waiting = apply(&mut tracker, &mut SessionTitles::disabled(), stop).expect("awaiting an answer should produce a visible event");
+        let waiting = apply(&mut tracker, &mut SessionTitles::disabled(), stop)
+            .expect("awaiting an answer should produce a visible event");
         assert_eq!(waiting.event, "agent.input_required");
         assert!(!waiting.extra.contains_key("announcement"));
     }
@@ -331,13 +344,21 @@ mod tests {
 
         // The finish announcement says who finished, so the screen shows that one; alpha is still running and
         // its later events will bring the screen back.
-        let done =
-            apply(&mut tracker, &mut SessionTitles::disabled(), hook("waiting", "Stop", "/work/beta")).expect("stop should produce an announcement");
+        let done = apply(
+            &mut tracker,
+            &mut SessionTitles::disabled(),
+            hook("waiting", "Stop", "/work/beta"),
+        )
+        .expect("stop should produce an announcement");
         assert_eq!(done.event, "task.done");
         assert_eq!(done.title.as_deref(), Some("CX:BETA"));
 
-        let back = apply(&mut tracker, &mut SessionTitles::disabled(), hook("working", "PostToolUse", "/work/alpha"))
-            .expect("the next event should hand the screen back to the still-running task");
+        let back = apply(
+            &mut tracker,
+            &mut SessionTitles::disabled(),
+            hook("working", "PostToolUse", "/work/alpha"),
+        )
+        .expect("the next event should hand the screen back to the still-running task");
         assert_eq!(back.event, "task.start");
         assert_eq!(back.title.as_deref(), Some("CX:ALPHA"));
     }
@@ -363,8 +384,12 @@ mod tests {
             hook("waiting", "PermissionRequest", "/work/beta"),
         );
 
-        let done =
-            apply(&mut tracker, &mut SessionTitles::disabled(), hook("finishing", "Stop", "/work/alpha")).expect("stop should produce an announcement");
+        let done = apply(
+            &mut tracker,
+            &mut SessionTitles::disabled(),
+            hook("finishing", "Stop", "/work/alpha"),
+        )
+        .expect("stop should produce an announcement");
 
         assert_eq!(
             done.extra.get("announcement").and_then(|v| v.as_str()),
@@ -409,29 +434,71 @@ mod tests {
     fn task_cards_put_waiting_ones_first_then_the_newest_up_to_six() {
         let mut tracker = ActivityTracker::default();
         for name in ["one", "two", "three", "four", "five", "six", "seven"] {
-            apply(&mut tracker, &mut SessionTitles::disabled(), hook(name, "UserPromptSubmit", &format!("/work/{name}")));
+            apply(
+                &mut tracker,
+                &mut SessionTitles::disabled(),
+                hook(name, "UserPromptSubmit", &format!("/work/{name}")),
+            );
         }
-        let latest = apply(&mut tracker, &mut SessionTitles::disabled(), hook("two", "PermissionRequest", "/work/two"))
-            .expect("a question should refresh the card stack");
+        let latest = apply(
+            &mut tracker,
+            &mut SessionTitles::disabled(),
+            hook("two", "PermissionRequest", "/work/two"),
+        )
+        .expect("a question should refresh the card stack");
 
-        let tasks = latest.extra["tasks"].as_array().expect("tasks should be an array");
-        let titles: Vec<&str> = tasks.iter().map(|task| task["title"].as_str().unwrap()).collect();
-        assert_eq!(titles, ["CX:TWO", "CX:SEVEN", "CX:SIX", "CX:FIVE", "CX:FOUR", "CX:THREE"]);
-        assert_eq!(latest.extra["tasks_total"], 7, "the box says one more than it shows");
-        assert!(tasks.iter().all(|task| task["agent"] == "codex"), "every card knows its agent from its first event");
+        let tasks = latest.extra["tasks"]
+            .as_array()
+            .expect("tasks should be an array");
+        let titles: Vec<&str> = tasks
+            .iter()
+            .map(|task| task["title"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            titles,
+            [
+                "CX:TWO", "CX:SEVEN", "CX:SIX", "CX:FIVE", "CX:FOUR", "CX:THREE"
+            ]
+        );
+        assert_eq!(
+            latest.extra["tasks_total"], 7,
+            "the box says one more than it shows"
+        );
+        assert!(
+            tasks.iter().all(|task| task["agent"] == "codex"),
+            "every card knows its agent from its first event"
+        );
         let line = latest.to_ndjson().expect("the event should encode");
-        assert!(line.len() < 1024, "six cards fit the box's line: {} bytes", line.len());
+        assert!(
+            line.len() < 1024,
+            "six cards fit the box's line: {} bytes",
+            line.len()
+        );
     }
 
     #[test]
     fn background_task_removal_refreshes_the_stack() {
         let mut tracker = ActivityTracker::default();
-        apply(&mut tracker, &mut SessionTitles::disabled(), hook("old", "UserPromptSubmit", "/work/old"));
-        apply(&mut tracker, &mut SessionTitles::disabled(), hook("new", "UserPromptSubmit", "/work/new"));
+        apply(
+            &mut tracker,
+            &mut SessionTitles::disabled(),
+            hook("old", "UserPromptSubmit", "/work/old"),
+        );
+        apply(
+            &mut tracker,
+            &mut SessionTitles::disabled(),
+            hook("new", "UserPromptSubmit", "/work/new"),
+        );
 
-        let refreshed = apply(&mut tracker, &mut SessionTitles::disabled(), hook("old", "Stop", "/work/old"))
-            .expect("background task ending should also refresh the card stack");
-        let tasks = refreshed.extra["tasks"].as_array().expect("tasks should be an array");
+        let refreshed = apply(
+            &mut tracker,
+            &mut SessionTitles::disabled(),
+            hook("old", "Stop", "/work/old"),
+        )
+        .expect("background task ending should also refresh the card stack");
+        let tasks = refreshed.extra["tasks"]
+            .as_array()
+            .expect("tasks should be an array");
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0]["title"], "CX:NEW");
     }
@@ -472,7 +539,9 @@ mod tests {
         }))
         .expect("Stop payload awaiting an answer should parse");
         assert_eq!(
-            apply(&mut tracker, &mut SessionTitles::disabled(), waiting).expect("a question should wait for an answer").event,
+            apply(&mut tracker, &mut SessionTitles::disabled(), waiting)
+                .expect("a question should wait for an answer")
+                .event,
             "agent.input_required"
         );
 
@@ -490,7 +559,10 @@ mod tests {
             &mut SessionTitles::disabled(),
             hook_with_turn("session-a", "turn-a", "Stop", "/work/alpha"),
         );
-        assert!(replay.is_none(), "a repeated Stop from the old turn must not change the new turn");
+        assert!(
+            replay.is_none(),
+            "a repeated Stop from the old turn must not change the new turn"
+        );
 
         let second = apply(
             &mut tracker,
@@ -510,8 +582,12 @@ mod tests {
             hook("session-a", "UserPromptSubmit", "/work/alpha"),
         );
 
-        let interrupted = apply(&mut tracker, &mut SessionTitles::disabled(), hook("session-a", "Interrupt", "/work/alpha"))
-            .expect("interrupt should return to idle");
+        let interrupted = apply(
+            &mut tracker,
+            &mut SessionTitles::disabled(),
+            hook("session-a", "Interrupt", "/work/alpha"),
+        )
+        .expect("interrupt should return to idle");
         assert_eq!(interrupted.event, "agent.idle");
         assert_eq!(interrupted.title.as_deref(), Some("INTERRUPTED"));
     }
@@ -530,8 +606,12 @@ mod tests {
         let announcements = ["one", "two", "three"]
             .into_iter()
             .filter(|session| {
-                let event = apply(&mut tracker, &mut SessionTitles::disabled(), hook(session, "Stop", "/work/project"))
-                    .expect("every active session ending should produce an event");
+                let event = apply(
+                    &mut tracker,
+                    &mut SessionTitles::disabled(),
+                    hook(session, "Stop", "/work/project"),
+                )
+                .expect("every active session ending should produce an event");
                 event.event == "task.done"
                     || event
                         .extra
@@ -541,6 +621,9 @@ mod tests {
             })
             .count();
 
-        assert_eq!(announcements, 3, "three sessions should trigger three completion announcements");
+        assert_eq!(
+            announcements, 3,
+            "three sessions should trigger three completion announcements"
+        );
     }
 }

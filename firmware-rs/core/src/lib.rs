@@ -4,7 +4,10 @@
 //! the serial port and flash onto [`firmware::Board`]; the state machine, drawing, protocol handling,
 //! storage formats and chip register sequences all live here, no_std, and `cargo test` runs them on the Mac.
 #![no_std]
-#![allow(clippy::result_unit_err, reason = "hardware ports only report success or failure: the device layer knows the details, and the protocol reports just one line anyway")]
+#![allow(
+    clippy::result_unit_err,
+    reason = "hardware ports only report success or failure: the device layer knows the details, and the protocol reports just one line anyway"
+)]
 
 extern crate alloc;
 #[cfg(test)]

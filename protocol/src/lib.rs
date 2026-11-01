@@ -93,7 +93,10 @@ impl fmt::Display for ProtocolError {
             }
             Self::Serialize(error) => write!(formatter, "JSON encoding failed: {error}"),
             Self::UnsupportedVersion(version) => {
-                write!(formatter, "unsupported VibeBuddy Protocol version {version}")
+                write!(
+                    formatter,
+                    "unsupported VibeBuddy Protocol version {version}"
+                )
             }
         }
     }
@@ -131,8 +134,8 @@ mod tests {
 
     #[test]
     fn unsupported_version_is_rejected() {
-        let event: Event =
-            serde_json::from_str(r#"{"version":2,"event":"task.done"}"#).expect("message structure should parse");
+        let event: Event = serde_json::from_str(r#"{"version":2,"event":"task.done"}"#)
+            .expect("message structure should parse");
 
         assert!(matches!(
             event.to_ndjson(),

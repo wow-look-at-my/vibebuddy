@@ -11,6 +11,18 @@ func check(_ condition: Bool, _ message: String, file: String = #file, line: Int
     }
 }
 
+// 0. The shipped Info.plist asks Sparkle for no checks, no automatic installs and carries no feed.
+let infoPlist = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    .appendingPathComponent("Info.plist")
+if let data = try? Data(contentsOf: infoPlist), let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] {
+    check(plist["SUEnableAutomaticChecks"] as? Bool == false, "Info.plist: no automatic update checks")
+    check(plist["SUAllowsAutomaticUpdates"] as? Bool == false, "Info.plist: no automatic update installs")
+    check(plist["SUAutomaticallyUpdate"] as? Bool == false, "Info.plist: no silent update downloads")
+    check(plist["SUFeedURL"] == nil, "Info.plist: no feed URL")
+} else {
+    check(false, "Info.plist is readable at \(infoPlist.path)")
+}
+
 // 1. Status JSON decoding, with microsecond timestamps and time zones.
 let sample = """
 {"daemon":{"build":"0.3.0 abc1234 2026-09-16 10:50","app_version":"0.3.0"},

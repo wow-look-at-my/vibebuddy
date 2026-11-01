@@ -7,9 +7,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use vibebuddy_protocol::Event;
 use serde::Deserialize;
 use tracing::{info, warn};
+use vibebuddy_protocol::Event;
 
 use crate::activity::{ActivityId, ActivitySource, ActivityStatus, ActivityTracker, display_title};
 
@@ -105,16 +105,26 @@ impl CiWatcher {
                     session_id: format!("ci:{repo}"),
                     key: format!("ci:{repo}:{}", run.database_id),
                 };
-                if let Some(event) = Self::apply_one(state, tracker, &repo, &id, &title, run, first_read) {
+                if let Some(event) =
+                    Self::apply_one(state, tracker, &repo, &id, &title, run, first_read)
+                {
                     events.push(event);
                 }
             }
             // A run still marked running but gone from the list was pushed out by newer ones: put its card away.
             let listed: HashSet<u64> = runs.iter().map(|run| run.database_id).collect();
-            let gone: Vec<u64> = state.running.iter().copied().filter(|id| !listed.contains(id)).collect();
+            let gone: Vec<u64> = state
+                .running
+                .iter()
+                .copied()
+                .filter(|id| !listed.contains(id))
+                .collect();
             for gone in gone {
                 state.running.remove(&gone);
-                let id = ActivityId { session_id: format!("ci:{repo}"), key: format!("ci:{repo}:{gone}") };
+                let id = ActivityId {
+                    session_id: format!("ci:{repo}"),
+                    key: format!("ci:{repo}:{gone}"),
+                };
                 events.extend(tracker.discard(&id, "ALL QUIET"));
             }
             state.ended.retain(|(id, _)| listed.contains(id));
@@ -273,7 +283,8 @@ async fn recent_runs(program: &str, repo: &str) -> Result<Vec<Run>, String> {
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_owned());
     }
 
-    serde_json::from_slice(&output.stdout).map_err(|error| format!("cannot parse gh output: {error}"))
+    serde_json::from_slice(&output.stdout)
+        .map_err(|error| format!("cannot parse gh output: {error}"))
 }
 
 #[cfg(test)]
@@ -359,7 +370,10 @@ mod tests {
         let events = poll(
             &mut watcher,
             &mut tracker,
-            vec![run(2, "completed", "failure"), run(1, "completed", "success")],
+            vec![
+                run(2, "completed", "failure"),
+                run(1, "completed", "success"),
+            ],
         );
 
         assert!(
@@ -374,12 +388,23 @@ mod tests {
         let mut tracker = ActivityTracker::default();
 
         poll(&mut watcher, &mut tracker, vec![run(7, "in_progress", "")]);
-        let events = poll(&mut watcher, &mut tracker, vec![run(7, "completed", "failure")]);
+        let events = poll(
+            &mut watcher,
+            &mut tracker,
+            vec![run(7, "completed", "failure")],
+        );
         assert_eq!(names(&events), ["task.error"]);
         assert_eq!(events[0].title.as_deref(), Some("CI:VIBE-BUDDY"));
 
-        let again = poll(&mut watcher, &mut tracker, vec![run(7, "completed", "failure")]);
-        assert!(again.is_empty(), "the same failure must not be announced on every poll");
+        let again = poll(
+            &mut watcher,
+            &mut tracker,
+            vec![run(7, "completed", "failure")],
+        );
+        assert!(
+            again.is_empty(),
+            "the same failure must not be announced on every poll"
+        );
     }
 
     #[test]
@@ -388,7 +413,11 @@ mod tests {
         let mut tracker = ActivityTracker::default();
 
         poll(&mut watcher, &mut tracker, vec![run(9, "in_progress", "")]);
-        let events = poll(&mut watcher, &mut tracker, vec![run(9, "completed", "cancelled")]);
+        let events = poll(
+            &mut watcher,
+            &mut tracker,
+            vec![run(9, "completed", "cancelled")],
+        );
 
         assert_eq!(names(&events), ["agent.idle"]);
     }
@@ -400,7 +429,11 @@ mod tests {
         let mut watcher = CiWatcher::default();
         let mut tracker = ActivityTracker::default();
 
-        poll(&mut watcher, &mut tracker, vec![run(11, "in_progress", ""), run(10, "in_progress", "")]);
+        poll(
+            &mut watcher,
+            &mut tracker,
+            vec![run(11, "in_progress", ""), run(10, "in_progress", "")],
+        );
         let events = poll(
             &mut watcher,
             &mut tracker,
@@ -413,7 +446,10 @@ mod tests {
         let events = poll(
             &mut watcher,
             &mut tracker,
-            vec![run(11, "completed", "success"), run(10, "completed", "failure")],
+            vec![
+                run(11, "completed", "success"),
+                run(10, "completed", "failure"),
+            ],
         );
         assert_eq!(names(&events), ["task.done"]);
     }
@@ -425,12 +461,28 @@ mod tests {
         let mut tracker = ActivityTracker::default();
 
         poll(&mut watcher, &mut tracker, vec![run(7, "in_progress", "")]);
-        poll(&mut watcher, &mut tracker, vec![run(7, "completed", "failure")]);
-        poll(&mut watcher, &mut tracker, vec![attempt(run(7, "in_progress", ""), 2)]);
-        let events = poll(&mut watcher, &mut tracker, vec![attempt(run(7, "completed", "failure"), 2)]);
+        poll(
+            &mut watcher,
+            &mut tracker,
+            vec![run(7, "completed", "failure")],
+        );
+        poll(
+            &mut watcher,
+            &mut tracker,
+            vec![attempt(run(7, "in_progress", ""), 2)],
+        );
+        let events = poll(
+            &mut watcher,
+            &mut tracker,
+            vec![attempt(run(7, "completed", "failure"), 2)],
+        );
         assert_eq!(names(&events), ["task.error"]);
 
-        let again = poll(&mut watcher, &mut tracker, vec![attempt(run(7, "completed", "failure"), 2)]);
+        let again = poll(
+            &mut watcher,
+            &mut tracker,
+            vec![attempt(run(7, "completed", "failure"), 2)],
+        );
         assert!(again.is_empty());
     }
 
@@ -440,20 +492,34 @@ mod tests {
         let mut watcher = CiWatcher::default();
         let mut tracker = ActivityTracker::default();
 
-        poll(&mut watcher, &mut tracker, vec![run(1, "completed", "success")]);
+        poll(
+            &mut watcher,
+            &mut tracker,
+            vec![run(1, "completed", "success")],
+        );
         let events = poll(
             &mut watcher,
             &mut tracker,
-            vec![run(2, "completed", "failure"), run(1, "completed", "success")],
+            vec![
+                run(2, "completed", "failure"),
+                run(1, "completed", "success"),
+            ],
         );
         assert_eq!(names(&events), ["task.error"]);
 
         let rerun = poll(
             &mut watcher,
             &mut tracker,
-            vec![run(2, "completed", "failure"), attempt(run(1, "completed", "failure"), 2)],
+            vec![
+                run(2, "completed", "failure"),
+                attempt(run(1, "completed", "failure"), 2),
+            ],
         );
-        assert_eq!(names(&rerun), ["task.error"], "a quick re-run is a new attempt");
+        assert_eq!(
+            names(&rerun),
+            ["task.error"],
+            "a quick re-run is a new attempt"
+        );
     }
 
     #[test]
@@ -462,7 +528,11 @@ mod tests {
         let mut tracker = ActivityTracker::default();
 
         poll(&mut watcher, &mut tracker, vec![]);
-        let events = poll(&mut watcher, &mut tracker, vec![run(3, "completed", "cancelled")]);
+        let events = poll(
+            &mut watcher,
+            &mut tracker,
+            vec![run(3, "completed", "cancelled")],
+        );
         assert!(events.is_empty());
     }
 
@@ -474,7 +544,14 @@ mod tests {
         poll(&mut watcher, &mut tracker, vec![run(1, "in_progress", "")]);
         let events = poll(&mut watcher, &mut tracker, vec![run(2, "in_progress", "")]);
 
-        let tasks = events.last().and_then(|event| event.extra.get("tasks")).and_then(|tasks| tasks.as_array());
-        assert_eq!(tasks.map(Vec::len), Some(1), "the card for run 1 must not stay forever: {events:?}");
+        let tasks = events
+            .last()
+            .and_then(|event| event.extra.get("tasks"))
+            .and_then(|tasks| tasks.as_array());
+        assert_eq!(
+            tasks.map(Vec::len),
+            Some(1),
+            "the card for run 1 must not stay forever: {events:?}"
+        );
     }
 }

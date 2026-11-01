@@ -50,7 +50,12 @@ struct Button {
 
 impl Button {
     fn new(pressed: bool, now: u32) -> Self {
-        Self { pressed, changed_at: now, pressed_at: now, long_fired: false }
+        Self {
+            pressed,
+            changed_at: now,
+            pressed_at: now,
+            long_fired: false,
+        }
     }
 
     /// A flip takes effect immediately; only further flips within DEBOUNCE_MS are ignored.
@@ -71,9 +76,16 @@ impl Button {
                 self.long_fired = false;
                 return Press::None;
             }
-            return if self.long_fired { Press::LongEnd } else { Press::Short };
+            return if self.long_fired {
+                Press::LongEnd
+            } else {
+                Press::Short
+            };
         }
-        if pressed && !self.long_fired && now.wrapping_sub(self.pressed_at) as i32 >= LONG_PRESS_MS as i32 {
+        if pressed
+            && !self.long_fired
+            && now.wrapping_sub(self.pressed_at) as i32 >= LONG_PRESS_MS as i32
+        {
             self.long_fired = true;
             return Press::Long;
         }
@@ -97,12 +109,26 @@ pub struct Levels {
 
 impl Buttons {
     pub fn new(levels: Levels, now: u32) -> Self {
-        Self { k0: Button::new(levels.k0, now), k1: Button::new(levels.k1, now), k2: Button::new(levels.k2, now) }
+        Self {
+            k0: Button::new(levels.k0, now),
+            k1: Button::new(levels.k1, now),
+            k2: Button::new(levels.k2, now),
+        }
     }
 
     /// K0 and the expander are read separately: when the expander read fails only K0 is updated, as in the C firmware.
-    pub fn update(&mut self, k0: bool, expander: Option<(bool, bool)>, now: u32) -> [Option<ButtonEvent>; 3] {
-        fn emit(press: Press, short: ButtonEvent, long: ButtonEvent, long_end: Option<ButtonEvent>) -> Option<ButtonEvent> {
+    pub fn update(
+        &mut self,
+        k0: bool,
+        expander: Option<(bool, bool)>,
+        now: u32,
+    ) -> [Option<ButtonEvent>; 3] {
+        fn emit(
+            press: Press,
+            short: ButtonEvent,
+            long: ButtonEvent,
+            long_end: Option<ButtonEvent>,
+        ) -> Option<ButtonEvent> {
             match press {
                 Press::None => None,
                 Press::Short => Some(short),
@@ -111,10 +137,25 @@ impl Buttons {
             }
         }
         let mut events = [None; 3];
-        events[0] = emit(self.k0.update(k0, now), ButtonEvent::K0Short, ButtonEvent::K0Long, Some(ButtonEvent::K0LongEnd));
+        events[0] = emit(
+            self.k0.update(k0, now),
+            ButtonEvent::K0Short,
+            ButtonEvent::K0Long,
+            Some(ButtonEvent::K0LongEnd),
+        );
         if let Some((k1, k2)) = expander {
-            events[1] = emit(self.k1.update(k1, now), ButtonEvent::K1Short, ButtonEvent::K1Long, None);
-            events[2] = emit(self.k2.update(k2, now), ButtonEvent::K2Short, ButtonEvent::K2Long, None);
+            events[1] = emit(
+                self.k1.update(k1, now),
+                ButtonEvent::K1Short,
+                ButtonEvent::K1Long,
+                None,
+            );
+            events[2] = emit(
+                self.k2.update(k2, now),
+                ButtonEvent::K2Short,
+                ButtonEvent::K2Long,
+                None,
+            );
         }
         events
     }
@@ -160,16 +201,28 @@ mod tests {
     fn k1_and_k2_say_nothing_when_let_go_after_a_long_press() {
         let mut buttons = Buttons::new(Levels::default(), 0);
         buttons.update(false, Some((true, true)), 100);
-        assert_eq!(buttons.update(false, Some((true, true)), 1100), [None, Some(ButtonEvent::K1Long), Some(ButtonEvent::K2Long)]);
-        assert_eq!(buttons.update(false, Some((false, false)), 1200), [None, None, None]);
+        assert_eq!(
+            buttons.update(false, Some((true, true)), 1100),
+            [None, Some(ButtonEvent::K1Long), Some(ButtonEvent::K2Long)]
+        );
+        assert_eq!(
+            buttons.update(false, Some((false, false)), 1200),
+            [None, None, None]
+        );
     }
 
     #[test]
     fn expander_buttons_map_to_k1_and_k2() {
         let mut buttons = Buttons::new(Levels::default(), 0);
         buttons.update(false, Some((true, false)), 100);
-        assert_eq!(buttons.update(false, Some((false, false)), 200), [None, Some(ButtonEvent::K1Short), None]);
+        assert_eq!(
+            buttons.update(false, Some((false, false)), 200),
+            [None, Some(ButtonEvent::K1Short), None]
+        );
         buttons.update(false, Some((false, true)), 300);
-        assert_eq!(buttons.update(false, Some((false, true)), 1300), [None, None, Some(ButtonEvent::K2Long)]);
+        assert_eq!(
+            buttons.update(false, Some((false, true)), 1300),
+            [None, None, Some(ButtonEvent::K2Long)]
+        );
     }
 }

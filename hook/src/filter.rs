@@ -78,11 +78,15 @@ pub fn requires_user_input(message: Option<&str>) -> bool {
     {
         return true;
     }
-    if rules.direct_reply_request.is_match(final_paragraph) || asks_in_english(rules, final_paragraph) {
+    if rules.direct_reply_request.is_match(final_paragraph)
+        || asks_in_english(rules, final_paragraph)
+    {
         return !rules.optional_offer.is_match(final_paragraph);
     }
     if paragraphs.len() >= 2 && rules.choice_list.is_match(final_paragraph) {
-        return rules.question_at_end.is_match(paragraphs[paragraphs.len() - 2]);
+        return rules
+            .question_at_end
+            .is_match(paragraphs[paragraphs.len() - 2]);
     }
     false
 }
@@ -102,8 +106,12 @@ mod tests {
     #[test]
     fn a_trailing_question_waits_for_the_user() {
         assert!(requires_user_input(Some("我该用方案 A 还是方案 B？")));
-        assert!(requires_user_input(Some("是否采用 GitHub Issues？直接回复“是”即可。")));
-        assert!(requires_user_input(Some("Should I proceed? Please confirm.")));
+        assert!(requires_user_input(Some(
+            "是否采用 GitHub Issues？直接回复“是”即可。"
+        )));
+        assert!(requires_user_input(Some(
+            "Should I proceed? Please confirm."
+        )));
     }
 
     #[test]
@@ -115,8 +123,12 @@ mod tests {
 
     #[test]
     fn an_optional_offer_is_not_a_request() {
-        assert!(!requires_user_input(Some("如果你还需要调整配色，可以告诉我。")));
-        assert!(!requires_user_input(Some("修复完成。If you need anything else, let me know.")));
+        assert!(!requires_user_input(Some(
+            "如果你还需要调整配色，可以告诉我。"
+        )));
+        assert!(!requires_user_input(Some(
+            "修复完成。If you need anything else, let me know."
+        )));
     }
 
     #[test]
@@ -185,7 +197,11 @@ mod tests {
 
     #[test]
     fn a_choice_list_after_a_question_waits() {
-        assert!(requires_user_input(Some("下一步选哪个？\n\n1. 先做 A\n2. 先做 B")));
-        assert!(!requires_user_input(Some("做了两件事。\n\n- 修了 A\n- 修了 B")));
+        assert!(requires_user_input(Some(
+            "下一步选哪个？\n\n1. 先做 A\n2. 先做 B"
+        )));
+        assert!(!requires_user_input(Some(
+            "做了两件事。\n\n- 修了 A\n- 修了 B"
+        )));
     }
 }

@@ -54,7 +54,8 @@ fn keygen(private: &Path) -> Result<(), String> {
 }
 
 fn build(releases: &Path, out: &Path) -> Result<(), String> {
-    let key = std::env::var("MANIFEST_SIGNING_KEY").map_err(|_| "MANIFEST_SIGNING_KEY is not set".to_owned())?;
+    let key = std::env::var("MANIFEST_SIGNING_KEY")
+        .map_err(|_| "MANIFEST_SIGNING_KEY is not set".to_owned())?;
     let key = signing_key(&key).map_err(|error| error.to_string())?;
     let releases = read_releases(releases)?;
     let min_supported_app = min_supported_app(Path::new("Cargo.toml"))?;
@@ -62,17 +63,39 @@ fn build(releases: &Path, out: &Path) -> Result<(), String> {
     let notes = |name: &str| std::fs::read_to_string(Path::new("docs/releases").join(name)).ok();
     let manifest = build::manifest(&releases, notes, &min_supported_app, &generated_at)?;
     let signed = sign(&manifest, &key);
-    std::fs::write(out, serde_json::to_string_pretty(&signed).expect("serializes")).map_err(|error| format!("{}: {error}", out.display()))?;
-    let firmware: Vec<&str> = manifest.firmware.iter().map(|firmware| firmware.download.version.as_str()).collect();
-    let apps: Vec<String> = manifest.app.iter().map(|(platform, app)| format!("{platform} {}", app.version)).collect();
-    println!("apps: {}; firmware: {}", apps.join(", "), if firmware.is_empty() { "none".to_owned() } else { firmware.join(", ") });
+    std::fs::write(
+        out,
+        serde_json::to_string_pretty(&signed).expect("serializes"),
+    )
+    .map_err(|error| format!("{}: {error}", out.display()))?;
+    let firmware: Vec<&str> = manifest
+        .firmware
+        .iter()
+        .map(|firmware| firmware.download.version.as_str())
+        .collect();
+    let apps: Vec<String> = manifest
+        .app
+        .iter()
+        .map(|(platform, app)| format!("{platform} {}", app.version))
+        .collect();
+    println!(
+        "apps: {}; firmware: {}",
+        apps.join(", "),
+        if firmware.is_empty() {
+            "none".to_owned()
+        } else {
+            firmware.join(", ")
+        }
+    );
     Ok(())
 }
 
 fn check(public: &Path, manifest: &Path) -> Result<(), String> {
-    let key = std::fs::read_to_string(public).map_err(|error| format!("{}: {error}", public.display()))?;
+    let key = std::fs::read_to_string(public)
+        .map_err(|error| format!("{}: {error}", public.display()))?;
     let key = verifying_key(&key).map_err(|error| error.to_string())?;
-    let text = std::fs::read_to_string(manifest).map_err(|error| format!("{}: {error}", manifest.display()))?;
+    let text = std::fs::read_to_string(manifest)
+        .map_err(|error| format!("{}: {error}", manifest.display()))?;
     let signed: Signed = serde_json::from_str(&text).map_err(|error| error.to_string())?;
     verify(&signed, &key).map_err(|error| error.to_string())?;
     println!("signature ok");
@@ -80,21 +103,29 @@ fn check(public: &Path, manifest: &Path) -> Result<(), String> {
 }
 
 fn appcast(manifest: &Path, dmg: &Path, out: &Path) -> Result<(), String> {
-    let key = std::env::var("SPARKLE_SIGNING_KEY").map_err(|_| "SPARKLE_SIGNING_KEY is not set".to_owned())?;
+    let key = std::env::var("SPARKLE_SIGNING_KEY")
+        .map_err(|_| "SPARKLE_SIGNING_KEY is not set".to_owned())?;
     let key = signing_key(&key).map_err(|error| error.to_string())?;
-    let text = std::fs::read_to_string(manifest).map_err(|error| format!("{}: {error}", manifest.display()))?;
+    let text = std::fs::read_to_string(manifest)
+        .map_err(|error| format!("{}: {error}", manifest.display()))?;
     let signed: Signed = serde_json::from_str(&text).map_err(|error| error.to_string())?;
-    let manifest: vibebuddy_manifest::Manifest = serde_json::from_str(&signed.manifest).map_err(|error| error.to_string())?;
+    let manifest: vibebuddy_manifest::Manifest =
+        serde_json::from_str(&signed.manifest).map_err(|error| error.to_string())?;
     let dmg = std::fs::read(dmg).map_err(|error| format!("{}: {error}", dmg.display()))?;
     let xml = vibebuddy_manifest::appcast::appcast(&manifest, &dmg, &key)?;
     std::fs::write(out, xml).map_err(|error| format!("{}: {error}", out.display()))?;
-    println!("appcast for {} {}", vibebuddy_manifest::appcast::PLATFORM, manifest.app[vibebuddy_manifest::appcast::PLATFORM].version);
+    println!(
+        "appcast for {} {}",
+        vibebuddy_manifest::appcast::PLATFORM,
+        manifest.app[vibebuddy_manifest::appcast::PLATFORM].version
+    );
     Ok(())
 }
 
 /// `--paginate --slurp` gives one array per page; a single page is accepted as is.
 fn read_releases(path: &Path) -> Result<Vec<Release>, String> {
-    let text = std::fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    let text =
+        std::fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
     if let Ok(pages) = serde_json::from_str::<Vec<Vec<Release>>>(&text) {
         return Ok(pages.into_iter().flatten().collect());
     }
@@ -102,8 +133,10 @@ fn read_releases(path: &Path) -> Result<Vec<Release>, String> {
 }
 
 fn min_supported_app(cargo: &Path) -> Result<String, String> {
-    let text = std::fs::read_to_string(cargo).map_err(|error| format!("{}: {error}", cargo.display()))?;
-    let table: toml::Table = toml::from_str(&text).map_err(|error| format!("{}: {error}", cargo.display()))?;
+    let text =
+        std::fs::read_to_string(cargo).map_err(|error| format!("{}: {error}", cargo.display()))?;
+    let table: toml::Table =
+        toml::from_str(&text).map_err(|error| format!("{}: {error}", cargo.display()))?;
     table
         .get("workspace")
         .and_then(|workspace| workspace.get("metadata"))
@@ -111,5 +144,7 @@ fn min_supported_app(cargo: &Path) -> Result<String, String> {
         .and_then(|vibebuddy| vibebuddy.get("min_supported_app"))
         .and_then(|version| version.as_str())
         .map(str::to_owned)
-        .ok_or_else(|| "Cargo.toml has no [workspace.metadata.vibebuddy] min_supported_app".to_owned())
+        .ok_or_else(|| {
+            "Cargo.toml has no [workspace.metadata.vibebuddy] min_supported_app".to_owned()
+        })
 }

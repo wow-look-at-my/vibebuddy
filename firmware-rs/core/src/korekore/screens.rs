@@ -78,28 +78,68 @@ const METER_LOW: u16 = MINT;
 
 /// The card column on duty: x 104–312, from y 29, 46 high (two lines of 12 px type), 5 apart.
 fn card_rect(slot: usize) -> Rect {
-    Rect { x: 104, y: 29 + slot as i32 * 51, width: 208, height: 46 }
+    Rect {
+        x: 104,
+        y: 29 + slot as i32 * 51,
+        width: 208,
+        height: 46,
+    }
 }
 
 /// Kore in the side panel on duty, at 4×.
 /// An agent's mark on a task card.
 const ICON: i32 = 24;
-const BUDDY: Rect = Rect { x: 8, y: 51, width: 80, height: 72 };
+const BUDDY: Rect = Rect {
+    x: 8,
+    y: 51,
+    width: 80,
+    height: 72,
+};
 /// Where a Character's look stands in the side panel, at 2×: the bottom of its frame, just above the state word.
 const LOOK_PANEL_BOTTOM: i32 = 196;
 /// The page line and its bar under the cards.
-const PAGE_LINE: Rect = Rect { x: 98, y: 216, width: 220, height: 22 };
+const PAGE_LINE: Rect = Rect {
+    x: 98,
+    y: 216,
+    width: 220,
+    height: 22,
+};
 /// The ticket on a takeover screen (needs input, done, failed).
-const TICKET: Rect = Rect { x: 12, y: 112, width: 296, height: 52 };
-const DONE_TICKET: Rect = Rect { x: 12, y: 150, width: 296, height: 52 };
-const FAILED_TICKET: Rect = Rect { x: 15, y: 115, width: 290, height: 52 };
+const TICKET: Rect = Rect {
+    x: 12,
+    y: 112,
+    width: 296,
+    height: 52,
+};
+const DONE_TICKET: Rect = Rect {
+    x: 12,
+    y: 150,
+    width: 296,
+    height: 52,
+};
+const FAILED_TICKET: Rect = Rect {
+    x: 15,
+    y: 115,
+    width: 290,
+    height: 52,
+};
 /// The cream card a panel is drawn on, 10 px in from the edges.
-const PANEL_CARD: Rect = Rect { x: 10, y: 10, width: 300, height: 220 };
+const PANEL_CARD: Rect = Rect {
+    x: 10,
+    y: 10,
+    width: 300,
+    height: 220,
+};
 const PANEL_INNER_LEFT: i32 = 23;
 const PANEL_INNER_RIGHT: i32 = 297;
 /// The rows of a panel's list, 26 apart, under the title's rule.
 fn panel_row(index: usize) -> Rect {
-    Rect { x: PANEL_INNER_LEFT, y: 49 + index as i32 * 26, width: PANEL_INNER_RIGHT - PANEL_INNER_LEFT, height: 24 }
+    Rect {
+        x: PANEL_INNER_LEFT,
+        y: 49 + index as i32 * 26,
+        width: PANEL_INNER_RIGHT - PANEL_INNER_LEFT,
+        height: 24,
+    }
 }
 const PANEL_HINTS_Y: i32 = 208;
 const PANEL_RULE_Y: i32 = 202;
@@ -107,13 +147,31 @@ const PANEL_RULE_Y: i32 = 202;
 // ---------- drawing helpers ----------
 
 /// A sprite at a whole-number scale; mirrored left to right, or in grays for a lost link.
-fn sprite(canvas: &mut Canvas, sprite: &Sprite, x: i32, y: i32, scale: i32, mirror: bool, gray: bool) {
+fn sprite(
+    canvas: &mut Canvas,
+    sprite: &Sprite,
+    x: i32,
+    y: i32,
+    scale: i32,
+    mirror: bool,
+    gray: bool,
+) {
     for row in 0..sprite.height {
         for column in 0..sprite.width {
-            let source = if mirror { sprite.width - 1 - column } else { column };
+            let source = if mirror {
+                sprite.width - 1 - column
+            } else {
+                column
+            };
             if let Some(color) = sprite.pixel(source, row) {
                 let color = if gray { look::gray(color) } else { color };
-                canvas.fill_rect(x + i32::from(column) * scale, y + i32::from(row) * scale, scale, scale, color);
+                canvas.fill_rect(
+                    x + i32::from(column) * scale,
+                    y + i32::from(row) * scale,
+                    scale,
+                    scale,
+                    color,
+                );
             }
         }
     }
@@ -133,14 +191,32 @@ fn fill_round(canvas: &mut Canvas, rect: Rect, radius: i32, color: u16) {
     let radius = radius.min(rect.width / 2).min(rect.height / 2);
     for row in 0..rect.height {
         let inset = corner_inset(radius, row.min(rect.height - 1 - row));
-        canvas.fill_rect(rect.x + inset, rect.y + row, rect.width - 2 * inset, 1, color);
+        canvas.fill_rect(
+            rect.x + inset,
+            rect.y + row,
+            rect.width - 2 * inset,
+            1,
+            color,
+        );
     }
 }
 
 /// A rounded rectangle with an outline `stroke` thick.
-fn outlined_round(canvas: &mut Canvas, rect: Rect, radius: i32, stroke: i32, outline: u16, fill: u16) {
+fn outlined_round(
+    canvas: &mut Canvas,
+    rect: Rect,
+    radius: i32,
+    stroke: i32,
+    outline: u16,
+    fill: u16,
+) {
     fill_round(canvas, rect, radius, outline);
-    let inner = Rect { x: rect.x + stroke, y: rect.y + stroke, width: rect.width - 2 * stroke, height: rect.height - 2 * stroke };
+    let inner = Rect {
+        x: rect.x + stroke,
+        y: rect.y + stroke,
+        width: rect.width - 2 * stroke,
+        height: rect.height - 2 * stroke,
+    };
     fill_round(canvas, inner, (radius - stroke).max(0), fill);
 }
 
@@ -150,16 +226,47 @@ fn tight(face: &Face, y: i32) -> i32 {
 }
 
 /// A small chip: `text` on `fill`, radius 3, 4 px either side, as tall as the face's line. Returns its width.
-fn chip(canvas: &mut Canvas, face: &Face, x: i32, y: i32, label: &[u8], ink: u16, fill: u16) -> i32 {
+fn chip(
+    canvas: &mut Canvas,
+    face: &Face,
+    x: i32,
+    y: i32,
+    label: &[u8],
+    ink: u16,
+    fill: u16,
+) -> i32 {
     let width = kt::width(face, label) + 8;
-    fill_round(canvas, Rect { x, y, width, height: face.line() }, 3, fill);
+    fill_round(
+        canvas,
+        Rect {
+            x,
+            y,
+            width,
+            height: face.line(),
+        },
+        3,
+        fill,
+    );
     kt::draw(canvas, face, x + 4, y, label, ink, i32::MAX);
     width
 }
 
 /// A chip and what the key does, as the design's key hints are drawn. Returns the width used.
-#[allow(clippy::too_many_arguments, reason = "where, what and in which colours")]
-fn hint(canvas: &mut Canvas, face: &Face, x: i32, y: i32, key: &[u8], action: &[u8], chip_ink: u16, chip_fill: u16, color: u16) -> i32 {
+#[allow(
+    clippy::too_many_arguments,
+    reason = "where, what and in which colours"
+)]
+fn hint(
+    canvas: &mut Canvas,
+    face: &Face,
+    x: i32,
+    y: i32,
+    key: &[u8],
+    action: &[u8],
+    chip_ink: u16,
+    chip_fill: u16,
+    color: u16,
+) -> i32 {
     let used = chip(canvas, face, x, y, key, chip_ink, chip_fill) + 4;
     used + kt::draw(canvas, face, x + used, y, action, color, i32::MAX)
 }
@@ -173,7 +280,13 @@ fn pointer(canvas: &mut Canvas, x: i32, y: i32, color: u16) {
 
 /// The 12 × 7 link glyphs at 2×: a plug for USB, waves for the network, a cloud for the Relay.
 fn link_glyph(canvas: &mut Canvas, path: LinkPath, right: i32, y: i32, color: u16) -> i32 {
-    draw_icon(canvas, right - ICON_WIDTH * ICON_SCALE, y, path.icon(), color);
+    draw_icon(
+        canvas,
+        right - ICON_WIDTH * ICON_SCALE,
+        y,
+        path.icon(),
+        color,
+    );
     ICON_WIDTH * ICON_SCALE
 }
 
@@ -252,7 +365,16 @@ impl Display {
     /// that keeps it as tall as Kore would be (at least 1×), standing on the same bottom line and centred on the same
     /// column. A look is 64 high and Kore 18, so a look draws at 1× where Kore draws at 4× to 6×.
     #[allow(clippy::too_many_arguments, reason = "where, how big and how")]
-    fn kk_buddy(&self, canvas: &mut Canvas, expr: Expr, x: i32, y: i32, scale: i32, mirror: bool, gray: bool) {
+    fn kk_buddy(
+        &self,
+        canvas: &mut Canvas,
+        expr: Expr,
+        x: i32,
+        y: i32,
+        scale: i32,
+        mirror: bool,
+        gray: bool,
+    ) {
         match &self.look {
             Some(look) => {
                 let look_scale = (KORE_HEIGHT * scale / look::HEIGHT).max(1);
@@ -267,7 +389,12 @@ impl Display {
     /// The buddy in the side panel, as drawn and tapped: Kore at 4×, or a Character's look at 2×.
     fn kk_buddy_rect(&self) -> Rect {
         match self.look {
-            Some(_) => Rect { x: 0, y: LOOK_PANEL_BOTTOM - look::HEIGHT * 2, width: 96, height: look::HEIGHT * 2 },
+            Some(_) => Rect {
+                x: 0,
+                y: LOOK_PANEL_BOTTOM - look::HEIGHT * 2,
+                width: 96,
+                height: look::HEIGHT * 2,
+            },
             None => BUDDY,
         }
     }
@@ -283,14 +410,24 @@ impl Display {
             return None;
         }
         match self.state {
-            State::InputRequired => self.kk_ticket_task(State::InputRequired).map(|index| (State::InputRequired, Some(index))),
-            State::Done => Some((State::Done, self.kk_ticket_task(State::Done).or(if self.tasks.is_empty() { None } else { Some(0) }))),
+            State::InputRequired => self
+                .kk_ticket_task(State::InputRequired)
+                .map(|index| (State::InputRequired, Some(index))),
+            State::Done => Some((
+                State::Done,
+                self.kk_ticket_task(State::Done)
+                    .or(if self.tasks.is_empty() { None } else { Some(0) }),
+            )),
             State::Failed => Some((State::Failed, self.kk_ticket_task(State::Failed))),
             _ => None,
         }
     }
 
-    pub(super) fn render_korekore(&mut self, screen: &mut dyn Screen, scene: &Scene) -> Result<(), ()> {
+    pub(super) fn render_korekore(
+        &mut self,
+        screen: &mut dyn Screen,
+        scene: &Scene,
+    ) -> Result<(), ()> {
         let leisure = scene.leisure.view(scene.now_ms);
         let mut dim = false;
         if self.mode == Mode::Leisure {
@@ -301,7 +438,11 @@ impl Display {
             dim = leisure.dim;
         }
         self.ensure_backlight(screen, true);
-        let alarm = if self.mode == Mode::Pomodoro { self.ring_alarm_active(&scene.pomodoro.view(scene.now_ms)) } else { false };
+        let alarm = if self.mode == Mode::Pomodoro {
+            self.ring_alarm_active(&scene.pomodoro.view(scene.now_ms))
+        } else {
+            false
+        };
         let mut canvas = Canvas::new(screen.frame());
         match self.mode {
             Mode::Pomodoro => self.kk_pomodoro(&mut canvas, scene, alarm),
@@ -348,7 +489,12 @@ impl Display {
             return (b"NO LINK", MIST, Expr::Sleep, b"z Z");
         }
         match self.state {
-            State::Working => (b"WORKING", SKY, Expr::Working, [b"." as &[u8], b". .", b". . ."][(self.animation_frame % 3) as usize]),
+            State::Working => (
+                b"WORKING",
+                SKY,
+                Expr::Working,
+                [b"." as &[u8], b". .", b". . ."][(self.animation_frame % 3) as usize],
+            ),
             State::InputRequired => (b"ASK", SUN, Expr::Input, b"!?"),
             State::Done => (b"DONE", MINT, Expr::Happy, b""),
             State::Failed => (b"FAIL", PEACH, Expr::Sad, b""),
@@ -386,12 +532,22 @@ impl Display {
 
         // The side panel: korekore, the mark, Kore, the state and today's line.
         canvas.fill_rect(0, 3, 96, HEIGHT - 3, BOX_CARD);
-        kt::draw_bitmap(canvas, &WORDMARK_14, 48 - i32::from(WORDMARK_14.width) / 2, 11, KORE_PINK);
+        kt::draw_bitmap(
+            canvas,
+            &WORDMARK_14,
+            48 - i32::from(WORDMARK_14.width) / 2,
+            11,
+            KORE_PINK,
+        );
         let petted = self.petted(scene.now_ms);
         let mut hop = 0;
         if petted {
             expr = Expr::Happy;
-            hop = if self.animation_frame.is_multiple_of(2) { -3 } else { 0 };
+            hop = if self.animation_frame.is_multiple_of(2) {
+                -3
+            } else {
+                0
+            };
         } else if !self.link_lost && self.state == State::Idle {
             match idle_mood(self.animation_frame) {
                 IdleMood::Nap => (expr, mark) = (Expr::Sleep, b"Z z"),
@@ -404,20 +560,46 @@ impl Display {
                 }
             }
         } else if self.state == State::Working {
-            hop = if self.animation_frame.is_multiple_of(2) { 0 } else { -1 };
+            hop = if self.animation_frame.is_multiple_of(2) {
+                0
+            } else {
+                -1
+            };
         }
         kt::draw_centered(canvas, &TYPE_11, 48, 31, mark, color);
-        let mirror = !self.link_lost && self.state == State::Idle && idle_mood(self.animation_frame) == IdleMood::Look && self.animation_frame % 4 < 2;
+        let mirror = !self.link_lost
+            && self.state == State::Idle
+            && idle_mood(self.animation_frame) == IdleMood::Look
+            && self.animation_frame % 4 < 2;
         match &self.look {
             // A Character fills the panel at 2× (96 × 128), standing just above the state word.
-            Some(look) => look.draw_scaled(canvas, expr.frame(), 0, LOOK_PANEL_BOTTOM - look::HEIGHT * 2 + hop, 2, mirror, self.link_lost),
-            None => self.kk_buddy(canvas, expr, BUDDY.x, BUDDY.y + hop, 4, mirror, self.link_lost),
+            Some(look) => look.draw_scaled(
+                canvas,
+                expr.frame(),
+                0,
+                LOOK_PANEL_BOTTOM - look::HEIGHT * 2 + hop,
+                2,
+                mirror,
+                self.link_lost,
+            ),
+            None => self.kk_buddy(
+                canvas,
+                expr,
+                BUDDY.x,
+                BUDDY.y + hop,
+                4,
+                mirror,
+                self.link_lost,
+            ),
         }
         if petted && !self.link_lost {
             heart(canvas, BUDDY.x + BUDDY.width, BUDDY.y - 10 + hop);
         }
         kt::draw_centered(canvas, &TYPE_14, 48, 201, word, color);
-        let tally = format_tally(scene.pomodoro.view(scene.now_ms).completed, scene.pomodoro.view(scene.now_ms).focus_s);
+        let tally = format_tally(
+            scene.pomodoro.view(scene.now_ms).completed,
+            scene.pomodoro.view(scene.now_ms).focus_s,
+        );
         let sub = self.kk_sub_line(scene, tally.as_bytes());
         let sub = &sub[..font::fit(sub, 1, 90).min(sub.len())];
         kt::draw_centered(canvas, &TYPE_9, 48, 222, sub, BOX_TEXT_MUTED);
@@ -437,15 +619,46 @@ impl Display {
             return;
         }
         for (slot, task) in self.tasks_on_page().iter().enumerate() {
-            self.kk_card(canvas, scene, task, card_rect(slot), BOX_CARD, 8, &TYPE_11, false);
+            self.kk_card(
+                canvas,
+                scene,
+                task,
+                card_rect(slot),
+                BOX_CARD,
+                8,
+                &TYPE_11,
+                false,
+            );
         }
-        kt::draw(canvas, &TYPE_9, 104, 223, self.page_line().as_bytes(), BOX_TEXT_MUTED, 150);
+        kt::draw(
+            canvas,
+            &TYPE_9,
+            104,
+            223,
+            self.page_line().as_bytes(),
+            BOX_TEXT_MUTED,
+            150,
+        );
         let pages = self.pages() as i32;
         if pages > 1 {
             for page in 0..pages {
                 let x = 312 - (pages - page) * 17 + 3;
-                let fill = if page == self.page as i32 { BOX_TEXT } else { BOX_FACE };
-                fill_round(canvas, Rect { x, y: 227, width: 14, height: 4 }, 2, fill);
+                let fill = if page == self.page as i32 {
+                    BOX_TEXT
+                } else {
+                    BOX_FACE
+                };
+                fill_round(
+                    canvas,
+                    Rect {
+                        x,
+                        y: 227,
+                        width: 14,
+                        height: 4,
+                    },
+                    2,
+                    fill,
+                );
             }
         }
     }
@@ -469,22 +682,52 @@ impl Display {
         let view = scene.pomodoro.view(scene.now_ms);
         if !view.is_idle() && !(view.run == Run::Paused && self.animation_frame % 2 == 1) {
             let mut badge = Text::<11>::new();
-            badge.push_bytes(if view.phase == Phase::Focus { b"F " } else { b"B " });
+            badge.push_bytes(if view.phase == Phase::Focus {
+                b"F "
+            } else {
+                b"B "
+            });
             badge.push_bytes(format_countdown(view.remaining_ms).as_bytes());
             let width = kt::width(&TYPE_10, badge.as_bytes()) + 8;
-            chip(canvas, &TYPE_10, right - width, 10, badge.as_bytes(), BOX_GROUND, KORE_PINK);
+            chip(
+                canvas,
+                &TYPE_10,
+                right - width,
+                10,
+                badge.as_bytes(),
+                BOX_GROUND,
+                KORE_PINK,
+            );
         }
     }
 
     /// One card: the agent's tile, the title, project and time, and the state's pill.
     #[allow(clippy::too_many_arguments, reason = "the card and how it is drawn")]
-    fn kk_card(&self, canvas: &mut Canvas, scene: &Scene, task: &Task, rect: Rect, fill: u16, radius: i32, title_face: &Face, takeover: bool) {
+    fn kk_card(
+        &self,
+        canvas: &mut Canvas,
+        scene: &Scene,
+        task: &Task,
+        rect: Rect,
+        fill: u16,
+        radius: i32,
+        title_face: &Face,
+        takeover: bool,
+    ) {
         fill_round(canvas, rect, radius, fill);
         let padding = if takeover { 7 } else { 6 };
         let (pill_fill, pill_word) = pill(task.state);
         let pill_width = kt::width(&TYPE_9, pill_word) + 8;
         let pill_x = rect.x + rect.width - padding - pill_width;
-        chip(canvas, &TYPE_9, pill_x, rect.y + (rect.height - TYPE_9.line()) / 2, pill_word, BOX_GROUND, pill_fill);
+        chip(
+            canvas,
+            &TYPE_9,
+            pill_x,
+            rect.y + (rect.height - TYPE_9.line()) / 2,
+            pill_word,
+            BOX_GROUND,
+            pill_fill,
+        );
         let mut text_x = rect.x + padding;
         let mut title = &task.title[..];
         // The agents' own marks, as the robot screens draw them, at 24 px (1.5×): easier to tell apart than the
@@ -496,16 +739,30 @@ impl Display {
         }
         let text_width = pill_x - 7 - text_x;
         let title_y = rect.y + padding;
-        kt::draw(canvas, title_face, text_x, title_y, title, BOX_TEXT, text_width);
+        kt::draw(
+            canvas, title_face, text_x, title_y, title, BOX_TEXT, text_width,
+        );
         // Under the title's letters; DotGothic16's line has room for descenders the titles rarely use.
         let line_y = title_y + title_face.line() - if title_face.line() > 20 { 4 } else { 0 };
         let elapsed = format_elapsed(self.task_elapsed_seconds(task, scene.now_ms));
         let time: Text<24> = match (takeover, task.state) {
-            (true, State::InputRequired) => text!(24, "waiting {}", core::str::from_utf8(elapsed.as_bytes()).unwrap_or("")),
+            (true, State::InputRequired) => text!(
+                24,
+                "waiting {}",
+                core::str::from_utf8(elapsed.as_bytes()).unwrap_or("")
+            ),
             (true, _) => Text::new(),
-            _ => text!(24, "{}", core::str::from_utf8(elapsed.as_bytes()).unwrap_or("")),
+            _ => text!(
+                24,
+                "{}",
+                core::str::from_utf8(elapsed.as_bytes()).unwrap_or("")
+            ),
         };
-        let time_color = if task.state == State::InputRequired && !takeover { SUN } else { BOX_TEXT_MUTED };
+        let time_color = if task.state == State::InputRequired && !takeover {
+            SUN
+        } else {
+            BOX_TEXT_MUTED
+        };
         let mut line = Text::<80>::new();
         if !task.project.is_empty() && !contains(&task.title, &task.project) {
             line.push_bytes(&task.project);
@@ -515,42 +772,146 @@ impl Display {
                 line.push_bytes(" · ".as_bytes());
             }
             line.push_bytes(time.as_bytes());
-            kt::draw(canvas, &TYPE_9, text_x, line_y, line.as_bytes(), BOX_TEXT_MUTED, text_width);
+            kt::draw(
+                canvas,
+                &TYPE_9,
+                text_x,
+                line_y,
+                line.as_bytes(),
+                BOX_TEXT_MUTED,
+                text_width,
+            );
         } else {
             let time_width = kt::width(&TYPE_9, time.as_bytes());
-            kt::draw(canvas, &TYPE_9, text_x, line_y, line.as_bytes(), BOX_TEXT_MUTED, text_width - time_width - 6);
-            kt::draw_right(canvas, &TYPE_9, pill_x - 7, line_y, time.as_bytes(), time_color);
+            kt::draw(
+                canvas,
+                &TYPE_9,
+                text_x,
+                line_y,
+                line.as_bytes(),
+                BOX_TEXT_MUTED,
+                text_width - time_width - 6,
+            );
+            kt::draw_right(
+                canvas,
+                &TYPE_9,
+                pill_x - 7,
+                line_y,
+                time.as_bytes(),
+                time_color,
+            );
         }
     }
 
     /// A card waits for an answer: the whole screen in `sun`.
     fn kk_needs_input(&self, canvas: &mut Canvas, scene: &Scene, index: usize) {
         canvas.fill_rect(0, 0, WIDTH, HEIGHT, SUN);
-        let bob = if self.animation_frame.is_multiple_of(2) { -2 } else { 0 };
+        let bob = if self.animation_frame.is_multiple_of(2) {
+            -2
+        } else {
+            0
+        };
         self.kk_buddy(canvas, Expr::Input, 12, 10 + bob, 5, false, false);
-        kt::draw(canvas, &TYPE_34, 122, tight(&TYPE_34, 20), "これこれ!".as_bytes(), BOX_GROUND, i32::MAX);
-        kt::draw(canvas, &TYPE_16, 122, tight(&TYPE_16, 60), b"KORE KORE!", BOX_GROUND, i32::MAX);
-        kt::draw(canvas, &TYPE_10, 122, 79, b"this one needs you", BOX_GROUND, i32::MAX);
-        self.kk_card(canvas, scene, &self.tasks[index], TICKET, BOX_GROUND, 10, &TYPE_12, true);
-        let others = self.tasks.iter().filter(|task| task.state == State::InputRequired).count() - 1;
+        kt::draw(
+            canvas,
+            &TYPE_34,
+            122,
+            tight(&TYPE_34, 20),
+            "これこれ!".as_bytes(),
+            BOX_GROUND,
+            i32::MAX,
+        );
+        kt::draw(
+            canvas,
+            &TYPE_16,
+            122,
+            tight(&TYPE_16, 60),
+            b"KORE KORE!",
+            BOX_GROUND,
+            i32::MAX,
+        );
+        kt::draw(
+            canvas,
+            &TYPE_10,
+            122,
+            79,
+            b"this one needs you",
+            BOX_GROUND,
+            i32::MAX,
+        );
+        self.kk_card(
+            canvas,
+            scene,
+            &self.tasks[index],
+            TICKET,
+            BOX_GROUND,
+            10,
+            &TYPE_12,
+            true,
+        );
+        let others = self
+            .tasks
+            .iter()
+            .filter(|task| task.state == State::InputRequired)
+            .count()
+            - 1;
         if others > 0 {
             let more = text!(24, "+{} more waiting", others % 100);
-            kt::draw(canvas, &TYPE_10, 12, 218, more.as_bytes(), BOX_GROUND, i32::MAX);
+            kt::draw(
+                canvas,
+                &TYPE_10,
+                12,
+                218,
+                more.as_bytes(),
+                BOX_GROUND,
+                i32::MAX,
+            );
         }
-        self.kk_key_hint_right(canvas, 308, 218, b"take me there", BOX_GROUND, SUN, BOX_GROUND);
+        self.kk_key_hint_right(
+            canvas,
+            308,
+            218,
+            b"take me there",
+            BOX_GROUND,
+            SUN,
+            BOX_GROUND,
+        );
     }
 
     /// K2 and what it does, against the right edge.
     #[allow(clippy::too_many_arguments, reason = "where and in which colours")]
-    fn kk_key_hint_right(&self, canvas: &mut Canvas, right: i32, y: i32, action: &[u8], chip_fill: u16, chip_ink: u16, color: u16) {
+    fn kk_key_hint_right(
+        &self,
+        canvas: &mut Canvas,
+        right: i32,
+        y: i32,
+        action: &[u8],
+        chip_fill: u16,
+        chip_ink: u16,
+        color: u16,
+    ) {
         let width = kt::width(&TYPE_10, b"K2") + 8 + 5 + kt::width(&TYPE_10, action);
-        hint(canvas, &TYPE_10, right - width + 1, y, b"K2", action, chip_ink, chip_fill, color);
+        hint(
+            canvas,
+            &TYPE_10,
+            right - width + 1,
+            y,
+            b"K2",
+            action,
+            chip_ink,
+            chip_fill,
+            color,
+        );
     }
 
     /// Done: 3 s in `mint` with sparkles, then back on duty (the firmware settles after the line).
     fn kk_done(&self, canvas: &mut Canvas, scene: &Scene, index: Option<usize>) {
         canvas.fill_rect(0, 0, WIDTH, HEIGHT, MINT);
-        let hop = if self.animation_frame.is_multiple_of(2) { -6 } else { 0 };
+        let hop = if self.animation_frame.is_multiple_of(2) {
+            -6
+        } else {
+            0
+        };
         self.kk_buddy(canvas, Expr::Happy, 110, 14 + hop, 5, false, false);
         let twinkle = self.animation_frame % 2;
         let left: [(i32, i32, &[u8]); 3] = [(86, 16, b"+"), (96, 44, b"*"), (86, 72, b"+")];
@@ -560,9 +921,25 @@ impl Display {
                 kt::draw(canvas, &TYPE_14, *x, *y, mark, BOX_GROUND, i32::MAX);
             }
         }
-        kt::draw_centered(canvas, &TYPE_36, 160, tight(&TYPE_36, 108), b"YATTA!", BOX_GROUND);
+        kt::draw_centered(
+            canvas,
+            &TYPE_36,
+            160,
+            tight(&TYPE_36, 108),
+            b"YATTA!",
+            BOX_GROUND,
+        );
         if let Some(index) = index {
-            self.kk_card(canvas, scene, &self.tasks[index], DONE_TICKET, BOX_GROUND, 10, &TYPE_12, true);
+            self.kk_card(
+                canvas,
+                scene,
+                &self.tasks[index],
+                DONE_TICKET,
+                BOX_GROUND,
+                10,
+                &TYPE_12,
+                true,
+            );
         }
     }
 
@@ -571,13 +948,54 @@ impl Display {
         canvas.fill_rect(0, 0, WIDTH, HEIGHT, PEACH);
         canvas.fill_rect(3, 3, WIDTH - 6, HEIGHT - 6, BOX_GROUND);
         self.kk_buddy(canvas, Expr::Sad, 15, 15, 5, false, false);
-        kt::draw(canvas, &TYPE_22, 127, tight(&TYPE_22, 26), b"daijoubu,", PEACH, i32::MAX);
-        kt::draw(canvas, &TYPE_22, 127, tight(&TYPE_22, 52), b"daijoubu.", PEACH, i32::MAX);
-        kt::draw(canvas, &TYPE_10, 127, 80, b"it happens. have a look?", BOX_TEXT_MUTED, i32::MAX);
+        kt::draw(
+            canvas,
+            &TYPE_22,
+            127,
+            tight(&TYPE_22, 26),
+            b"daijoubu,",
+            PEACH,
+            i32::MAX,
+        );
+        kt::draw(
+            canvas,
+            &TYPE_22,
+            127,
+            tight(&TYPE_22, 52),
+            b"daijoubu.",
+            PEACH,
+            i32::MAX,
+        );
+        kt::draw(
+            canvas,
+            &TYPE_10,
+            127,
+            80,
+            b"it happens. have a look?",
+            BOX_TEXT_MUTED,
+            i32::MAX,
+        );
         if let Some(index) = index {
-            self.kk_card(canvas, scene, &self.tasks[index], FAILED_TICKET, BOX_CARD, 10, &TYPE_12, true);
+            self.kk_card(
+                canvas,
+                scene,
+                &self.tasks[index],
+                FAILED_TICKET,
+                BOX_CARD,
+                10,
+                &TYPE_12,
+                true,
+            );
         }
-        self.kk_key_hint_right(canvas, 305, 213, b"open the run", BOX_TEXT, BOX_GROUND, BOX_TEXT);
+        self.kk_key_hint_right(
+            canvas,
+            305,
+            213,
+            b"open the run",
+            BOX_TEXT,
+            BOX_GROUND,
+            BOX_TEXT,
+        );
     }
 
     /// No link and nothing kept: honest gray, Kore asleep.
@@ -587,8 +1005,22 @@ impl Display {
         let float = (self.animation_frame % 4) as i32;
         kt::draw(canvas, &TYPE_14, 227, 45 - float, b"Z", MIST, i32::MAX);
         kt::draw(canvas, &TYPE_14, 217, 62 - float, b"z", MIST, i32::MAX);
-        kt::draw_centered(canvas, &TYPE_22, 160, tight(&TYPE_22, 155), b"NO LINK", MIST);
-        kt::draw_centered(canvas, &TYPE_10, 160, 187, b"waiting for the computer", MIST_TEXT);
+        kt::draw_centered(
+            canvas,
+            &TYPE_22,
+            160,
+            tight(&TYPE_22, 155),
+            b"NO LINK",
+            MIST,
+        );
+        kt::draw_centered(
+            canvas,
+            &TYPE_10,
+            160,
+            187,
+            b"waiting for the computer",
+            MIST_TEXT,
+        );
     }
 
     // ---------- pomodoro ----------
@@ -612,15 +1044,44 @@ impl Display {
 
         // The dial: 60 ticks a minute each, the minutes gone lit, and a hand.
         let (center_x, center_y) = (78.0f32, 121.0f32);
-        let minutes = if view.run == Run::Pending { 0 } else { ((view.total_ms - view.remaining_ms) / 60_000) as i32 };
+        let minutes = if view.run == Run::Pending {
+            0
+        } else {
+            ((view.total_ms - view.remaining_ms) / 60_000) as i32
+        };
         for tick in 0..60 {
             let fill = if tick < minutes { color } else { BOX_FACE };
-            fill_rotated(canvas, center_x, center_y, tick as f32 * 6.0, 62.0, 4.0, 9.0, fill);
+            fill_rotated(
+                canvas,
+                center_x,
+                center_y,
+                tick as f32 * 6.0,
+                62.0,
+                4.0,
+                9.0,
+                fill,
+            );
         }
-        fill_rotated(canvas, center_x, center_y, minutes as f32 * 6.0, 44.0, 4.0, 18.0, BOX_TEXT);
+        fill_rotated(
+            canvas,
+            center_x,
+            center_y,
+            minutes as f32 * 6.0,
+            44.0,
+            4.0,
+            18.0,
+            BOX_TEXT,
+        );
         if !paused || self.animation_frame.is_multiple_of(2) {
             let digits = if paused { BOX_TEXT_MUTED } else { BOX_TEXT };
-            kt::draw_centered(canvas, &TYPE_38, 78, tight(&TYPE_38, 99), format_countdown(view.remaining_ms).as_bytes(), digits);
+            kt::draw_centered(
+                canvas,
+                &TYPE_38,
+                78,
+                tight(&TYPE_38, 99),
+                format_countdown(view.remaining_ms).as_bytes(),
+                digits,
+            );
         }
         let under: &[u8] = match (view.is_idle(), view.phase, paused) {
             (true, _, _) => b"FOCUS 25 MIN",
@@ -638,9 +1099,25 @@ impl Display {
         } else {
             b"FOCUS"
         };
-        let label_width = kt::draw(canvas, &TYPE_22, 164, tight(&TYPE_22, 11), label, color, i32::MAX);
+        let label_width = kt::draw(
+            canvas,
+            &TYPE_22,
+            164,
+            tight(&TYPE_22, 11),
+            label,
+            color,
+            i32::MAX,
+        );
         if paused {
-            chip(canvas, &TYPE_9, 164 + label_width + 6, 16, b"PAUSED", BOX_GROUND, BOX_TEXT);
+            chip(
+                canvas,
+                &TYPE_9,
+                164 + label_width + 6,
+                16,
+                b"PAUSED",
+                BOX_GROUND,
+                BOX_TEXT,
+            );
         }
         let hints: [(&[u8], &[u8]); 2] = match (view.run, view.is_idle()) {
             (Run::Pending, true) => [(b"K0", b"start focus"), (b"", b"")],
@@ -650,16 +1127,48 @@ impl Display {
         };
         for (row, (key, action)) in hints.iter().enumerate() {
             if !key.is_empty() {
-                hint(canvas, &TYPE_9, 164, 38 + row as i32 * 18, key, action, BOX_GROUND, BOX_TEXT, BOX_TEXT_MUTED);
+                hint(
+                    canvas,
+                    &TYPE_9,
+                    164,
+                    38 + row as i32 * 18,
+                    key,
+                    action,
+                    BOX_GROUND,
+                    BOX_TEXT,
+                    BOX_TEXT_MUTED,
+                );
             }
         }
         kt::draw(canvas, &TYPE_9, 164, 78, b"TODAY", BOX_TEXT_MUTED, i32::MAX);
         let squares = view.completed.clamp(4, 12) as i32;
         for square in 0..squares {
-            let fill = if (square as u32) < view.completed { KORE_PINK } else { BOX_FACE };
-            fill_round(canvas, Rect { x: 164 + square * 11, y: 96, width: 8, height: 8 }, 2, fill);
+            let fill = if (square as u32) < view.completed {
+                KORE_PINK
+            } else {
+                BOX_FACE
+            };
+            fill_round(
+                canvas,
+                Rect {
+                    x: 164 + square * 11,
+                    y: 96,
+                    width: 8,
+                    height: 8,
+                },
+                2,
+                fill,
+            );
         }
-        kt::draw(canvas, &TYPE_10, 164, 108, format_tally(view.completed, view.focus_s).as_bytes(), KORE_PINK, 148);
+        kt::draw(
+            canvas,
+            &TYPE_10,
+            164,
+            108,
+            format_tally(view.completed, view.focus_s).as_bytes(),
+            KORE_PINK,
+            148,
+        );
 
         let expr = match (view.is_idle(), view.phase, paused) {
             (true, _, _) | (_, _, true) => Expr::Normal,
@@ -667,12 +1176,23 @@ impl Display {
             _ => Expr::Working,
         };
         self.kk_buddy(canvas, expr, 164, 198, 2, false, false);
-        self.kk_agent_strip(canvas, Rect { x: 208, y: 196, width: 104, height: 38 });
+        self.kk_agent_strip(
+            canvas,
+            Rect {
+                x: 208,
+                y: 196,
+                width: 104,
+                height: 38,
+            },
+        );
     }
 
     /// The agents during a Pomodoro: they never take the screen, only this strip.
     fn kk_agent_strip(&self, canvas: &mut Canvas, rect: Rect) {
-        let asking = self.tasks.iter().any(|task| task.state == State::InputRequired);
+        let asking = self
+            .tasks
+            .iter()
+            .any(|task| task.state == State::InputRequired);
         let (fill, ink, word_color, word): (u16, u16, u16, &[u8]) = if self.link_lost {
             (BOX_GRAY_GROUND, MIST_TEXT, MIST, b"NO LINK")
         } else if asking {
@@ -686,14 +1206,39 @@ impl Display {
             }
         };
         fill_round(canvas, rect, 6, fill);
-        kt::draw(canvas, &TYPE_9, rect.x + 5, rect.y + 4, word, word_color, rect.width - 10);
+        kt::draw(
+            canvas,
+            &TYPE_9,
+            rect.x + 5,
+            rect.y + 4,
+            word,
+            word_color,
+            rect.width - 10,
+        );
         let title: &[u8] = if self.link_lost {
             b"timer keeps going"
         } else {
-            let task = self.tasks.iter().find(|task| task.state == State::InputRequired).or(self.tasks.first());
-            task.map(|task| task.icon.and_then(|icon| task.title.strip_prefix(icon.prefix())).unwrap_or(&task.title)).unwrap_or(b"all quiet")
+            let task = self
+                .tasks
+                .iter()
+                .find(|task| task.state == State::InputRequired)
+                .or(self.tasks.first());
+            task.map(|task| {
+                task.icon
+                    .and_then(|icon| task.title.strip_prefix(icon.prefix()))
+                    .unwrap_or(&task.title)
+            })
+            .unwrap_or(b"all quiet")
         };
-        kt::draw(canvas, &TYPE_9, rect.x + 5, rect.y + 19, title, ink, rect.width - 10);
+        kt::draw(
+            canvas,
+            &TYPE_9,
+            rect.x + 5,
+            rect.y + 19,
+            title,
+            ink,
+            rect.width - 10,
+        );
     }
 
     /// A phase just ended: the screen fills, pink after focus and lavender after a break, until a key.
@@ -705,20 +1250,67 @@ impl Display {
         let tally = format_tally(view.completed, view.focus_s);
         kt::draw(canvas, &TYPE_10, 14, 15, b"POMODORO", BOX_GROUND, i32::MAX);
         kt::draw_right(canvas, &TYPE_10, 306, 15, tally.as_bytes(), BOX_GROUND);
-        let hop = if self.animation_frame.is_multiple_of(2) { -4 } else { 0 };
+        let hop = if self.animation_frame.is_multiple_of(2) {
+            -4
+        } else {
+            0
+        };
         self.kk_buddy(canvas, Expr::Happy, 14, 35 + hop, 5, false, false);
-        let line: &[u8] = if focus_ended { b"Nice work. Time for a break!" } else { b"Break's over. Ready?" };
-        let bubble = Rect { x: 126, y: 33, width: 180, height: 62 };
+        let line: &[u8] = if focus_ended {
+            b"Nice work. Time for a break!"
+        } else {
+            b"Break's over. Ready?"
+        };
+        let bubble = Rect {
+            x: 126,
+            y: 33,
+            width: 180,
+            height: 62,
+        };
         outlined_round(canvas, bubble, 10, 2, BOX_GROUND, CREAM);
         let (first, rest) = split_line(&TYPE_12, line, bubble.width - 16);
-        kt::draw(canvas, &TYPE_12, bubble.x + 8, bubble.y + 6, first, BOX_GROUND, bubble.width - 16);
-        kt::draw(canvas, &TYPE_12, bubble.x + 8, bubble.y + 6 + TYPE_12.line() - 4, rest, BOX_GROUND, bubble.width - 16);
-        let big: &[u8] = if focus_ended { b"BREAK 05:00" } else { b"FOCUS 25:00" };
-        kt::draw(canvas, &TYPE_30, 14, tight(&TYPE_30, 133), big, BOX_GROUND, i32::MAX);
-        let hints: [(&[u8], &[u8]); 2] = if focus_ended { [(b"K0", b"start break"), (b"HOLD K0", b"skip")] } else { [(b"K0", b"start focus"), (b"K1", b"on duty")] };
+        kt::draw(
+            canvas,
+            &TYPE_12,
+            bubble.x + 8,
+            bubble.y + 6,
+            first,
+            BOX_GROUND,
+            bubble.width - 16,
+        );
+        kt::draw(
+            canvas,
+            &TYPE_12,
+            bubble.x + 8,
+            bubble.y + 6 + TYPE_12.line() - 4,
+            rest,
+            BOX_GROUND,
+            bubble.width - 16,
+        );
+        let big: &[u8] = if focus_ended {
+            b"BREAK 05:00"
+        } else {
+            b"FOCUS 25:00"
+        };
+        kt::draw(
+            canvas,
+            &TYPE_30,
+            14,
+            tight(&TYPE_30, 133),
+            big,
+            BOX_GROUND,
+            i32::MAX,
+        );
+        let hints: [(&[u8], &[u8]); 2] = if focus_ended {
+            [(b"K0", b"start break"), (b"HOLD K0", b"skip")]
+        } else {
+            [(b"K0", b"start focus"), (b"K1", b"on duty")]
+        };
         let mut x = 14;
         for (key, action) in hints {
-            x += hint(canvas, &TYPE_10, x, 216, key, action, CREAM, BOX_GROUND, BOX_GROUND) + 10;
+            x += hint(
+                canvas, &TYPE_10, x, 216, key, action, CREAM, BOX_GROUND, BOX_GROUND,
+            ) + 10;
         }
     }
 
@@ -726,22 +1318,42 @@ impl Display {
 
     fn kk_leisure(&self, canvas: &mut Canvas, scene: &Scene, view: &leisure::View) {
         let frame = view.skit_frame;
-        let ground = if view.skit == Skit::Stars { BOX_DIM } else { BOX_GROUND };
+        let ground = if view.skit == Skit::Stars {
+            BOX_DIM
+        } else {
+            BOX_GROUND
+        };
         canvas.fill_rect(0, 0, WIDTH, HEIGHT, ground);
         kt::draw(canvas, &TYPE_9, 8, 6, b"LEISURE", BOX_TEXT_MUTED, i32::MAX);
         let pomodoro = scene.pomodoro.view(scene.now_ms);
         if !pomodoro.is_idle() {
             let mut badge = Text::<11>::new();
-            badge.push_bytes(if pomodoro.phase == Phase::Focus { b"F " } else { b"B " });
+            badge.push_bytes(if pomodoro.phase == Phase::Focus {
+                b"F "
+            } else {
+                b"B "
+            });
             badge.push_bytes(format_countdown(pomodoro.remaining_ms).as_bytes());
             let width = kt::width(&TYPE_10, badge.as_bytes()) + 8;
-            chip(canvas, &TYPE_10, 312 - width, 5, badge.as_bytes(), BOX_GROUND, KORE_PINK);
+            chip(
+                canvas,
+                &TYPE_10,
+                312 - width,
+                5,
+                badge.as_bytes(),
+                BOX_GROUND,
+                KORE_PINK,
+            );
         } else if let Some(stat) = self.stats.first() {
             kt::draw_right(canvas, &TYPE_9, 312, 6, stat, BOX_TEXT_MUTED);
         }
         canvas.fill_rect(0, 198, WIDTH, 2, BOX_FACE);
 
-        let resting = if frame % 24 == 23 { Expr::Sleep } else { Expr::Normal };
+        let resting = if frame % 24 == 23 {
+            Expr::Sleep
+        } else {
+            Expr::Normal
+        };
         let breathe = ((frame / 8) % 2) as i32;
         // Where Kore stands (its top left at 4×, standing on the floor) and how.
         let (mut x, mut y, mut expr, mut mirror) = (120, 126 + breathe, resting, false);
@@ -754,7 +1366,15 @@ impl Display {
                 (expr, mirror) = (Expr::Working, left);
                 let arrows: &[u8] = if left { b"< < <" } else { b"> > >" };
                 if walking {
-                    kt::draw(canvas, &TYPE_12, if left { x - 50 } else { x + 90 }, 168, arrows, BOX_TEXT_MUTED, i32::MAX);
+                    kt::draw(
+                        canvas,
+                        &TYPE_12,
+                        if left { x - 50 } else { x + 90 },
+                        168,
+                        arrows,
+                        BOX_TEXT_MUTED,
+                        i32::MAX,
+                    );
                 }
             }
             Skit::Ball if !looks => {
@@ -762,7 +1382,19 @@ impl Display {
                 let t = (frame % 24) as f32 / 24.0;
                 let ball_x = 190 + (frame % 24) as i32 * 2;
                 let ball_y = 168 - (30.0 * libm::sinf(core::f32::consts::PI * t)) as i32;
-                outlined_round(canvas, Rect { x: ball_x, y: ball_y, width: 22, height: 22 }, 11, 3, KORE_PINK, BOX_TEXT);
+                outlined_round(
+                    canvas,
+                    Rect {
+                        x: ball_x,
+                        y: ball_y,
+                        width: 22,
+                        height: 22,
+                    },
+                    11,
+                    3,
+                    KORE_PINK,
+                    BOX_TEXT,
+                );
             }
             Skit::Read if !looks => {
                 (x, expr) = (100, Expr::Working);
@@ -774,7 +1406,15 @@ impl Display {
                 }
             }
             Skit::Stars => {
-                const SKY_STARS: [(i32, i32); 7] = [(30, 40), (80, 70), (140, 30), (210, 55), (270, 35), (250, 95), (40, 100)];
+                const SKY_STARS: [(i32, i32); 7] = [
+                    (30, 40),
+                    (80, 70),
+                    (140, 30),
+                    (210, 55),
+                    (270, 35),
+                    (250, 95),
+                    (40, 100),
+                ];
                 let count = (frame / 12 + 1).min(7) as usize;
                 for &(star_x, star_y) in &SKY_STARS[..count] {
                     kt::draw(canvas, &TYPE_12, star_x, star_y, b"+", SUN, i32::MAX);
@@ -805,13 +1445,35 @@ impl Display {
             },
             Skit::Dream => {
                 (x, expr) = (60, Expr::Sleep);
-                fill_round(canvas, Rect { x: 150, y: 70, width: 150, height: 24 }, 10, BOX_FACE);
-                let line: &[u8] = if self.stats.is_empty() { b"zzz" } else { &self.stats[(frame / 32) as usize % self.stats.len()] };
+                fill_round(
+                    canvas,
+                    Rect {
+                        x: 150,
+                        y: 70,
+                        width: 150,
+                        height: 24,
+                    },
+                    10,
+                    BOX_FACE,
+                );
+                let line: &[u8] = if self.stats.is_empty() {
+                    b"zzz"
+                } else {
+                    &self.stats[(frame / 32) as usize % self.stats.len()]
+                };
                 kt::draw(canvas, &TYPE_10, 158, 76, line, BOX_TEXT, 134);
             }
             Skit::Sleep => {
                 expr = Expr::Sleep;
-                kt::draw(canvas, &TYPE_16, 210, 110 - (frame % 16) as i32, b"Z", LAVENDER, i32::MAX);
+                kt::draw(
+                    canvas,
+                    &TYPE_16,
+                    210,
+                    110 - (frame % 16) as i32,
+                    b"Z",
+                    LAVENDER,
+                    i32::MAX,
+                );
             }
             Skit::Ball | Skit::Read | Skit::None => {}
         }
@@ -829,8 +1491,22 @@ impl Display {
     fn kk_panel(&self, canvas: &mut Canvas, panel: &Panel) {
         canvas.fill_rect(0, 0, WIDTH, HEIGHT, BOX_DIM);
         outlined_round(canvas, PANEL_CARD, 12, 3, BOX_GROUND, CREAM);
-        kt::draw(canvas, &TYPE_16, PANEL_INNER_LEFT, 21, &panel.title, title_color(&panel.title), PANEL_INNER_RIGHT - PANEL_INNER_LEFT);
-        canvas.fill_rect(PANEL_INNER_LEFT, 44, PANEL_INNER_RIGHT - PANEL_INNER_LEFT, 2, BOX_GROUND);
+        kt::draw(
+            canvas,
+            &TYPE_16,
+            PANEL_INNER_LEFT,
+            21,
+            &panel.title,
+            title_color(&panel.title),
+            PANEL_INNER_RIGHT - PANEL_INNER_LEFT,
+        );
+        canvas.fill_rect(
+            PANEL_INNER_LEFT,
+            44,
+            PANEL_INNER_RIGHT - PANEL_INNER_LEFT,
+            2,
+            BOX_GROUND,
+        );
         let tone = |tone: Tone| match tone {
             Tone::Plain => BOX_GROUND,
             Tone::Dim => MUTED_2,
@@ -847,9 +1523,19 @@ impl Display {
                         pointer(canvas, row.x + 6, row.y + 9, BOX_GROUND);
                     }
                     // A Facts label's second line is a note the robot draws small; one line here.
-                    let label = label.split(|&byte| byte == b'\n').next().unwrap_or_default();
+                    let label = label
+                        .split(|&byte| byte == b'\n')
+                        .next()
+                        .unwrap_or_default();
                     kt::draw(canvas, &TYPE_13, row.x + 14, row.y, label, BOX_GROUND, 150);
-                    kt::draw_right(canvas, &TYPE_13, row.x + row.width - 6, row.y, value, tone(*value_tone));
+                    kt::draw_right(
+                        canvas,
+                        &TYPE_13,
+                        row.x + row.width - 6,
+                        row.y,
+                        value,
+                        tone(*value_tone),
+                    );
                 }
             }
             PanelKind::Meter(level) => {
@@ -869,7 +1555,15 @@ impl Display {
                     canvas.fill_rect(left + step * (bar + 2), 90 - height, bar, height, color);
                 }
                 if let Some((label, _, line_tone)) = panel.lines.first() {
-                    kt::draw(canvas, &TYPE_12, left, 98, label, tone(*line_tone), PANEL_INNER_RIGHT - left);
+                    kt::draw(
+                        canvas,
+                        &TYPE_12,
+                        left,
+                        98,
+                        label,
+                        tone(*line_tone),
+                        PANEL_INNER_RIGHT - left,
+                    );
                 }
             }
             PanelKind::Text(scale) => {
@@ -879,26 +1573,69 @@ impl Display {
                     if y + face.line() > PANEL_RULE_Y {
                         break;
                     }
-                    kt::draw(canvas, face, PANEL_INNER_LEFT, y, label, tone(*line_tone), PANEL_INNER_RIGHT - PANEL_INNER_LEFT);
+                    kt::draw(
+                        canvas,
+                        face,
+                        PANEL_INNER_LEFT,
+                        y,
+                        label,
+                        tone(*line_tone),
+                        PANEL_INNER_RIGHT - PANEL_INNER_LEFT,
+                    );
                 }
             }
             PanelKind::Progress(percent) => {
                 self.kk_buddy(canvas, Expr::Working, PANEL_INNER_LEFT, 56, 3, false, false);
-                let bar = Rect { x: PANEL_INNER_LEFT + 70, y: 70, width: PANEL_INNER_RIGHT - PANEL_INNER_LEFT - 70, height: 16 };
+                let bar = Rect {
+                    x: PANEL_INNER_LEFT + 70,
+                    y: 70,
+                    width: PANEL_INNER_RIGHT - PANEL_INNER_LEFT - 70,
+                    height: 16,
+                };
                 outlined_round(canvas, bar, 8, 2, BOX_GROUND, PAPER);
                 let lit = (i32::from(percent.min(100)) + 2) / 5;
                 let segment = (bar.width - 8 - 19 * 2) / 20;
                 for index in 0..lit {
-                    canvas.fill_rect(bar.x + 4 + index * (segment + 2), bar.y + 4, segment, bar.height - 8, KORE_PINK);
+                    canvas.fill_rect(
+                        bar.x + 4 + index * (segment + 2),
+                        bar.y + 4,
+                        segment,
+                        bar.height - 8,
+                        KORE_PINK,
+                    );
                 }
                 for (index, (label, _, line_tone)) in panel.lines.iter().enumerate() {
-                    kt::draw(canvas, &TYPE_12, bar.x, 94 + index as i32 * 16, label, tone(*line_tone), bar.width);
+                    kt::draw(
+                        canvas,
+                        &TYPE_12,
+                        bar.x,
+                        94 + index as i32 * 16,
+                        label,
+                        tone(*line_tone),
+                        bar.width,
+                    );
                 }
             }
         }
-        canvas.fill_rect(PANEL_INNER_LEFT, PANEL_RULE_Y, PANEL_INNER_RIGHT - PANEL_INNER_LEFT, 2, BOX_GROUND);
+        canvas.fill_rect(
+            PANEL_INNER_LEFT,
+            PANEL_RULE_Y,
+            PANEL_INNER_RIGHT - PANEL_INNER_LEFT,
+            2,
+            BOX_GROUND,
+        );
         for (rect, (key, action)) in kk_hint_rects(panel).iter().zip(&panel.hints) {
-            hint(canvas, &TYPE_10, rect.x + 2, PANEL_HINTS_Y, key, action, CREAM, BOX_GROUND, BOX_GROUND);
+            hint(
+                canvas,
+                &TYPE_10,
+                rect.x + 2,
+                PANEL_HINTS_Y,
+                key,
+                action,
+                CREAM,
+                BOX_GROUND,
+                BOX_GROUND,
+            );
         }
     }
 
@@ -906,17 +1643,32 @@ impl Display {
 
     pub(super) fn kk_target_rect(&self, target: Target) -> Option<Rect> {
         match (target, &self.panel) {
-            (Target::Row(index), Some(panel)) if panel.kind == PanelKind::List && index < panel.lines.len() => Some(panel_row(index)),
+            (Target::Row(index), Some(panel))
+                if panel.kind == PanelKind::List && index < panel.lines.len() =>
+            {
+                Some(panel_row(index))
+            }
             (Target::Hint(index), Some(panel)) => kk_hint_rects(panel).get(index).copied(),
-            (Target::Card(index), None) if self.mode == Mode::Duty && index < self.tasks.len() => match self.kk_takeover() {
-                Some((State::InputRequired, Some(shown))) if shown == index => Some(TICKET),
-                Some((State::Done, Some(shown))) if shown == index => Some(DONE_TICKET),
-                Some((State::Failed, Some(shown))) if shown == index => Some(FAILED_TICKET),
-                Some(_) => None,
-                None => index.checked_sub(self.page * CARDS_PER_PAGE).filter(|&slot| slot < CARDS_PER_PAGE).map(card_rect),
-            },
-            (Target::PageLine, None) if self.mode == Mode::Duty && self.kk_takeover().is_none() && self.pages() > 1 => Some(PAGE_LINE),
-            (Target::Buddy, None) if self.mode == Mode::Duty && self.kk_takeover().is_none() => Some(self.kk_buddy_rect()),
+            (Target::Card(index), None) if self.mode == Mode::Duty && index < self.tasks.len() => {
+                match self.kk_takeover() {
+                    Some((State::InputRequired, Some(shown))) if shown == index => Some(TICKET),
+                    Some((State::Done, Some(shown))) if shown == index => Some(DONE_TICKET),
+                    Some((State::Failed, Some(shown))) if shown == index => Some(FAILED_TICKET),
+                    Some(_) => None,
+                    None => index
+                        .checked_sub(self.page * CARDS_PER_PAGE)
+                        .filter(|&slot| slot < CARDS_PER_PAGE)
+                        .map(card_rect),
+                }
+            }
+            (Target::PageLine, None)
+                if self.mode == Mode::Duty && self.kk_takeover().is_none() && self.pages() > 1 =>
+            {
+                Some(PAGE_LINE)
+            }
+            (Target::Buddy, None) if self.mode == Mode::Duty && self.kk_takeover().is_none() => {
+                Some(self.kk_buddy_rect())
+            }
             _ => None,
         }
     }
@@ -926,14 +1678,22 @@ impl Display {
             if !PANEL_CARD.contains(x, y) {
                 return Some(Target::OutsidePanel);
             }
-            if let Some(index) = kk_hint_rects(panel).iter().position(|rect| rect.contains(x, y)) {
+            if let Some(index) = kk_hint_rects(panel)
+                .iter()
+                .position(|rect| rect.contains(x, y))
+            {
                 return Some(Target::Hint(index));
             }
             if panel.kind == PanelKind::List {
                 return (0..panel.lines.len())
                     .find(|&index| {
                         let row = panel_row(index);
-                        Rect { y: row.y - 1, height: 23, ..row }.contains(x, y)
+                        Rect {
+                            y: row.y - 1,
+                            height: 23,
+                            ..row
+                        }
+                        .contains(x, y)
                     })
                     .map(Target::Row);
             }
@@ -943,13 +1703,21 @@ impl Display {
             return None;
         }
         match self.kk_takeover() {
-            Some((State::InputRequired, Some(index))) if TICKET.contains(x, y) => return Some(Target::Card(index)),
-            Some((State::Done, Some(index))) if DONE_TICKET.contains(x, y) => return Some(Target::Card(index)),
-            Some((State::Failed, Some(index))) if FAILED_TICKET.contains(x, y) => return Some(Target::Card(index)),
+            Some((State::InputRequired, Some(index))) if TICKET.contains(x, y) => {
+                return Some(Target::Card(index));
+            }
+            Some((State::Done, Some(index))) if DONE_TICKET.contains(x, y) => {
+                return Some(Target::Card(index));
+            }
+            Some((State::Failed, Some(index))) if FAILED_TICKET.contains(x, y) => {
+                return Some(Target::Card(index));
+            }
             Some(_) => return None,
             None => {}
         }
-        if let Some(slot) = (0..self.tasks_on_page().len()).find(|&slot| card_rect(slot).contains(x, y)) {
+        if let Some(slot) =
+            (0..self.tasks_on_page().len()).find(|&slot| card_rect(slot).contains(x, y))
+        {
             return Some(Target::Card(self.page * CARDS_PER_PAGE + slot));
         }
         if self.pages() > 1 && PAGE_LINE.contains(x, y) {
@@ -962,7 +1730,14 @@ impl Display {
 /// A panel's title colour: a voice command's errors and the last confirmation before a new identity in
 /// `kore-pink-text`, the other confirmations in `wait-text` (canvas: "voice, transfers, menu sub-views").
 fn title_color(title: &[u8]) -> u16 {
-    const ERRORS: [&[u8]; 6] = [b"NOT HEARD", b"UNAVAILABLE", b"BUSY", b"VOICE ERROR", b"NO MICROPHONE", b"SURE?"];
+    const ERRORS: [&[u8]; 6] = [
+        b"NOT HEARD",
+        b"UNAVAILABLE",
+        b"BUSY",
+        b"VOICE ERROR",
+        b"NO MICROPHONE",
+        b"SURE?",
+    ];
     if ERRORS.contains(&title) {
         KORE_PINK_TEXT
     } else if title.ends_with(b"?") {
@@ -981,7 +1756,12 @@ fn kk_hint_rects(panel: &Panel) -> Vec<Rect> {
         .iter()
         .map(|(key, action)| {
             let width = kt::width(&TYPE_10, key) + 8 + 4 + kt::width(&TYPE_10, action) + 10;
-            let rect = Rect { x: x - 2, y: PANEL_RULE_Y + 2, width, height: PANEL_CARD.y + PANEL_CARD.height - PANEL_RULE_Y - 2 };
+            let rect = Rect {
+                x: x - 2,
+                y: PANEL_RULE_Y + 2,
+                width,
+                height: PANEL_CARD.y + PANEL_CARD.height - PANEL_RULE_Y - 2,
+            };
             x += width;
             rect
         })
@@ -993,8 +1773,20 @@ fn kk_hint_rects(panel: &Panel) -> Vec<Rect> {
 }
 
 /// A `width` × `height` bar rotated `degrees` clockwise from 12 o'clock, its middle `radius` from the centre.
-#[allow(clippy::too_many_arguments, reason = "the bar's place, size and colour")]
-fn fill_rotated(canvas: &mut Canvas, center_x: f32, center_y: f32, degrees: f32, radius: f32, width: f32, height: f32, color: u16) {
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the bar's place, size and colour"
+)]
+fn fill_rotated(
+    canvas: &mut Canvas,
+    center_x: f32,
+    center_y: f32,
+    degrees: f32,
+    radius: f32,
+    width: f32,
+    height: f32,
+    color: u16,
+) {
     let angle = degrees.to_radians();
     let (sin, cos) = (libm::sinf(angle), libm::cosf(angle));
     let (mid_x, mid_y) = (center_x + sin * radius, center_y - cos * radius);
@@ -1006,7 +1798,13 @@ fn fill_rotated(canvas: &mut Canvas, center_x: f32, center_y: f32, degrees: f32,
             let across = px * cos + py * sin;
             let along = -px * sin + py * cos;
             if across.abs() <= width / 2.0 && along.abs() <= height / 2.0 {
-                canvas.fill_rect(libm::roundf(mid_x) as i32 + dx, libm::roundf(mid_y) as i32 + dy, 1, 1, color);
+                canvas.fill_rect(
+                    libm::roundf(mid_x) as i32 + dx,
+                    libm::roundf(mid_y) as i32 + dy,
+                    1,
+                    1,
+                    color,
+                );
             }
         }
     }

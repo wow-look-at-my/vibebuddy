@@ -32,7 +32,11 @@ pub struct VoicePack {
 
 impl VoicePack {
     pub fn voice_id(&self) -> &str {
-        let end = self.voice_id.iter().position(|&byte| byte == 0).unwrap_or(ID_BYTES);
+        let end = self
+            .voice_id
+            .iter()
+            .position(|&byte| byte == 0)
+            .unwrap_or(ID_BYTES);
         core::str::from_utf8(&self.voice_id[..end]).unwrap_or("?")
     }
 }
@@ -48,7 +52,11 @@ const fn crc_table() -> [u32; 256] {
         let mut c = n as u32;
         let mut k = 0;
         while k < 8 {
-            c = if c & 1 != 0 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
+            c = if c & 1 != 0 {
+                0xEDB8_8320 ^ (c >> 1)
+            } else {
+                c >> 1
+            };
             k += 1;
         }
         table[n] = c;
@@ -93,7 +101,10 @@ pub fn parse(header: &[u8], capacity: usize) -> Option<VoicePack> {
     for index in 0..CLIPS {
         let offset = read_u32(&header[48 + index * 4..]);
         let length = read_u32(&header[68 + index * 4..]);
-        if length == 0 || (offset as usize) < HEADER_BYTES || offset as u64 + length as u64 > end_of_payload {
+        if length == 0
+            || (offset as usize) < HEADER_BYTES
+            || offset as u64 + length as u64 > end_of_payload
+        {
             return None;
         }
         pack.clip_offset[index] = offset;
@@ -151,7 +162,11 @@ pub(crate) mod tests {
     }
 
     /// Lays out a header by hand per the spec: the five clips sit back to back after the header.
-    pub(crate) fn build_header(voice_id: &str, lengths: [u32; 5], payload_crc: u32) -> [u8; HEADER_BYTES] {
+    pub(crate) fn build_header(
+        voice_id: &str,
+        lengths: [u32; 5],
+        payload_crc: u32,
+    ) -> [u8; HEADER_BYTES] {
         let mut header = [0u8; HEADER_BYTES];
         header[..4].copy_from_slice(b"VBVP");
         put_u32(&mut header[4..], 1);
@@ -236,7 +251,13 @@ pub(crate) mod tests {
     #[test]
     fn base64_round_trips_standard_vectors() {
         let mut out = [0u8; 16];
-        for (encoded, decoded) in [("", ""), ("Zg==", "f"), ("Zm8=", "fo"), ("Zm9v", "foo"), ("Zm9vYmFy", "foobar")] {
+        for (encoded, decoded) in [
+            ("", ""),
+            ("Zg==", "f"),
+            ("Zm8=", "fo"),
+            ("Zm9v", "foo"),
+            ("Zm9vYmFy", "foobar"),
+        ] {
             let length = decode_base64(encoded.as_bytes(), &mut out).expect("valid input");
             assert_eq!(&out[..length], decoded.as_bytes());
         }

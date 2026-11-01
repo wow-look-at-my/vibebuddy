@@ -30,13 +30,22 @@ fn picture(connected: bool, activities: &[(&str, &str, &str)]) -> BoxPicture {
 }
 
 fn save<M: Clone>(name: &str, size: (f32, f32), element: Element<'_, M>) {
-    let settings = Settings { fonts: FONTS.iter().map(|font| (*font).into()).collect(), ..Settings::default() };
+    let settings = Settings {
+        fonts: FONTS.iter().map(|font| (*font).into()).collect(),
+        ..Settings::default()
+    };
     let mut simulator = Simulator::with_size(settings, size, element);
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/korekore-preview").join(format!("{name}.png"));
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../target/korekore-preview")
+        .join(format!("{name}.png"));
     // The simulator only writes a file that isn't there yet.
     let written = path.with_file_name(format!("{name}-tiny-skia.png"));
     let _ = std::fs::remove_file(&written);
-    simulator.snapshot(&Theme::Light).unwrap().matches_image(&path).unwrap();
+    simulator
+        .snapshot(&Theme::Light)
+        .unwrap()
+        .matches_image(&path)
+        .unwrap();
     println!("wrote {}", written.display());
 }
 
@@ -51,12 +60,49 @@ fn draw_the_korekore_views() {
             ("github-actions", "CI:App tests", "working"),
         ],
     );
-    let asking = picture(true, &[("codex", "CX:Review changes", "needs_input"), ("claude-code", "CC:Add Chinese to the box", "working")]);
+    let asking = picture(
+        true,
+        &[
+            ("codex", "CX:Review changes", "needs_input"),
+            ("claude-code", "CC:Add Chinese to the box", "working"),
+        ],
+    );
     // The window's inside, as on the canvas (960 × 772 less its 3 px outline).
-    save("window-character", (954.0, 766.0), view::settings(&working, &Section::ALL, Section::Character, "0.5.0", |section| section, view::pending()));
-    save("window-device-asking", (954.0, 766.0), view::settings(&asking, &Section::ALL, Section::Device, "0.5.0", |section| section, view::pending()));
-    for (name, sample) in [("working", &working), ("asking", &asking), ("quiet", &picture(true, &[])), ("no-link", &picture(false, &[]))] {
-        save(&format!("minibox-{name}"), (214.0, 166.0), view::mini_box::<Section>(sample));
+    save(
+        "window-character",
+        (954.0, 766.0),
+        view::settings(
+            &working,
+            &Section::ALL,
+            Section::Character,
+            "0.5.0",
+            |section| section,
+            view::pending(),
+        ),
+    );
+    save(
+        "window-device-asking",
+        (954.0, 766.0),
+        view::settings(
+            &asking,
+            &Section::ALL,
+            Section::Device,
+            "0.5.0",
+            |section| section,
+            view::pending(),
+        ),
+    );
+    for (name, sample) in [
+        ("working", &working),
+        ("asking", &asking),
+        ("quiet", &picture(true, &[])),
+        ("no-link", &picture(false, &[])),
+    ] {
+        save(
+            &format!("minibox-{name}"),
+            (214.0, 166.0),
+            view::mini_box::<Section>(sample),
+        );
     }
 }
 
@@ -86,14 +132,23 @@ fn draw_the_korekore_pages() {
     let (mut app, _) = crate::App::boot();
     app.status = Some(serde_json::from_str(SAMPLE).unwrap());
     app.resident = true;
-    app.resident_info = serde_json::from_str(r#"{"enabled":true,"revision":1,"brain_setting":"codex","anthropic_key_set":false}"#).unwrap();
+    app.resident_info = serde_json::from_str(
+        r#"{"enabled":true,"revision":1,"brain_setting":"codex","anthropic_key_set":false}"#,
+    )
+    .unwrap();
     app.conversation = Some(Ok(vec![
         client::Exchange {
             said: "Quick check: what time is it, and how many agents are working?".to_owned(),
             replies: vec!["It's 10:09 a.m. in Singapore. Three agents are working.".to_owned()],
             at: Some(chrono::Utc::now() - chrono::Duration::days(1)),
         },
-        client::Exchange { said: "新加坡明天天气怎么样".to_owned(), replies: vec!["明天上午多云转晴，最高约三十四度；午后可能有雷阵雨，出门记得带伞。".to_owned()], at: Some(chrono::Utc::now()) },
+        client::Exchange {
+            said: "新加坡明天天气怎么样".to_owned(),
+            replies: vec![
+                "明天上午多云转晴，最高约三十四度；午后可能有雷阵雨，出门记得带伞。".to_owned(),
+            ],
+            at: Some(chrono::Utc::now()),
+        },
     ]));
     let setup = |agent: &str, name: &str, present: bool, installed: bool| agents::Setup {
         agent: agent.to_owned(),
@@ -127,7 +182,11 @@ fn draw_the_korekore_pages() {
     for section in Section::ALL {
         app.tab = section.tab();
         let element: Element<'_, Message> = app.view(iced::window::Id::unique());
-        save(&format!("page-{}", format!("{section:?}").to_lowercase()), (954.0, 766.0), element);
+        save(
+            &format!("page-{}", format!("{section:?}").to_lowercase()),
+            (954.0, 766.0),
+            element,
+        );
     }
     // Making a Character, which takes the Character page's place.
     if let Some(base) = app.voices.first().map(crate::Lender::of) {
@@ -136,7 +195,10 @@ fn draw_the_korekore_pages() {
             base,
             name: "Night owl".to_owned(),
             voice: None,
-            lines: vec![crate::making::Line { occasion: "done".to_owned(), text: "All done, {address}.".to_owned() }],
+            lines: vec![crate::making::Line {
+                occasion: "done".to_owned(),
+                text: "All done, {address}.".to_owned(),
+            }],
             original: Vec::new(),
             occasions: vec!["done".to_owned()],
             look: None,

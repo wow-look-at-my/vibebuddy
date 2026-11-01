@@ -12,10 +12,10 @@ mod client;
 mod custom;
 mod firmware_file;
 mod i18n;
-mod making;
 #[cfg(target_os = "linux")]
 mod instance;
 mod korekore;
+mod making;
 mod preview;
 mod status;
 #[cfg(target_os = "linux")]
@@ -43,12 +43,17 @@ const SETTINGS: &str = "--settings";
 
 /// The running copy's socket, handed to the subscription that listens on it.
 #[cfg(target_os = "linux")]
-static INSTANCE: std::sync::Mutex<Option<std::os::unix::net::UnixListener>> = std::sync::Mutex::new(None);
+static INSTANCE: std::sync::Mutex<Option<std::os::unix::net::UnixListener>> =
+    std::sync::Mutex::new(None);
 
 fn main() -> iced::Result {
     #[cfg(target_os = "linux")]
     match instance::claim(std::env::args().any(|arg| arg == RESTARTED)) {
-        instance::Claim::First(listener) => *INSTANCE.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(listener),
+        instance::Claim::First(listener) => {
+            *INSTANCE
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(listener)
+        }
         instance::Claim::HandedOff => return Ok(()),
         instance::Claim::Unavailable => {}
     }
@@ -413,7 +418,12 @@ impl std::fmt::Display for OwnProvider {
 impl MakeForm {
     /// Only the look is new: nothing to make, the preset lends its voice and lines.
     fn look_only(&self) -> bool {
-        self.look.is_some() && self.lines == self.original && self.voice.as_ref().is_none_or(|voice| voice.id == self.base.id)
+        self.look.is_some()
+            && self.lines == self.original
+            && self
+                .voice
+                .as_ref()
+                .is_none_or(|voice| voice.id == self.base.id)
     }
 }
 
@@ -486,7 +496,11 @@ impl App {
         // window is the only way in.
         let mut app = app;
         app.voices = assets::voices();
-        app.faces = app.voices.iter().map(|voice| voice.face.as_ref().map(|face| handle(face, 1))).collect();
+        app.faces = app
+            .voices
+            .iter()
+            .map(|voice| voice.face.as_ref().map(|face| handle(face, 1)))
+            .collect();
         app.lender = app
             .characters
             .custom_lender
@@ -494,19 +508,27 @@ impl App {
             .and_then(|id| app.voices.iter().find(|voice| voice.id == id))
             .or(app.voices.first())
             .map(Lender::of);
-        app.robot_face = ::image::load_from_memory(include_bytes!("../../characters/robot/face.png")).ok().map(|face| {
-            let face = face.to_rgba8();
-            image::Handle::from_rgba(face.width(), face.height(), face.into_raw())
-        });
+        app.robot_face =
+            ::image::load_from_memory(include_bytes!("../../characters/robot/face.png"))
+                .ok()
+                .map(|face| {
+                    let face = face.to_rgba8();
+                    image::Handle::from_rgba(face.width(), face.height(), face.into_raw())
+                });
         app.custom_look = custom::custom_look_file()
             .and_then(|path| std::fs::read(path).ok())
-            .and_then(|look| character::look_frames(&look).map(|frames| (look, frames.iter().map(|frame| handle(frame, 2)).collect())));
+            .and_then(|look| {
+                character::look_frames(&look)
+                    .map(|frames| (look, frames.iter().map(|frame| handle(frame, 2)).collect()))
+            });
         app.custom_look_written = app.custom_look.is_some();
         // Debug builds only: open the window on a given section or first-run step, for checking it on a desktop
         // without a pointer (VIBEBUDDY_KOREKORE_SECTION=device, VIBEBUDDY_KOREKORE_GUIDE=1).
         #[cfg(debug_assertions)]
         if let Ok(name) = std::env::var("VIBEBUDDY_KOREKORE_SECTION")
-            && let Some(section) = korekore::Section::ALL.into_iter().find(|section| format!("{section:?}").eq_ignore_ascii_case(&name))
+            && let Some(section) = korekore::Section::ALL
+                .into_iter()
+                .find(|section| format!("{section:?}").eq_ignore_ascii_case(&name))
         {
             app.tab = section.tab();
         }
@@ -516,10 +538,17 @@ impl App {
         app.guide = (first && cfg!(target_os = "linux")).then_some(0);
         #[cfg(debug_assertions)]
         {
-            app.guide = std::env::var("VIBEBUDDY_KOREKORE_GUIDE").ok().and_then(|page| page.parse().ok()).or(app.guide);
+            app.guide = std::env::var("VIBEBUDDY_KOREKORE_GUIDE")
+                .ok()
+                .and_then(|page| page.parse().ok())
+                .or(app.guide);
         }
         let open = first || restarted || !cfg!(target_os = "linux");
-        let task = if open { Task::done(Message::OpenSettings) } else { Task::none() };
+        let task = if open {
+            Task::done(Message::OpenSettings)
+        } else {
+            Task::none()
+        };
         (app, task)
     }
 
@@ -536,18 +565,23 @@ impl App {
     fn subscription(&self) -> Subscription<Message> {
         #[cfg(target_os = "linux")]
         let (tray, instance) = (
-            if self.plugin { Subscription::none() } else { Subscription::run(run_tray) },
+            if self.plugin {
+                Subscription::none()
+            } else {
+                Subscription::run(run_tray)
+            },
             Subscription::run(run_instance),
         );
         #[cfg(not(target_os = "linux"))]
         let (tray, instance) = (Subscription::none(), Subscription::none());
         // Only while the Conversation tab is in an open window: the history is read again when it changed.
-        let conversation = if self.settings.is_some() && self.resident && self.tab == Tab::Conversation {
-            let every = if self.conversation_marked { 2 } else { 5 };
-            iced::time::every(Duration::from_secs(every)).map(|_| Message::PollConversation)
-        } else {
-            Subscription::none()
-        };
+        let conversation =
+            if self.settings.is_some() && self.resident && self.tab == Tab::Conversation {
+                let every = if self.conversation_marked { 2 } else { 5 };
+                iced::time::every(Duration::from_secs(every)).map(|_| Message::PollConversation)
+            } else {
+                Subscription::none()
+            };
         Subscription::batch([
             Subscription::run(client::status_updates).map(Message::Daemon),
             iced::time::every(Duration::from_secs(2)).map(|_| Message::PluginTick),
@@ -562,7 +596,10 @@ impl App {
         match message {
             Message::Daemon(client::Update::Status(status)) => {
                 let device = &status.device;
-                let busy = status.operation.as_ref().is_some_and(status::Operation::running);
+                let busy = status
+                    .operation
+                    .as_ref()
+                    .is_some_and(status::Operation::running);
                 // Wait for the build: the box has answered, not just had its port opened (which resets it).
                 let voice = (device.connected && device.firmware_build.is_some() && !busy)
                     .then(|| self.pending_voice.take())
@@ -579,8 +616,17 @@ impl App {
                 } else {
                     Task::none()
                 };
-                let job = |status: &Status| status.making.as_ref().map(|making| (making.id.clone(), making.state.clone()));
-                let made = if self.status.as_ref().is_none_or(|before| job(before) != job(&status)) {
+                let job = |status: &Status| {
+                    status
+                        .making
+                        .as_ref()
+                        .map(|making| (making.id.clone(), making.state.clone()))
+                };
+                let made = if self
+                    .status
+                    .as_ref()
+                    .is_none_or(|before| job(before) != job(&status))
+                {
                     self.refresh_made()
                 } else {
                     Task::none()
@@ -610,7 +656,9 @@ impl App {
                 self.tray_host = up;
                 // A shell restarting is back within a second or two; one that isn't up after this, isn't coming.
                 if !up {
-                    return Task::perform(tokio::time::sleep(Duration::from_secs(10)), |()| Message::TrayHostCheck);
+                    return Task::perform(tokio::time::sleep(Duration::from_secs(10)), |()| {
+                        Message::TrayHostCheck
+                    });
                 }
             }
             Message::TrayHostCheck => {
@@ -656,7 +704,11 @@ impl App {
                     Task::none()
                 };
                 // The Agents tab reads each agent's config from disk; have it ready, whichever tab shows first.
-                return Task::batch([open.discard(), Task::done(Message::RefreshAgents), conversation]);
+                return Task::batch([
+                    open.discard(),
+                    Task::done(Message::RefreshAgents),
+                    conversation,
+                ]);
             }
             Message::WindowClosed(id) => {
                 if self.settings == Some(id) {
@@ -682,8 +734,15 @@ impl App {
                 }
                 // Reading the day's use costs a request to the service, so only when General, which shows the account,
                 // opens; the status brings it.
-                if tab == Tab::General && self.status.as_ref().is_some_and(|status| status.account.signed_in) {
-                    return Task::perform(client::refresh_account(), |_| Message::AccountDone(Ok(())));
+                if tab == Tab::General
+                    && self
+                        .status
+                        .as_ref()
+                        .is_some_and(|status| status.account.signed_in)
+                {
+                    return Task::perform(client::refresh_account(), |_| {
+                        Message::AccountDone(Ok(()))
+                    });
                 }
             }
             Message::Resident(Ok(enabled)) => {
@@ -696,7 +755,10 @@ impl App {
             Message::RefreshConversation => {
                 if !self.conversation_loading {
                     self.conversation_loading = true;
-                    return Task::perform(client::resident_history(CONVERSATION_LIMIT), Message::Conversation);
+                    return Task::perform(
+                        client::resident_history(CONVERSATION_LIMIT),
+                        Message::Conversation,
+                    );
                 }
             }
             Message::Conversation(result) => {
@@ -714,10 +776,13 @@ impl App {
                 match result {
                     Ok(info) => {
                         self.conversation_marked = info.revision.is_some();
-                        let became_ready = self.resident_problem.is_some() && info.problem.is_none();
+                        let became_ready =
+                            self.resident_problem.is_some() && info.problem.is_none();
                         self.resident_problem = info.problem.clone();
                         self.resident_info = Some(info.clone());
-                        let changed = info.revision.is_none() || info.revision != self.conversation_seen || became_ready;
+                        let changed = info.revision.is_none()
+                            || info.revision != self.conversation_seen
+                            || became_ready;
                         // A read already under way is left alone; the next poll sees the change again.
                         if (changed || self.conversation.is_none()) && !self.conversation_loading {
                             self.conversation_seen = info.revision;
@@ -734,12 +799,14 @@ impl App {
                 }
             }
             Message::OpenCodexInstallPage => {
-                if let Err(error) = launch("xdg-open", &[std::ffi::OsStr::new(CODEX_INSTALL_PAGE)]) {
+                if let Err(error) = launch("xdg-open", &[std::ffi::OsStr::new(CODEX_INSTALL_PAGE)])
+                {
                     self.notice = Some(Err(error));
                 }
             }
             Message::OpenClaudeInstallPage => {
-                if let Err(error) = launch("xdg-open", &[std::ffi::OsStr::new(CLAUDE_INSTALL_PAGE)]) {
+                if let Err(error) = launch("xdg-open", &[std::ffi::OsStr::new(CLAUDE_INSTALL_PAGE)])
+                {
                     self.notice = Some(Err(error));
                 }
             }
@@ -748,15 +815,28 @@ impl App {
                     self.notice = Some(Err(error));
                 }
             }
-            Message::PickBrain(choice) => return Task::perform(client::set_resident_brain(choice), Message::ResidentSettingSaved),
+            Message::PickBrain(choice) => {
+                return Task::perform(
+                    client::set_resident_brain(choice),
+                    Message::ResidentSettingSaved,
+                );
+            }
             Message::AnthropicKeyDraft(draft) => self.anthropic_key_draft = draft,
             Message::SaveAnthropicKey => {
                 let key = self.anthropic_key_draft.trim().to_owned();
                 if !key.is_empty() {
-                    return Task::perform(client::set_anthropic_key(Some(key)), Message::ResidentSettingSaved);
+                    return Task::perform(
+                        client::set_anthropic_key(Some(key)),
+                        Message::ResidentSettingSaved,
+                    );
                 }
             }
-            Message::RemoveAnthropicKey => return Task::perform(client::set_anthropic_key(None), Message::ResidentSettingSaved),
+            Message::RemoveAnthropicKey => {
+                return Task::perform(
+                    client::set_anthropic_key(None),
+                    Message::ResidentSettingSaved,
+                );
+            }
             Message::ResidentSettingSaved(result) => match result {
                 Ok(info) => {
                     if info.anthropic_key_set == Some(true) {
@@ -770,23 +850,43 @@ impl App {
                     return Task::done(Message::PollConversation);
                 }
                 Err(error) => self.resident_setting_error = Some(error),
-            }
+            },
             Message::NotifyLink(enabled) => {
-                let mut config = self.status.as_ref().map(|status| status.config.clone()).unwrap_or_default();
+                let mut config = self
+                    .status
+                    .as_ref()
+                    .map(|status| status.config.clone())
+                    .unwrap_or_default();
                 config.notify_link = enabled;
                 return Task::perform(client::put_config(config), Message::ConfigSaved);
             }
             Message::Relay(enabled) => {
-                let mut config = self.status.as_ref().map(|status| status.config.clone()).unwrap_or_default();
+                let mut config = self
+                    .status
+                    .as_ref()
+                    .map(|status| status.config.clone())
+                    .unwrap_or_default();
                 config.relay = enabled;
                 return Task::perform(client::put_config(config), Message::ConfigSaved);
             }
             Message::CheckUpdates(enabled) => {
-                let mut config = self.status.as_ref().map(|status| status.config.clone()).unwrap_or_default();
+                if !status::UPDATES_COMPILED_IN {
+                    return Task::none();
+                }
+                let mut config = self
+                    .status
+                    .as_ref()
+                    .map(|status| status.config.clone())
+                    .unwrap_or_default();
                 config.check_updates = Some(enabled);
                 return Task::perform(client::put_config(config), Message::ConfigSaved);
             }
-            Message::CheckForUpdatesNow => return Task::perform(client::check_for_updates(), Message::Done),
+            Message::CheckForUpdatesNow => {
+                if !status::UPDATES_COMPILED_IN {
+                    return Task::none();
+                }
+                return Task::perform(client::check_for_updates(), Message::Done);
+            }
             Message::OpenReleases => {
                 if let Err(error) = launch("xdg-open", &[std::ffi::OsStr::new(RELEASES_PAGE)]) {
                     self.notice = Some(Err(error));
@@ -808,14 +908,21 @@ impl App {
                 }
                 self.language = choice;
                 self.restart_offer = (choice.chinese() != i18n::is_chinese()).then(|| {
-                    let target = if choice.chinese() { assets::Language::Chinese } else { assets::Language::English };
+                    let target = if choice.chinese() {
+                        assets::Language::Chinese
+                    } else {
+                        assets::Language::English
+                    };
                     let device = self.status.as_ref().map(|status| &status.device);
                     // Only a box that has answered (build and voice reported) can take a voice; an unknown one isn't guessed at.
                     let voice = device
                         .filter(|device| device.connected && device.firmware_build.is_some())
                         .and_then(|device| device.voice.as_deref())
                         .and_then(|voice| assets::voice_switch(voice, target));
-                    RestartOffer { voice, switch_voice: true }
+                    RestartOffer {
+                        voice,
+                        switch_voice: true,
+                    }
                 });
             }
             Message::SwitchVoice(on) => {
@@ -824,8 +931,13 @@ impl App {
                 }
             }
             Message::RestartForLanguage(now) => {
-                let Some(offer) = self.restart_offer.take() else { return Task::none() };
-                let voice = offer.voice.filter(|_| offer.switch_voice).map(|voice| voice.id);
+                let Some(offer) = self.restart_offer.take() else {
+                    return Task::none();
+                };
+                let voice = offer
+                    .voice
+                    .filter(|_| offer.switch_voice)
+                    .map(|voice| voice.id);
                 if now {
                     match restart(voice) {
                         Ok(()) => return iced::exit(),
@@ -835,16 +947,14 @@ impl App {
                     return Task::done(Message::UseVoice(id));
                 }
             }
-            Message::ConfigSaved(result) => {
-                match result {
-                    Ok(config) => {
-                        if let Some(status) = &mut self.status {
-                            status.config = config;
-                        }
+            Message::ConfigSaved(result) => match result {
+                Ok(config) => {
+                    if let Some(status) = &mut self.status {
+                        status.config = config;
                     }
-                    Err(error) => self.notice = Some(Err(error)),
                 }
-            }
+                Err(error) => self.notice = Some(Err(error)),
+            },
             Message::VolumeDragged(level) => self.volume = Some(level),
             Message::VolumeReleased => {
                 if let Some(level) = self.volume {
@@ -852,11 +962,18 @@ impl App {
                 }
             }
             Message::PlayLine => {
-                let level = self.volume.or_else(|| self.status.as_ref()?.device.volume).unwrap_or(60);
+                let level = self
+                    .volume
+                    .or_else(|| self.status.as_ref()?.device.volume)
+                    .unwrap_or(60);
                 return Task::perform(client::set_volume(level, true), Message::Done);
             }
-            Message::SetScreens(screens) => return Task::perform(client::set_screens(screens.0), Message::Done),
-            Message::ChooseBox(usb_serial) => return Task::perform(client::choose_box(usb_serial), Message::Done),
+            Message::SetScreens(screens) => {
+                return Task::perform(client::set_screens(screens.0), Message::Done);
+            }
+            Message::ChooseBox(usb_serial) => {
+                return Task::perform(client::choose_box(usb_serial), Message::Done);
+            }
             Message::Unpair(key) => return Task::perform(client::unpair(key), Message::Done),
             Message::TakeOver => return Task::perform(client::take_over(), Message::Done),
             Message::WifiSsid(ssid) => self.wifi_ssid = ssid,
@@ -865,16 +982,26 @@ impl App {
             Message::JoinWifi => {
                 self.wifi_editing = false;
                 let password = std::mem::take(&mut self.wifi_password);
-                return Task::perform(client::set_wifi(self.wifi_ssid.clone(), password), Message::Done);
+                return Task::perform(
+                    client::set_wifi(self.wifi_ssid.clone(), password),
+                    Message::Done,
+                );
             }
             Message::ForgetWifi => return Task::perform(client::forget_wifi(), Message::Done),
             Message::ScanWifi => return Task::perform(client::scan_wifi(), Message::Done),
             Message::Identify => return Task::perform(client::identify(), Message::Done),
             Message::UseVoice(id) => {
-                let form = assets::language_of(id).and_then(|language| self.characters.address(language)).map(str::to_owned);
+                let form = assets::language_of(id)
+                    .and_then(|language| self.characters.address(language))
+                    .map(str::to_owned);
                 let write = async move {
                     let pack = assets::read_character(id, form.as_deref()).await?;
-                    client::write_voice_pack(pack.build().ok_or("the Character pack doesn't fit")?, None, form.as_deref()).await
+                    client::write_voice_pack(
+                        pack.build().ok_or("the Character pack doesn't fit")?,
+                        None,
+                        form.as_deref(),
+                    )
+                    .await
                 };
                 return Task::perform(write, Message::Done);
             }
@@ -882,31 +1009,51 @@ impl App {
                 self.characters.set_address(language, form);
                 self.characters.save();
                 // The box says it at once when it wears a Character of that language.
-                let current = self.status.as_ref().and_then(|status| status.device.voice.clone());
-                if let Some(id) = current.as_deref().and_then(assets::voice_id).filter(|&id| assets::language_of(id) == Some(language)) {
+                let current = self
+                    .status
+                    .as_ref()
+                    .and_then(|status| status.device.voice.clone());
+                if let Some(id) = current
+                    .as_deref()
+                    .and_then(assets::voice_id)
+                    .filter(|&id| assets::language_of(id) == Some(language))
+                {
                     return Task::done(Message::UseVoice(id));
                 }
-                if let Some(made) = self.made.iter().find(|made| made.complete && current.as_deref() == Some(made.id.as_str()))
+                if let Some(made) = self
+                    .made
+                    .iter()
+                    .find(|made| made.complete && current.as_deref() == Some(made.id.as_str()))
                     && self.made_language(made) == Some(language)
                 {
                     return Task::done(Message::UseMade(made.id.clone()));
                 }
-                let lends = self.lender.is_some_and(|lender| assets::language_of(lender.id) == Some(language));
+                let lends = self
+                    .lender
+                    .is_some_and(|lender| assets::language_of(lender.id) == Some(language));
                 if current.as_deref() == Some(CUSTOM) && lends && self.custom_look.is_some() {
                     return Task::done(Message::UseCustom);
                 }
             }
-            Message::ChooseDrawings => return Task::perform(custom::choose_drawings(), Message::Drawings),
+            Message::ChooseDrawings => {
+                return Task::perform(custom::choose_drawings(), Message::Drawings);
+            }
             Message::Drawings(Ok(None)) => {}
             Message::Drawings(Ok(Some(drawings))) => {
                 match character::build_look(&drawings) {
                     Some(look) => {
                         let frames = character::look_frames(&look).unwrap_or_default();
-                        self.custom_look = Some((look, frames.iter().map(|frame| handle(frame, 2)).collect()));
+                        self.custom_look =
+                            Some((look, frames.iter().map(|frame| handle(frame, 2)).collect()));
                         self.custom_look_written = false;
                         self.custom_problem = None;
                     }
-                    None => self.custom_problem = Some(tr("No figure found: use a plain white or transparent background.", &[])),
+                    None => {
+                        self.custom_problem = Some(tr(
+                            "No figure found: use a plain white or transparent background.",
+                            &[],
+                        ))
+                    }
                 }
                 return self.show_custom_look();
             }
@@ -918,21 +1065,35 @@ impl App {
             Message::UseRobot => {
                 self.characters.robot_lender = None;
                 self.characters.save();
-                let write = async move { client::write_voice_pack(assets::read_pack(ROBOT).await?, None, None).await };
+                let write = async move {
+                    client::write_voice_pack(assets::read_pack(ROBOT).await?, None, None).await
+                };
                 return Task::perform(write, Message::Done);
             }
             Message::UseCustom => {
-                let (Some((look, _)), Some(lender)) = (self.custom_look.clone(), self.lender) else { return Task::none() };
+                let (Some((look, _)), Some(lender)) = (self.custom_look.clone(), self.lender)
+                else {
+                    return Task::none();
+                };
                 if let Some(path) = custom::custom_look_file() {
                     custom::write(&path, &look);
                 }
                 self.characters.custom_lender = Some(lender.id.to_owned());
                 self.characters.save();
                 self.custom_look_written = true;
-                let form = assets::language_of(lender.id).and_then(|language| self.characters.address(language)).map(str::to_owned);
+                let form = assets::language_of(lender.id)
+                    .and_then(|language| self.characters.address(language))
+                    .map(str::to_owned);
                 let write = async move {
-                    let pack = assets::read_character(lender.id, form.as_deref()).await?.with_look(look, CUSTOM);
-                    client::write_voice_pack(pack.build().ok_or("that character can't lend its voice")?, Some(lender.id), form.as_deref()).await
+                    let pack = assets::read_character(lender.id, form.as_deref())
+                        .await?
+                        .with_look(look, CUSTOM);
+                    client::write_voice_pack(
+                        pack.build().ok_or("that character can't lend its voice")?,
+                        Some(lender.id),
+                        form.as_deref(),
+                    )
+                    .await
                 };
                 return Task::perform(write, Message::Done);
             }
@@ -940,7 +1101,9 @@ impl App {
             Message::MakeCharacter(open) => {
                 self.make = None;
                 self.stop_preview();
-                let Some(base) = self.voices.first().map(Lender::of).filter(|_| open) else { return Task::none() };
+                let Some(base) = self.voices.first().map(Lender::of).filter(|_| open) else {
+                    return Task::none();
+                };
                 self.make = Some(MakeForm {
                     base,
                     name: String::new(),
@@ -956,12 +1119,18 @@ impl App {
                 return Task::batch([Task::done(Message::MakeBase(base)), self.refresh_made()]);
             }
             Message::MakeBase(base) => {
-                let Some(form) = &mut self.make else { return Task::none() };
+                let Some(form) = &mut self.make else {
+                    return Task::none();
+                };
                 (form.base, form.lines, form.occasions) = (base, Vec::new(), Vec::new());
-                return Task::perform(client::preset_lines(base.id), move |lines| Message::MakeLines(base.id, lines));
+                return Task::perform(client::preset_lines(base.id), move |lines| {
+                    Message::MakeLines(base.id, lines)
+                });
             }
             Message::MakeLines(base, lines) => {
-                let Some(form) = self.make.as_mut().filter(|form| form.base.id == base) else { return Task::none() };
+                let Some(form) = self.make.as_mut().filter(|form| form.base.id == base) else {
+                    return Task::none();
+                };
                 match lines {
                     Ok(lines) => {
                         form.occasions = lines.iter().fold(Vec::new(), |mut seen, line| {
@@ -974,11 +1143,20 @@ impl App {
                         form.lines = lines;
                         form.problem = None;
                     }
-                    Err(error) => form.problem = Some(tr("Couldn't read the lines of %@: %@", &[&assets::voice_name(base), &error])),
+                    Err(error) => {
+                        form.problem = Some(tr(
+                            "Couldn't read the lines of %@: %@",
+                            &[&assets::voice_name(base), &error],
+                        ))
+                    }
                 }
                 // The preset's own voice to begin with (voices.tsv has each preset's under its id); one the user picked stays.
                 if form.voice.is_none() {
-                    form.voice = self.character_voices.iter().find(|voice| voice.id == base).cloned();
+                    form.voice = self
+                        .character_voices
+                        .iter()
+                        .find(|voice| voice.id == base)
+                        .cloned();
                 }
             }
             Message::MakeName(name) => {
@@ -992,9 +1170,16 @@ impl App {
                 }
             }
             Message::MakeVoiceAndLines(voice) => {
-                let Some(form) = &mut self.make else { return Task::none() };
-                let preset = self.voices.iter().find(|shipped| shipped.id == voice.id).map(Lender::of);
-                let follow = form.lines == form.original && preset.is_some_and(|preset| preset != form.base);
+                let Some(form) = &mut self.make else {
+                    return Task::none();
+                };
+                let preset = self
+                    .voices
+                    .iter()
+                    .find(|shipped| shipped.id == voice.id)
+                    .map(Lender::of);
+                let follow =
+                    form.lines == form.original && preset.is_some_and(|preset| preset != form.base);
                 form.voice = Some(voice);
                 if let Some(preset) = preset.filter(|_| follow) {
                     return Task::done(Message::MakeBase(preset));
@@ -1040,17 +1225,32 @@ impl App {
                 }
             }
             Message::MakeOwnTry => {
-                let Some(form) = &mut self.make else { return Task::none() };
+                let Some(form) = &mut self.make else {
+                    return Task::none();
+                };
                 // The first line, as the box would say it, is what the voice is tried with.
-                let text = form.lines.first().map(|line| line.text.clone()).unwrap_or_else(|| tr("All done!", &[]));
-                let Some(own) = form.own.as_mut().filter(|own| !own.trying) else { return Task::none() };
+                let text = form
+                    .lines
+                    .first()
+                    .map(|line| line.text.clone())
+                    .unwrap_or_else(|| tr("All done!", &[]));
+                let Some(own) = form.own.as_mut().filter(|own| !own.trying) else {
+                    return Task::none();
+                };
                 own.trying = true;
                 own.problem = None;
-                let tried = client::add_own_voice(own.provider.id().to_owned(), own.voice.trim().to_owned(), own.name.trim().to_owned(), text);
+                let tried = client::add_own_voice(
+                    own.provider.id().to_owned(),
+                    own.voice.trim().to_owned(),
+                    own.name.trim().to_owned(),
+                    text,
+                );
                 return Task::perform(tried, Message::MakeOwnTried);
             }
             Message::MakeOwnTried(result) => {
-                let Some(form) = &mut self.make else { return Task::none() };
+                let Some(form) = &mut self.make else {
+                    return Task::none();
+                };
                 match result {
                     Ok((voice, audio)) => {
                         self.character_voices.retain(|kept| kept.id != voice.id);
@@ -1061,10 +1261,14 @@ impl App {
                         if let Some((_, stop)) = self.previewing.take() {
                             stop.notify_one();
                         }
-                        let Some(pcm) = preview::wav(&audio) else { return Task::none() };
+                        let Some(pcm) = preview::wav(&audio) else {
+                            return Task::none();
+                        };
                         let stop = std::sync::Arc::new(tokio::sync::Notify::new());
                         self.previewing = Some((voice.id.clone(), stop.clone()));
-                        return Task::perform(preview::play(pcm, stop), move |result| Message::PreviewDone(voice.id.clone(), result));
+                        return Task::perform(preview::play(pcm, stop), move |result| {
+                            Message::PreviewDone(voice.id.clone(), result)
+                        });
                     }
                     Err(error) => {
                         if let Some(own) = form.own.as_mut() {
@@ -1074,47 +1278,84 @@ impl App {
                     }
                 }
             }
-            Message::RemoveOwnVoice(id) => return Task::perform(client::delete_own_voice(id.clone()), move |result| Message::OwnVoiceRemoved(id.clone(), result)),
+            Message::RemoveOwnVoice(id) => {
+                return Task::perform(client::delete_own_voice(id.clone()), move |result| {
+                    Message::OwnVoiceRemoved(id.clone(), result)
+                });
+            }
             Message::OwnVoiceRemoved(id, result) => match result {
                 Ok(()) => {
                     self.character_voices.retain(|voice| voice.id != id);
-                    if let Some(form) = self.make.as_mut().filter(|form| form.voice.as_ref().is_some_and(|voice| voice.id == id)) {
-                        form.voice = self.character_voices.iter().find(|voice| voice.id == form.base.id).cloned();
+                    if let Some(form) = self
+                        .make
+                        .as_mut()
+                        .filter(|form| form.voice.as_ref().is_some_and(|voice| voice.id == id))
+                    {
+                        form.voice = self
+                            .character_voices
+                            .iter()
+                            .find(|voice| voice.id == form.base.id)
+                            .cloned();
                     }
                 }
-                Err(error) => self.notice = Some(Err(tr("Couldn't remove the voice: %@", &[&error]))),
+                Err(error) => {
+                    self.notice = Some(Err(tr("Couldn't remove the voice: %@", &[&error])))
+                }
             },
             Message::MakeLine(index, text) => {
-                if let Some(line) = self.make.as_mut().and_then(|form| form.lines.get_mut(index)) {
+                if let Some(line) = self
+                    .make
+                    .as_mut()
+                    .and_then(|form| form.lines.get_mut(index))
+                {
                     line.text = text;
                 }
             }
             Message::MakeRemoveLine(index) => {
-                if let Some(form) = self.make.as_mut().filter(|form| making::can_remove(index, &form.lines)) {
+                if let Some(form) = self
+                    .make
+                    .as_mut()
+                    .filter(|form| making::can_remove(index, &form.lines))
+                {
                     form.lines.remove(index);
                 }
             }
-            Message::MakeChooseDrawings => return Task::perform(custom::choose_drawings(), Message::MakeDrawings),
+            Message::MakeChooseDrawings => {
+                return Task::perform(custom::choose_drawings(), Message::MakeDrawings);
+            }
             Message::MakeDrawings(drawings) => {
-                let Some(form) = &mut self.make else { return Task::none() };
+                let Some(form) = &mut self.make else {
+                    return Task::none();
+                };
                 match drawings {
                     Ok(None) => {}
                     Ok(Some(drawings)) => match character::build_look(&drawings) {
                         Some(look) => {
-                            let face = character::look_frames(&look).and_then(|frames| frames.first().map(|frame| handle(frame, 1)));
+                            let face = character::look_frames(&look)
+                                .and_then(|frames| frames.first().map(|frame| handle(frame, 1)));
                             form.look = face.map(|face| (look, face));
                             form.problem = None;
                         }
-                        None => form.problem = Some(tr("No figure found: use a plain white or transparent background.", &[])),
+                        None => {
+                            form.problem = Some(tr(
+                                "No figure found: use a plain white or transparent background.",
+                                &[],
+                            ))
+                        }
                     },
                     Err(error) => form.problem = Some(error),
                 }
             }
             Message::MakeUseLook => {
-                let Some(form) = self.make.take() else { return Task::none() };
-                let Some((look, _)) = form.look else { return Task::none() };
+                let Some(form) = self.make.take() else {
+                    return Task::none();
+                };
+                let Some((look, _)) = form.look else {
+                    return Task::none();
+                };
                 let frames = character::look_frames(&look).unwrap_or_default();
-                self.custom_look = Some((look, frames.iter().map(|frame| handle(frame, 2)).collect()));
+                self.custom_look =
+                    Some((look, frames.iter().map(|frame| handle(frame, 2)).collect()));
                 self.custom_look_written = false;
                 self.custom_problem = None;
                 self.lender = Some(form.base);
@@ -1126,8 +1367,12 @@ impl App {
                 }
             }
             Message::MakeStart => {
-                let Some(form) = &mut self.make else { return Task::none() };
-                let Some(voice) = &form.voice else { return Task::none() };
+                let Some(form) = &mut self.make else {
+                    return Task::none();
+                };
+                let Some(voice) = &form.voice else {
+                    return Task::none();
+                };
                 form.starting = true;
                 let request = making::Request {
                     id: None,
@@ -1159,7 +1404,11 @@ impl App {
                     async move {
                         let mut found = Vec::new();
                         for made in faces {
-                            let frame = making::look_of(&made).await.as_deref().and_then(character::look_frames).and_then(|frames| frames.into_iter().next());
+                            let frame = making::look_of(&made)
+                                .await
+                                .as_deref()
+                                .and_then(character::look_frames)
+                                .and_then(|frames| frames.into_iter().next());
                             if let Some(frame) = frame {
                                 found.push((made.id, handle(&frame, 1)));
                             }
@@ -1173,14 +1422,22 @@ impl App {
             Message::MadeFaces(faces) => self.made_faces = faces,
             Message::CharacterVoices(Ok(voices)) => {
                 if let Some(form) = self.make.as_mut().filter(|form| form.voice.is_none()) {
-                    form.voice = voices.iter().find(|voice| voice.id == form.base.id).cloned();
+                    form.voice = voices
+                        .iter()
+                        .find(|voice| voice.id == form.base.id)
+                        .cloned();
                 }
                 self.character_voices = voices;
             }
             Message::CharacterVoices(Err(_)) => {}
             Message::UseMade(id) => {
-                let Some(made) = self.made.iter().find(|made| made.id == id).cloned() else { return Task::none() };
-                let form = self.made_language(&made).and_then(|language| self.characters.address(language)).map(str::to_owned);
+                let Some(made) = self.made.iter().find(|made| made.id == id).cloned() else {
+                    return Task::none();
+                };
+                let form = self
+                    .made_language(&made)
+                    .and_then(|language| self.characters.address(language))
+                    .map(str::to_owned);
                 let write = async move {
                     let pack = making::pack_of(&made, form.as_deref()).await?;
                     client::write_voice_pack(pack, None, form.as_deref()).await
@@ -1198,9 +1455,17 @@ impl App {
                 self.custom_look = None;
                 self.custom_look_written = false;
                 self.custom_problem = None;
-                let lender = self.characters.custom_lender.take().and_then(|id| self.voices.iter().find(|voice| voice.id == id).map(|voice| voice.id));
+                let lender = self.characters.custom_lender.take().and_then(|id| {
+                    self.voices
+                        .iter()
+                        .find(|voice| voice.id == id)
+                        .map(|voice| voice.id)
+                });
                 self.characters.save();
-                let current = self.status.as_ref().and_then(|status| status.device.voice.clone());
+                let current = self
+                    .status
+                    .as_ref()
+                    .and_then(|status| status.device.voice.clone());
                 if let Some(lender) = lender.filter(|_| current.as_deref() == Some(CUSTOM)) {
                     return Task::done(Message::UseVoice(lender));
                 }
@@ -1216,17 +1481,26 @@ impl App {
                 return self.refresh_made();
             }
             Message::ResumeMade(id) => match making::manifest(&id) {
-                Ok(request) => return Task::perform(client::make_character(request), Message::MakeStarted),
+                Ok(request) => {
+                    return Task::perform(client::make_character(request), Message::MakeStarted);
+                }
                 Err(error) => self.notice = Some(Err(error)),
             },
             Message::AskFirmwareUpdate(asking) => self.confirm_firmware = asking,
             Message::FlashFirmware => {
                 self.confirm_firmware = false;
-                if let Some(directory) = self.updates().and_then(status::Updates::firmware_directory) {
-                    return Task::perform(client::flash_firmware(directory.to_path_buf()), Message::Done);
+                if let Some(directory) =
+                    self.updates().and_then(status::Updates::firmware_directory)
+                {
+                    return Task::perform(
+                        client::flash_firmware(directory.to_path_buf()),
+                        Message::Done,
+                    );
                 }
             }
-            Message::FlashFromFile => return Task::perform(firmware_file::pick(), Message::FirmwareFile),
+            Message::FlashFromFile => {
+                return Task::perform(firmware_file::pick(), Message::FirmwareFile);
+            }
             Message::FirmwareFile(Ok(package)) => self.file_firmware = package,
             Message::FirmwareFile(Err(error)) => self.notice = Some(Err(error)),
             Message::FlashFile(flash) => {
@@ -1241,7 +1515,13 @@ impl App {
             Message::Screenshot(result) => {
                 self.screenshot_busy = false;
                 match result {
-                    Ok(png) => self.screenshot = Some((png.clone(), image::Handle::from_bytes(png), chrono::Local::now().format("%H:%M").to_string())),
+                    Ok(png) => {
+                        self.screenshot = Some((
+                            png.clone(),
+                            image::Handle::from_bytes(png),
+                            chrono::Local::now().format("%H:%M").to_string(),
+                        ))
+                    }
                     Err(error) => self.notice = Some(Err(error)),
                 }
             }
@@ -1250,10 +1530,18 @@ impl App {
                     self.notice = Some(save_screenshot(png));
                 }
             }
-            Message::RestartDaemon => return Task::perform(client::restart_daemon(), Message::Done),
+            Message::RestartDaemon => {
+                return Task::perform(client::restart_daemon(), Message::Done);
+            }
             Message::CheckFromMenu => {
+                if !status::UPDATES_COMPILED_IN {
+                    return Task::none();
+                }
                 self.tab = Tab::General;
-                return Task::batch([Task::done(Message::OpenSettings), Task::done(Message::CheckForUpdatesNow)]);
+                return Task::batch([
+                    Task::done(Message::OpenSettings),
+                    Task::done(Message::CheckForUpdatesNow),
+                ]);
             }
             Message::StartDaemon => {
                 let args = ["--user", "restart", "vibebuddyd"].map(std::ffi::OsStr::new);
@@ -1261,12 +1549,12 @@ impl App {
                     self.notice = Some(Err(error));
                 }
             }
-            Message::LaunchAtLogin(enabled) => {
-                match set_launch_at_login(enabled) {
-                    Ok(()) => self.launch_at_login = enabled,
-                    Err(error) => self.notice = Some(Err(tr("Couldn't change Launch at login: %@", &[&error]))),
+            Message::LaunchAtLogin(enabled) => match set_launch_at_login(enabled) {
+                Ok(()) => self.launch_at_login = enabled,
+                Err(error) => {
+                    self.notice = Some(Err(tr("Couldn't change Launch at login: %@", &[&error])))
                 }
-            }
+            },
             Message::TogglePreview(id) => {
                 let playing = self.previewing.take();
                 if let Some((_, stop)) = &playing {
@@ -1279,13 +1567,20 @@ impl App {
                 self.previewing = Some((id.to_owned(), stop.clone()));
                 let play = async move {
                     let pack = assets::read_pack(id).await?;
-                    let pcm = preview::pcm(&pack).ok_or_else(|| format!("{id} has no lines to preview"))?;
+                    let pcm = preview::pcm(&pack)
+                        .ok_or_else(|| format!("{id} has no lines to preview"))?;
                     preview::play(pcm, stop).await
                 };
-                return Task::perform(play, move |result| Message::PreviewDone(id.to_owned(), result));
+                return Task::perform(play, move |result| {
+                    Message::PreviewDone(id.to_owned(), result)
+                });
             }
             Message::PreviewDone(id, result) => {
-                if self.previewing.as_ref().is_some_and(|(playing, _)| *playing == id) {
+                if self
+                    .previewing
+                    .as_ref()
+                    .is_some_and(|(playing, _)| *playing == id)
+                {
                     self.previewing = None;
                 }
                 if let Err(error) = result {
@@ -1295,7 +1590,9 @@ impl App {
             Message::RefreshAgents => return Task::perform(agents::status(), Message::Agents),
             Message::Agents(Ok(setups)) => self.agents = setups,
             Message::Agents(Err(error)) => self.notice = Some(Err(error)),
-            Message::PlanHooks(agent, installing) => return Task::perform(agents::plan(agent, installing), Message::HookPlan),
+            Message::PlanHooks(agent, installing) => {
+                return Task::perform(agents::plan(agent, installing), Message::HookPlan);
+            }
             Message::HookPlan(Ok(plan)) => self.hook_plan = Some(plan),
             Message::HookPlan(Err(error)) => self.notice = Some(Err(error)),
             Message::ApplyHooks(write) => {
@@ -1309,12 +1606,16 @@ impl App {
             }
             Message::Notice(result) => self.notice = Some(result),
             Message::OpenLogsFolder => {
-                if let Err(error) = state_dir().ok_or("HOME is not set".to_owned()).and_then(|dir| launch("xdg-open", &[dir.as_os_str()])) {
+                if let Err(error) = state_dir()
+                    .ok_or("HOME is not set".to_owned())
+                    .and_then(|dir| launch("xdg-open", &[dir.as_os_str()]))
+                {
                     self.notice = Some(Err(error));
                 }
             }
             Message::ShowDaemonLog => {
-                let args = ["journalctl", "--user", "-u", "vibebuddyd", "-f"].map(std::ffi::OsStr::new);
+                let args =
+                    ["journalctl", "--user", "-u", "vibebuddyd", "-f"].map(std::ffi::OsStr::new);
                 if let Err(error) = launch("xdg-terminal-exec", &args) {
                     self.notice = Some(Err(error));
                 }
@@ -1336,14 +1637,18 @@ impl App {
             }
             Message::SignOut => {
                 return Task::perform(client::sign_out(), |result| {
-                    Message::AccountDone(result.map_err(|error| tr("Couldn't sign out: %@", &[&error])))
+                    Message::AccountDone(
+                        result.map_err(|error| tr("Couldn't sign out: %@", &[&error])),
+                    )
                 });
             }
             Message::AskDeleteAccount(asking) => self.confirm_delete_account = asking,
             Message::DeleteAccount => {
                 self.confirm_delete_account = false;
                 return Task::perform(client::delete_account(), |result| {
-                    Message::AccountDone(result.map_err(|error| tr("Couldn't delete the account: %@", &[&error])))
+                    Message::AccountDone(
+                        result.map_err(|error| tr("Couldn't delete the account: %@", &[&error])),
+                    )
                 });
             }
             Message::AccountDone(result) => {
@@ -1355,11 +1660,16 @@ impl App {
             Message::SaveOwnKey(provider) => {
                 let key = self.own_key_drafts[provider as usize].trim().to_owned();
                 if !key.is_empty() {
-                    return Task::perform(client::set_voice_key(provider, Some(key)), move |result| Message::OwnKeySaved(provider, result));
+                    return Task::perform(
+                        client::set_voice_key(provider, Some(key)),
+                        move |result| Message::OwnKeySaved(provider, result),
+                    );
                 }
             }
             Message::ClearOwnKey(provider) => {
-                return Task::perform(client::set_voice_key(provider, None), move |result| Message::OwnKeySaved(provider, result));
+                return Task::perform(client::set_voice_key(provider, None), move |result| {
+                    Message::OwnKeySaved(provider, result)
+                });
             }
             Message::OpenOwnKeyPage(provider) => {
                 let page = match provider {
@@ -1372,7 +1682,9 @@ impl App {
             }
             Message::OwnKeySaved(provider, result) => match result {
                 Ok(()) => self.own_key_drafts[provider as usize].clear(),
-                Err(error) => self.notice = Some(Err(tr("Couldn't save your own key: %@", &[&error]))),
+                Err(error) => {
+                    self.notice = Some(Err(tr("Couldn't save your own key: %@", &[&error])))
+                }
             },
             Message::Done(result) => {
                 // The box answers a volume change through the status stream; drop the dragged value then.
@@ -1401,7 +1713,10 @@ impl App {
         } else {
             Task::none()
         };
-        Task::batch([Task::perform(client::made_characters(), Message::MadeCharacters), voices])
+        Task::batch([
+            Task::perform(client::made_characters(), Message::MadeCharacters),
+            voices,
+        ])
     }
 
     /// Stops a preview playing here, as the form whose voices it was played from closes.
@@ -1413,7 +1728,10 @@ impl App {
 
     /// The language a made Character speaks: its voice's, else its base preset's.
     fn made_language(&self, made: &making::MadeCharacter) -> Option<assets::Language> {
-        let voice = self.character_voices.iter().find(|voice| voice.id == made.voice);
+        let voice = self
+            .character_voices
+            .iter()
+            .find(|voice| voice.id == made.voice);
         match voice.map(|voice| voice.language.as_str()) {
             Some("zh") => Some(assets::Language::Chinese),
             Some("en") => Some(assets::Language::English),
@@ -1428,11 +1746,19 @@ impl App {
         if let Some(language) = assets::language_of(current) {
             return Some(language);
         }
-        if let Some(made) = self.made.iter().find(|made| made.complete && made.id == current) {
+        if let Some(made) = self
+            .made
+            .iter()
+            .find(|made| made.complete && made.id == current)
+        {
             return self.made_language(made);
         }
         if current == CUSTOM {
-            return self.characters.custom_lender.as_deref().and_then(assets::language_of);
+            return self
+                .characters
+                .custom_lender
+                .as_deref()
+                .and_then(assets::language_of);
         }
         None
     }
@@ -1470,10 +1796,20 @@ impl App {
             .filter(|&section| section != korekore::Section::Conversation || self.resident)
             .collect();
         let picture = korekore::picture::BoxPicture::derive(self.status.as_ref());
-        korekore::view::settings(&picture, &sections, section, env!("CARGO_PKG_VERSION"), Message::Korekore, self.korekore_page(section))
+        korekore::view::settings(
+            &picture,
+            &sections,
+            section,
+            env!("CARGO_PKG_VERSION"),
+            Message::Korekore,
+            self.korekore_page(section),
+        )
     }
 
     fn updates(&self) -> Option<&status::Updates> {
+        if !status::UPDATES_COMPILED_IN {
+            return None;
+        }
         self.status.as_ref()?.updates.as_ref()
     }
 
@@ -1484,10 +1820,19 @@ impl App {
         format!(
             "App {}\ndaemon {}\nfirmware {}\noffered firmware {}\nvoice {}\nOS {}\n",
             env!("CARGO_PKG_VERSION"),
-            self.status.as_ref().map_or("not connected", |status| status.daemon.build.as_str()),
-            device.and_then(|device| device.firmware_label()).as_deref().unwrap_or("—"),
-            self.updates().and_then(|updates| updates.firmware.as_ref()).map_or("—", |offer| offer.version.as_str()),
-            device.and_then(|device| device.voice.as_deref()).unwrap_or("—"),
+            self.status
+                .as_ref()
+                .map_or("not connected", |status| status.daemon.build.as_str()),
+            device
+                .and_then(|device| device.firmware_label())
+                .as_deref()
+                .unwrap_or("—"),
+            self.updates()
+                .and_then(|updates| updates.firmware.as_ref())
+                .map_or("—", |offer| offer.version.as_str()),
+            device
+                .and_then(|device| device.voice.as_deref())
+                .unwrap_or("—"),
             os_name(),
         )
     }
@@ -1498,7 +1843,13 @@ fn os_name() -> String {
     std::fs::read_to_string("/etc/os-release")
         .ok()
         .and_then(|release| {
-            release.lines().find_map(|line| Some(line.strip_prefix("PRETTY_NAME=")?.trim_matches('"').to_owned()))
+            release.lines().find_map(|line| {
+                Some(
+                    line.strip_prefix("PRETTY_NAME=")?
+                        .trim_matches('"')
+                        .to_owned(),
+                )
+            })
         })
         .unwrap_or_else(|| std::env::consts::OS.to_owned())
 }
@@ -1528,23 +1879,44 @@ async fn export_diagnostics(summary: String, config: Option<Config>) -> Result<S
         .duration_since(SystemTime::UNIX_EPOCH)
         .map(|elapsed| elapsed.as_secs())
         .unwrap_or_default();
-    let target = user_dir("DOWNLOAD", "Downloads")?.join(format!("vibe-buddy-diagnostics-{seconds}"));
+    let target =
+        user_dir("DOWNLOAD", "Downloads")?.join(format!("vibe-buddy-diagnostics-{seconds}"));
     let fail = |error: std::io::Error| format!("{}: {error}", target.display());
     tokio::fs::create_dir_all(&target).await.map_err(fail)?;
     let journal = tokio::process::Command::new("journalctl")
-        .args(["--user", "-u", "vibebuddyd", "--since", "-2d", "--no-pager", "-o", "short-iso"])
+        .args([
+            "--user",
+            "-u",
+            "vibebuddyd",
+            "--since",
+            "-2d",
+            "--no-pager",
+            "-o",
+            "short-iso",
+        ])
         .output()
         .await
         .map_err(|error| format!("cannot run journalctl: {error}"))?;
-    tokio::fs::write(target.join("vibebuddyd.log"), journal.stdout).await.map_err(fail)?;
-    if let Some(hooks) = state_dir().map(|dir| dir.join("codex-hooks.log")).filter(|path| path.is_file()) {
-        tokio::fs::copy(hooks, target.join("codex-hooks.log")).await.map_err(fail)?;
+    tokio::fs::write(target.join("vibebuddyd.log"), journal.stdout)
+        .await
+        .map_err(fail)?;
+    if let Some(hooks) = state_dir()
+        .map(|dir| dir.join("codex-hooks.log"))
+        .filter(|path| path.is_file())
+    {
+        tokio::fs::copy(hooks, target.join("codex-hooks.log"))
+            .await
+            .map_err(fail)?;
     }
     if let Some(config) = config {
         let text = serde_json::to_string_pretty(&config).map_err(|error| error.to_string())?;
-        tokio::fs::write(target.join("config.json"), text).await.map_err(fail)?;
+        tokio::fs::write(target.join("config.json"), text)
+            .await
+            .map_err(fail)?;
     }
-    tokio::fs::write(target.join("summary.txt"), summary).await.map_err(fail)?;
+    tokio::fs::write(target.join("summary.txt"), summary)
+        .await
+        .map_err(fail)?;
     launch("xdg-open", &[target.as_os_str()])?;
     Ok(tr("Saved to %@", &[&target.display()]))
 }
@@ -1578,7 +1950,8 @@ fn handle(frame: &character::Image, scale: usize) -> image::Handle {
     for y in 0..h {
         for x in 0..w {
             let from = ((y / scale) * frame.width + x / scale) * 4;
-            pixels[(y * w + x) * 4..(y * w + x) * 4 + 4].copy_from_slice(&frame.pixels[from..from + 4]);
+            pixels[(y * w + x) * 4..(y * w + x) * 4 + 4]
+                .copy_from_slice(&frame.pixels[from..from + 4]);
         }
     }
     image::Handle::from_rgba(w as u32, h as u32, pixels)
@@ -1632,7 +2005,10 @@ struct AddressChoice {
 
 impl std::fmt::Display for AddressChoice {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.form.and_then(|id| assets::FORMS_OF_ADDRESS.iter().find(|form| form.id == id)) {
+        match self
+            .form
+            .and_then(|id| assets::FORMS_OF_ADDRESS.iter().find(|form| form.id == id))
+        {
             Some(form) => f.write_str(form.words),
             None => f.write_str(&tr("Nothing", &[])),
         }
@@ -1671,12 +2047,23 @@ fn set_launch_at_login(enabled: bool) -> Result<(), String> {
 /// One notification per new firmware version, only while the box is there to take it and once it's downloaded, as on
 /// the Mac; the version last told about is kept in the state directory.
 fn notify_new_firmware(status: &Status) {
-    let Some(offer) = status.updates.as_ref().filter(|updates| updates.firmware_update_available()).and_then(|updates| updates.firmware.as_ref())
+    if !status::UPDATES_COMPILED_IN {
+        return;
+    }
+    let Some(offer) = status
+        .updates
+        .as_ref()
+        .filter(|updates| updates.firmware_update_available())
+        .and_then(|updates| updates.firmware.as_ref())
     else {
         return;
     };
-    let Some(marker) = state_dir().map(|dir| dir.join("notified-firmware")) else { return };
-    if !status.device.connected || std::fs::read_to_string(&marker).is_ok_and(|told| told.trim() == offer.version) {
+    let Some(marker) = state_dir().map(|dir| dir.join("notified-firmware")) else {
+        return;
+    };
+    if !status.device.connected
+        || std::fs::read_to_string(&marker).is_ok_and(|told| told.trim() == offer.version)
+    {
         return;
     }
     let _ = std::fs::create_dir_all(marker.parent().unwrap_or(&marker));
@@ -1684,7 +2071,14 @@ fn notify_new_firmware(status: &Status) {
     let title = tr("Box firmware %@ is available", &[&offer.version]);
     // As the korekore canvas words it ("SYSTEM NOTIFICATIONS").
     let body = tr("Update it from Settings › Device.", &[]);
-    if let Err(error) = launch("notify-send", &["--app-name=VibeBuddy".as_ref(), title.as_ref(), body.as_ref()]) {
+    if let Err(error) = launch(
+        "notify-send",
+        &[
+            "--app-name=VibeBuddy".as_ref(),
+            title.as_ref(),
+            body.as_ref(),
+        ],
+    ) {
         eprintln!("vibebuddy-desktop: {error}");
     }
 }
@@ -1711,7 +2105,9 @@ fn xdg_dir(variable: &str, default: &str) -> Option<std::path::PathBuf> {
     std::env::var_os(variable)
         .map(std::path::PathBuf::from)
         .filter(|dir| dir.is_absolute())
-        .or_else(|| std::env::var_os("HOME").map(|home| std::path::PathBuf::from(home).join(default)))
+        .or_else(|| {
+            std::env::var_os("HOME").map(|home| std::path::PathBuf::from(home).join(default))
+        })
         .map(|dir| dir.join("vibebuddy"))
 }
 
@@ -1724,7 +2120,9 @@ fn user_dir(kind: &str, fallback: &str) -> Result<std::path::PathBuf, String> {
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
         .filter(|dir| !dir.is_empty())
         .map(std::path::PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| std::path::PathBuf::from(home).join(fallback)))
+        .or_else(|| {
+            std::env::var_os("HOME").map(|home| std::path::PathBuf::from(home).join(fallback))
+        })
         .ok_or_else(|| "HOME is not set".to_owned())
 }
 
@@ -1760,7 +2158,9 @@ fn restart(voice: Option<&str>) -> Result<(), String> {
 
 /// True only the first time the app starts for this user; a marker in the state directory remembers it.
 fn first_launch() -> bool {
-    let Some(state) = state_dir() else { return false };
+    let Some(state) = state_dir() else {
+        return false;
+    };
     let marker = state.join("desktop-launched");
     if marker.exists() {
         return false;
@@ -1786,7 +2186,10 @@ fn save_screenshot(png: &[u8]) -> Result<String, String> {
 
 /// `2026-10-01T17:06:59.003+08:00` → `2026-10-01 17:06`, in the daemon's own (local) offset.
 fn short_time(rfc3339: &str) -> String {
-    rfc3339.get(..16).map(|prefix| prefix.replacen('T', " ", 1)).unwrap_or_else(|| rfc3339.to_owned())
+    rfc3339
+        .get(..16)
+        .map(|prefix| prefix.replacen('T', " ", 1))
+        .unwrap_or_else(|| rfc3339.to_owned())
 }
 
 #[cfg(target_os = "linux")]
@@ -1797,7 +2200,11 @@ fn run_tray() -> impl futures::Stream<Item = Message> {
     iced::stream::channel(16, async |mut output| {
         let (events, mut clicks) = futures::channel::mpsc::unbounded();
         let kore = korekore::picture::BoxPicture::derive(None);
-        let tray = tray::Tray { menu: MenuState::derive(None), kore, events };
+        let tray = tray::Tray {
+            menu: MenuState::derive(None),
+            kore,
+            events,
+        };
         // At login the app can start before the shell's tray host is up; ksni then registers once it appears, and
         // again after the shell restarts. The app opens the window if it doesn't (`Message::TrayHost`).
         match tray.assume_sni_available(true).spawn().await {
@@ -1805,7 +2212,9 @@ fn run_tray() -> impl futures::Stream<Item = Message> {
                 let _ = output.send(Message::TrayReady(TrayHandle(handle))).await;
             }
             Err(error) => {
-                eprintln!("vibebuddy-desktop: no tray available ({error}); opening the window instead");
+                eprintln!(
+                    "vibebuddy-desktop: no tray available ({error}); opening the window instead"
+                );
                 let _ = output.send(Message::TrayUnavailable).await;
                 return;
             }
@@ -1831,8 +2240,17 @@ fn run_instance() -> impl futures::Stream<Item = Message> {
     use futures::SinkExt;
 
     iced::stream::channel(4, async |mut output| {
-        let Some(listener) = INSTANCE.lock().ok().and_then(|mut listener| listener.take()) else { return };
-        let listener = match listener.set_nonblocking(true).and_then(|()| tokio::net::UnixListener::from_std(listener)) {
+        let Some(listener) = INSTANCE
+            .lock()
+            .ok()
+            .and_then(|mut listener| listener.take())
+        else {
+            return;
+        };
+        let listener = match listener
+            .set_nonblocking(true)
+            .and_then(|()| tokio::net::UnixListener::from_std(listener))
+        {
             Ok(listener) => listener,
             Err(error) => {
                 eprintln!("vibebuddy-desktop: cannot listen for other copies ({error})");
@@ -1848,12 +2266,24 @@ fn run_instance() -> impl futures::Stream<Item = Message> {
 /// What `device.wifi_error` means (docs/protocol.md "Wi-Fi network").
 fn wifi_failure(why: &str) -> String {
     match why {
-        "wrong_password" => tr("The network turned the box away; the password is probably wrong. Check it, then join again.", &[]),
-        "not_found" => tr("The box can't find this network. It only joins 2.4 GHz Wi-Fi: check the name, and that the box is in range.", &[]),
-        "security" => tr("The box can't join this network's kind of security. It joins WPA2 and open networks.", &[]),
+        "wrong_password" => tr(
+            "The network turned the box away; the password is probably wrong. Check it, then join again.",
+            &[],
+        ),
+        "not_found" => tr(
+            "The box can't find this network. It only joins 2.4 GHz Wi-Fi: check the name, and that the box is in range.",
+            &[],
+        ),
+        "security" => tr(
+            "The box can't join this network's kind of security. It joins WPA2 and open networks.",
+            &[],
+        ),
         "password" => tr("The password must be 8 to 63 characters.", &[]),
         "ssid" => tr("The network name is too long: 32 bytes at most.", &[]),
-        _ => tr("Couldn't join (%@). Check the network name and password, then join again.", &[&why]),
+        _ => tr(
+            "Couldn't join (%@). Check the network name and password, then join again.",
+            &[&why],
+        ),
     }
 }
 
@@ -1863,15 +2293,24 @@ mod tests {
 
     #[test]
     fn event_times_read_as_local_minutes() {
-        assert_eq!(short_time("2026-10-01T17:06:59.003370003+08:00"), "2026-10-01 17:06");
+        assert_eq!(
+            short_time("2026-10-01T17:06:59.003370003+08:00"),
+            "2026-10-01 17:06"
+        );
         assert_eq!(short_time("garbage"), "garbage");
     }
 
     #[test]
     fn a_problem_report_opens_a_new_issue_with_the_versions() {
         let url = issue_url("App 0.3.5\nOS Omarchy 3.1+beta\n");
-        assert!(url.as_str().starts_with("https://github.com/second-state/vibebuddy/issues/new?body="));
-        let body = url.query_pairs().find(|(name, _)| name == "body").map(|(_, value)| value.into_owned());
+        assert!(
+            url.as_str()
+                .starts_with("https://github.com/second-state/vibebuddy/issues/new?body=")
+        );
+        let body = url
+            .query_pairs()
+            .find(|(name, _)| name == "body")
+            .map(|(_, value)| value.into_owned());
         assert!(body.is_some_and(|body| body.contains("App 0.3.5\nOS Omarchy 3.1+beta\n```")));
     }
 }

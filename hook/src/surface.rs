@@ -53,13 +53,21 @@ pub enum Tab {
     Ttys(Vec<String>),
     /// Warp can't be asked about its tabs, but it hands each session a deeplink back to its pane.
     FocusUrl(String),
-    Tmux { socket: String, pane: String },
+    Tmux {
+        socket: String,
+        pane: String,
+    },
 }
 
 pub fn detect(own_bundle_id: &str) -> Surface {
     if !cfg!(target_os = "macos") {
-        let tmux = std::env::var("TMUX").ok().zip(std::env::var("TMUX_PANE").ok());
-        return Surface::Window(ancestor_pids(), tmux.and_then(|(tmux, pane)| tmux_tab(&tmux, &pane)));
+        let tmux = std::env::var("TMUX")
+            .ok()
+            .zip(std::env::var("TMUX_PANE").ok());
+        return Surface::Window(
+            ancestor_pids(),
+            tmux.and_then(|(tmux, pane)| tmux_tab(&tmux, &pane)),
+        );
     }
     let found = std::env::var(BUNDLE_ID)
         .ok()
@@ -77,10 +85,15 @@ fn current_tab() -> Option<Tab> {
     if let (Some(tmux), Some(pane)) = (tmux, pane) {
         return tmux_tab(&tmux, &pane);
     }
-    if let Some(url) = std::env::var("WARP_FOCUS_URL").ok().filter(|url| valid_focus_url(url)) {
+    if let Some(url) = std::env::var("WARP_FOCUS_URL")
+        .ok()
+        .filter(|url| valid_focus_url(url))
+    {
         return Some(Tab::FocusUrl(url));
     }
-    Some(controlling_ttys()).filter(|ttys| !ttys.is_empty()).map(Tab::Ttys)
+    Some(controlling_ttys())
+        .filter(|ttys| !ttys.is_empty())
+        .map(Tab::Ttys)
 }
 
 /// `warp://session/<32 hex digits>`, under any of Warp's channel schemes; anything else is not passed on.
@@ -96,8 +109,13 @@ fn valid_focus_url(url: &str) -> bool {
 /// `$TMUX` is `<socket>,<server pid>,<session index>`; the socket path itself may hold commas.
 fn tmux_tab(tmux: &str, pane: &str) -> Option<Tab> {
     let socket = tmux.rsplitn(3, ',').nth(2)?;
-    let valid_pane = pane.strip_prefix('%').is_some_and(|id| !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()));
-    (socket.starts_with('/') && valid_pane).then(|| Tab::Tmux { socket: socket.to_owned(), pane: pane.to_owned() })
+    let valid_pane = pane
+        .strip_prefix('%')
+        .is_some_and(|id| !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()));
+    (socket.starts_with('/') && valid_pane).then(|| Tab::Tmux {
+        socket: socket.to_owned(),
+        pane: pane.to_owned(),
+    })
 }
 
 /// The controlling terminals up this process chain, nearest first, as `ttys016`. There can be more than one:
@@ -111,7 +129,9 @@ fn controlling_ttys() -> Vec<String> {
     for _ in 0..32 {
         let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
         let size = std::mem::size_of::<libc::proc_bsdinfo>() as libc::c_int;
-        let read = unsafe { libc::proc_pidinfo(pid, libc::PROC_PIDTBSDINFO, 0, (&raw mut info).cast(), size) };
+        let read = unsafe {
+            libc::proc_pidinfo(pid, libc::PROC_PIDTBSDINFO, 0, (&raw mut info).cast(), size)
+        };
         if read != size {
             break;
         }
@@ -141,7 +161,10 @@ fn controlling_ttys() -> Vec<String> {
 /// The bundle id of the app launchd started at the top of this process chain, if it is an app.
 /// Only runs when `__CFBundleIdentifier` is missing, so the common path spawns nothing.
 fn launched_app_bundle_id() -> Option<String> {
-    let table = Command::new("/bin/ps").args(["-A", "-o", "pid=,ppid=,comm="]).output().ok()?;
+    let table = Command::new("/bin/ps")
+        .args(["-A", "-o", "pid=,ppid=,comm="])
+        .output()
+        .ok()?;
     let table = String::from_utf8(table.stdout).ok()?;
     let app = launched_app(&table, std::process::id())?;
     let plist = format!("{app}/Contents/Info.plist");
@@ -179,7 +202,10 @@ fn launched_app(table: &str, pid: u32) -> Option<String> {
 }
 
 fn outermost_app(path: &str) -> Option<&str> {
-    let end = path.find(".app/").map(|index| index + ".app".len()).or_else(|| path.ends_with(".app").then_some(path.len()))?;
+    let end = path
+        .find(".app/")
+        .map(|index| index + ".app".len())
+        .or_else(|| path.ends_with(".app").then_some(path.len()))?;
     Some(&path[..end])
 }
 
@@ -220,7 +246,10 @@ pub fn write_into(payload: &mut Map<String, Value>, surface: &Surface) {
     let name = match surface {
         Surface::App => "app",
         Surface::Host(bundle_id, tab) => {
-            payload.insert("host_bundle_id".to_owned(), Value::String(bundle_id.clone()));
+            payload.insert(
+                "host_bundle_id".to_owned(),
+                Value::String(bundle_id.clone()),
+            );
             match tab {
                 Some(Tab::Ttys(ttys)) => {
                     payload.insert("host_ttys".to_owned(), Value::from(ttys.clone()));
@@ -255,7 +284,10 @@ mod tests {
 
     #[test]
     fn the_parent_pid_survives_odd_command_names() {
-        assert_eq!(parent_from_stat("3620 (claude) S 3534 3620 3534 34816"), Some(3534));
+        assert_eq!(
+            parent_from_stat("3620 (claude) S 3534 3620 3534 34816"),
+            Some(3534)
+        );
         assert_eq!(parent_from_stat("42 (a) b (c)) R 7 42 42 0"), Some(7));
         assert_eq!(parent_from_stat("garbage"), None);
     }
@@ -264,21 +296,36 @@ mod tests {
     fn a_tmux_pane_is_reported_by_socket_and_pane() {
         assert_eq!(
             tmux_tab("/private/tmp/tmux-502/default,84233,0", "%3"),
-            Some(Tab::Tmux { socket: "/private/tmp/tmux-502/default".to_owned(), pane: "%3".to_owned() })
+            Some(Tab::Tmux {
+                socket: "/private/tmp/tmux-502/default".to_owned(),
+                pane: "%3".to_owned()
+            })
         );
         assert_eq!(
             tmux_tab("/tmp/odd,name/default,1,0", "%12"),
-            Some(Tab::Tmux { socket: "/tmp/odd,name/default".to_owned(), pane: "%12".to_owned() })
+            Some(Tab::Tmux {
+                socket: "/tmp/odd,name/default".to_owned(),
+                pane: "%12".to_owned()
+            })
         );
-        for (tmux, pane) in [("relative,1,0", "%3"), ("/tmp/default,1,0", "3"), ("/tmp/default,1,0", "%3;x"), ("garbage", "%3")] {
+        for (tmux, pane) in [
+            ("relative,1,0", "%3"),
+            ("/tmp/default,1,0", "3"),
+            ("/tmp/default,1,0", "%3;x"),
+            ("garbage", "%3"),
+        ] {
             assert_eq!(tmux_tab(tmux, pane), None, "{tmux} {pane}");
         }
     }
 
     #[test]
     fn only_warps_own_session_links_are_passed_on() {
-        assert!(valid_focus_url("warp://session/550e8400e29b41d4a716446655440000"));
-        assert!(valid_focus_url("warppreview://session/550e8400e29b41d4a716446655440000"));
+        assert!(valid_focus_url(
+            "warp://session/550e8400e29b41d4a716446655440000"
+        ));
+        assert!(valid_focus_url(
+            "warppreview://session/550e8400e29b41d4a716446655440000"
+        ));
         for bogus in [
             "",
             "https://session/550e8400e29b41d4a716446655440000",
@@ -293,8 +340,14 @@ mod tests {
     #[test]
     fn a_tmux_pane_goes_into_the_payload_instead_of_a_tty() {
         let mut payload = Map::new();
-        let tab = Tab::Tmux { socket: "/tmp/tmux-502/default".to_owned(), pane: "%3".to_owned() };
-        write_into(&mut payload, &Surface::Host("com.mitchellh.ghostty".to_owned(), Some(tab)));
+        let tab = Tab::Tmux {
+            socket: "/tmp/tmux-502/default".to_owned(),
+            pane: "%3".to_owned(),
+        };
+        write_into(
+            &mut payload,
+            &Surface::Host("com.mitchellh.ghostty".to_owned(), Some(tab)),
+        );
         assert_eq!(payload["tmux_socket"], "/tmp/tmux-502/default");
         assert_eq!(payload["tmux_pane"], "%3");
         assert!(!payload.contains_key("host_ttys"));
@@ -304,9 +357,13 @@ mod tests {
     #[test]
     fn the_tty_matches_what_ps_reports() {
         // Under a terminal ps names the tty; under launchd or CI it prints `??` and there is none.
-        let output = Command::new("/bin/ps").args(["-o", "tty=", "-p", &std::process::id().to_string()]).output().unwrap();
+        let output = Command::new("/bin/ps")
+            .args(["-o", "tty=", "-p", &std::process::id().to_string()])
+            .output()
+            .unwrap();
         let reported = String::from_utf8(output.stdout).unwrap().trim().to_owned();
-        let expected = (reported != "??").then(|| format!("tty{}", reported.trim_start_matches("tty")));
+        let expected =
+            (reported != "??").then(|| format!("tty{}", reported.trim_start_matches("tty")));
         assert_eq!(controlling_ttys().first(), expected.as_ref());
     }
 
@@ -319,12 +376,21 @@ mod tests {
         assert!(!payload.contains_key("tmux_pane"));
         let tab = tmux_tab("/tmp/tmux-1000/default,4242,0", "%3");
         write_into(&mut payload, &Surface::Window(vec![3620], tab));
-        assert_eq!((payload["tmux_socket"].as_str(), payload["tmux_pane"].as_str()), (Some("/tmp/tmux-1000/default"), Some("%3")));
+        assert_eq!(
+            (
+                payload["tmux_socket"].as_str(),
+                payload["tmux_pane"].as_str()
+            ),
+            (Some("/tmp/tmux-1000/default"), Some("%3"))
+        );
     }
 
     #[test]
     fn the_agents_own_app_is_not_a_host() {
-        assert_eq!(from_bundle_id(Some("com.openai.codex"), "com.openai.codex"), Surface::App);
+        assert_eq!(
+            from_bundle_id(Some("com.openai.codex"), "com.openai.codex"),
+            Surface::App
+        );
     }
 
     #[test]
@@ -348,7 +414,10 @@ mod tests {
     fn no_bundle_id_means_nowhere_to_go() {
         // CLIs started over SSH, by launchd or by a daemon all end up here.
         assert_eq!(from_bundle_id(None, "com.openai.codex"), Surface::Headless);
-        assert_eq!(from_bundle_id(Some(""), "com.openai.codex"), Surface::Headless);
+        assert_eq!(
+            from_bundle_id(Some(""), "com.openai.codex"),
+            Surface::Headless
+        );
     }
 
     /// The chain seen on 2026-09-28: ChatGPT.app runs Codex without `__CFBundleIdentifier`.
@@ -363,14 +432,19 @@ mod tests {
 
     #[test]
     fn a_scrubbed_environment_falls_back_to_the_app_launchd_started() {
-        assert_eq!(launched_app(CHATGPT_CHAIN, 4242).as_deref(), Some("/Applications/ChatGPT.app"));
+        assert_eq!(
+            launched_app(CHATGPT_CHAIN, 4242).as_deref(),
+            Some("/Applications/ChatGPT.app")
+        );
     }
 
     #[test]
     fn a_nested_helper_bundle_is_not_the_landing_spot() {
         // CodexCLI.app has its own bundle id but no window; only the outer app does.
         assert_eq!(
-            outermost_app("/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"),
+            outermost_app(
+                "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
+            ),
             Some("/Applications/ChatGPT.app")
         );
         assert_eq!(outermost_app("/usr/sbin/sshd"), None);
@@ -384,7 +458,10 @@ mod tests {
  12 11 /opt/homebrew/bin/codex
  13 12 /Users/me/Library/Application Support/VibeBuddy/bin/vibebuddy-hook
 ";
-        assert_eq!(launched_app(table, 13).as_deref(), Some("/Applications/Some Terminal.app"));
+        assert_eq!(
+            launched_app(table, 13).as_deref(),
+            Some("/Applications/Some Terminal.app")
+        );
     }
 
     #[test]
@@ -402,10 +479,19 @@ mod tests {
     #[test]
     fn the_payload_carries_the_landing_spot_only_for_a_host() {
         let mut payload = Map::new();
-        write_into(&mut payload, &Surface::Host("com.mitchellh.ghostty".to_owned(), Some(Tab::Ttys(vec!["ttys041".to_owned(), "ttys040".to_owned()]))));
+        write_into(
+            &mut payload,
+            &Surface::Host(
+                "com.mitchellh.ghostty".to_owned(),
+                Some(Tab::Ttys(vec!["ttys041".to_owned(), "ttys040".to_owned()])),
+            ),
+        );
         assert_eq!(payload["surface"], "host");
         assert_eq!(payload["host_bundle_id"], "com.mitchellh.ghostty");
-        assert_eq!(payload["host_ttys"], serde_json::json!(["ttys041", "ttys040"]));
+        assert_eq!(
+            payload["host_ttys"],
+            serde_json::json!(["ttys041", "ttys040"])
+        );
 
         let mut payload = Map::new();
         write_into(&mut payload, &Surface::App);

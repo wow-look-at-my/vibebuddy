@@ -68,7 +68,11 @@ impl Default for UartRate {
 
 impl UartRate {
     pub const fn new() -> Self {
-        Self { rate: SLOW, trial_since: None, heard: 0 }
+        Self {
+            rate: SLOW,
+            trial_since: None,
+            heard: 0,
+        }
     }
 
     /// The rate the UART runs at.
@@ -141,9 +145,16 @@ mod tests {
     fn a_switch_is_kept_once_a_line_arrives_at_the_new_rate() {
         let mut uart = UartRate::new();
         assert_eq!(uart.request(FAST, 100), Some(FAST));
-        assert!(!uart.carries_stream(), "not before the computer confirms it");
+        assert!(
+            !uart.carries_stream(),
+            "not before the computer confirms it"
+        );
         assert_eq!(uart.poll(100 + TRIAL_MS - 1), None);
-        assert_eq!(uart.heard_line(100 + TRIAL_MS - 1), Some(FAST), "say BAUD 921600");
+        assert_eq!(
+            uart.heard_line(100 + TRIAL_MS - 1),
+            Some(FAST),
+            "say BAUD 921600"
+        );
         assert!(uart.carries_stream());
         assert_eq!(uart.heard_line(5_000), None, "said once");
         assert_eq!(uart.rate(), FAST);
@@ -175,7 +186,11 @@ mod tests {
         assert_eq!(uart.receive_errors(0), None);
         assert_eq!(uart.receive_errors(1), Some(SLOW));
         assert_eq!(uart.rate(), SLOW);
-        assert_eq!(uart.receive_errors(100), None, "at 115200 errors change nothing");
+        assert_eq!(
+            uart.receive_errors(100),
+            None,
+            "at 115200 errors change nothing"
+        );
     }
 
     #[test]
@@ -191,7 +206,10 @@ mod tests {
         // What a box at 921600 read when the daemon restarted and said hello at 115200.
         let mut check = TextCheck::new();
         check.garbled(b'\n');
-        assert!(check.garbled(0x80), "a continuation byte no lead byte called for");
+        assert!(
+            check.garbled(0x80),
+            "a continuation byte no lead byte called for"
+        );
         let mut check = TextCheck::new();
         assert!(check.garbled(0x00));
         assert!(check.garbled(0xc0));
@@ -204,7 +222,10 @@ mod tests {
         let mut check = TextCheck::new();
         assert!(!check.garbled(0xe8));
         assert!(!check.garbled(0xaf));
-        assert!(check.garbled(b'a'), "two continuation bytes called for, one came");
+        assert!(
+            check.garbled(b'a'),
+            "two continuation bytes called for, one came"
+        );
         assert!(!check.garbled(b'b'), "the check starts again after it");
     }
 

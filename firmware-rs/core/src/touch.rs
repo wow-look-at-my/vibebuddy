@@ -45,7 +45,10 @@ pub fn parse_report(report: &[u8; REPORT_BYTES]) -> Option<Point> {
     }
     let short = (i32::from(report[5] & 0x0F) << 8) | i32::from(report[2]);
     let long = (i32::from(report[5] >> 4) << 8) | i32::from(report[3]);
-    let point = Point { x: long, y: HEIGHT - 1 - short };
+    let point = Point {
+        x: long,
+        y: HEIGHT - 1 - short,
+    };
     // Off the screen is the chip's way of saying it has nothing good.
     if !(0..WIDTH).contains(&point.x) || !(0..HEIGHT).contains(&point.y) {
         return None;
@@ -95,7 +98,8 @@ impl Gestures {
                 None
             }
             (Some(point), Some((start, since, last, spoiled))) => {
-                let strayed = (point.x - start.x).abs() > TAP_SLOP || (point.y - start.y).abs() > TAP_SLOP;
+                let strayed =
+                    (point.x - start.x).abs() > TAP_SLOP || (point.y - start.y).abs() > TAP_SLOP;
                 if strayed || now_ms.wrapping_sub(*since) > TAP_MS {
                     *spoiled = true;
                 }
@@ -108,7 +112,11 @@ impl Gestures {
                 let gesture = if !*spoiled && held <= TAP_MS {
                     Some(Gesture::Tap(*start))
                 } else if held <= SWIPE_MS && dy.abs() >= SWIPE_MIN && dy.abs() >= 2 * dx.abs() {
-                    Some(Gesture::Swipe(if dy < 0 { Direction::Up } else { Direction::Down }))
+                    Some(Gesture::Swipe(if dy < 0 {
+                        Direction::Up
+                    } else {
+                        Direction::Down
+                    }))
                 } else {
                     None
                 };
@@ -146,16 +154,26 @@ mod tests {
 
     #[test]
     fn the_high_nibbles_carry_coordinates_past_255() {
-        assert_eq!(parse_report(&report(0, 300)), Some(Point { x: 300, y: 239 }));
+        assert_eq!(
+            parse_report(&report(0, 300)),
+            Some(Point { x: 300, y: 239 })
+        );
         assert_eq!(parse_report(&report(239, 0)), Some(Point { x: 0, y: 0 }));
-        assert_eq!(parse_report(&report(120, 260)), Some(Point { x: 260, y: 119 }));
+        assert_eq!(
+            parse_report(&report(120, 260)),
+            Some(Point { x: 260, y: 119 })
+        );
     }
 
     #[test]
     fn a_point_off_the_screen_is_ignored() {
         assert_eq!(parse_report(&report(0, 320)), None);
         assert_eq!(parse_report(&report(240, 10)), None);
-        assert_eq!(parse_report(&[0xFF; REPORT_BYTES]), None, "what a read without a register address gives");
+        assert_eq!(
+            parse_report(&[0xFF; REPORT_BYTES]),
+            None,
+            "what a read without a register address gives"
+        );
     }
 
     const AT: Point = Point { x: 100, y: 80 };
@@ -175,14 +193,22 @@ mod tests {
         taps.update(Some(AT), 0);
         taps.update(Some(Point { x: 130, y: 80 }), 40);
         taps.update(Some(AT), 80);
-        assert_eq!(taps.update(None, 100), None, "it strayed, even though it came back, and went nowhere");
+        assert_eq!(
+            taps.update(None, 100),
+            None,
+            "it strayed, even though it came back, and went nowhere"
+        );
 
         taps.update(Some(AT), 1000);
         taps.update(Some(AT), 1500);
         assert_eq!(taps.update(None, 1520), None, "held too long");
 
         taps.update(Some(AT), 2000);
-        assert_eq!(taps.update(None, 2500), None, "held too long between two samples");
+        assert_eq!(
+            taps.update(None, 2500),
+            None,
+            "held too long between two samples"
+        );
     }
 
     #[test]
@@ -191,11 +217,17 @@ mod tests {
         gestures.update(Some(AT), 0);
         gestures.update(Some(Point { x: 104, y: 50 }), 100);
         gestures.update(Some(Point { x: 106, y: 30 }), 200);
-        assert_eq!(gestures.update(None, 220), Some(Gesture::Swipe(Direction::Up)));
+        assert_eq!(
+            gestures.update(None, 220),
+            Some(Gesture::Swipe(Direction::Up))
+        );
 
         gestures.update(Some(AT), 1000);
         gestures.update(Some(Point { x: 98, y: 140 }), 1300);
-        assert_eq!(gestures.update(None, 1320), Some(Gesture::Swipe(Direction::Down)));
+        assert_eq!(
+            gestures.update(None, 1320),
+            Some(Gesture::Swipe(Direction::Down))
+        );
     }
 
     #[test]

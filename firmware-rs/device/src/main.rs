@@ -14,6 +14,7 @@
 #![no_std]
 #![no_main]
 #![deny(clippy::mem_forget, reason = "esp_hal types often hold buffers mid-transfer; forgetting them is unsound")]
+#![cfg_attr(not(feature = "audio"), allow(dead_code, unused_imports))]
 
 extern crate alloc;
 
@@ -28,7 +29,6 @@ mod storage;
 use core::sync::atomic::Ordering;
 
 use embassy_executor::Spawner;
-use esp_rtos::embassy::InterruptExecutor;
 use embassy_time::{Instant, Timer};
 use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
@@ -38,14 +38,15 @@ use esp_hal::i2c::master::{AcknowledgeCheckFailedReason, Config as I2cConfig, Er
 use esp_hal::i2s::master::{Channels, DataFormat, I2s, TdmConfig};
 use esp_hal::interrupt::Priority;
 use esp_hal::lcd_cam::LcdCam;
-use esp_hal::lcd_cam::lcd::{ClockMode, Phase, Polarity};
 use esp_hal::lcd_cam::lcd::i8080::{Config as I8080Config, I8080};
+use esp_hal::lcd_cam::lcd::{ClockMode, Phase, Polarity};
 use esp_hal::rng::{Rng, Trng, TrngSource};
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::uart::Uart;
 use esp_hal::usb::usb_serial_jtag::UsbSerialJtag;
 use esp_hal::{Blocking, dma_tx_buffer, dma_tx_stream_buffer};
+use esp_rtos::embassy::InterruptExecutor;
 use esp_storage::FlashStorage;
 use vibebuddy_firmware_core::audio::{self as codec, ES8311_ADDRESS, Registers, SAMPLE_RATE, Sound};
 use vibebuddy_firmware_core::buttons::Levels;
@@ -91,6 +92,9 @@ const XL9555_LCD_BACKLIGHT: u8 = 0x80;
 const XL9555_SPEAKER: u8 = 0x20;
 const XL9555_K1: u8 = 0x10;
 const XL9555_K2: u8 = 0x08;
+
+/// Whether this build has the microphone and the speaker (the `audio` feature).
+const AUDIO: bool = cfg!(feature = "audio");
 
 /// Build stamp: git description plus build time, written in by build.rs.
 const BUILD: &str = env!("VIBEBUDDY_FW_BUILD");
@@ -315,14 +319,16 @@ impl Board for DeviceBoard {
     }
 
     fn init_display(&mut self) -> bool {
-        let backlight_off = self
-            .expander()
-            .set_direction(XL9555_LCD_BACKLIGHT, false)
-            .and_then(|()| self.expander().set_output(XL9555_LCD_BACKLIGHT, false));
+        let backlight_off = self.expander().set_direction(XL9555_LCD_BACKLIGHT, false).and_then(|()| self.expander().set_output(XL9555_LCD_BACKLIGHT, false));
         backlight_off.is_ok() && self.lcd.init().is_ok()
     }
 
     fn init_audio(&mut self, volume: u32) -> AudioStatus {
+        if !AUDIO {
+            // The output latch goes first: the expander's latches power up high.
+            let off = self.expander().set_output(XL9555_SPEAKER, false).and_then(|()| self.expander().set_direction(XL9555_SPEAKER, false));
+            return Err(if off.is_err() { "SPEAKER DISABLE" } else { "DISABLED" });
+        }
         // An ES8311 means the ES8311 variant; no answer at the address means the NS4168 variant.
         let mut chip_id = [0u8];
         match self.i2c.write_read(ES8311_ADDRESS, &[0xFD], &mut chip_id) {
@@ -333,10 +339,7 @@ impl Board for DeviceBoard {
             Err(I2cError::AcknowledgeCheckFailed(AcknowledgeCheckFailedReason::Address | AcknowledgeCheckFailedReason::Unknown)) => {}
             Err(_) => return Err("ES8311 PROBE"),
         }
-        let speaker = self
-            .expander()
-            .set_direction(XL9555_SPEAKER, false)
-            .and_then(|()| self.expander().set_output(XL9555_SPEAKER, true));
+        let speaker = self.expander().set_direction(XL9555_SPEAKER, false).and_then(|()| self.expander().set_output(XL9555_SPEAKER, true));
         if speaker.is_err() {
             return Err("SPEAKER ENABLE");
         }
@@ -370,10 +373,16 @@ impl Board for DeviceBoard {
     }
 
     fn play(&mut self, sound: Sound) -> Result<(), ()> {
+        if !AUDIO {
+            return Err(());
+        }
         QUEUE.try_send(PlayCommand { sound }).map_err(|_| ())
     }
 
     fn stop_audio(&mut self) {
+        if !AUDIO {
+            return;
+        }
         QUEUE.clear();
         STOP.store(true, Ordering::Release);
     }
@@ -399,6 +408,9 @@ impl Board for DeviceBoard {
     }
 
     fn mic_start(&mut self, bytes: usize) -> Result<(), ()> {
+        if !AUDIO {
+            return Err(());
+        }
         mic::DONE.reset();
         mic::COMMAND.signal(mic::Command::Record(bytes));
         Ok(())
@@ -413,6 +425,9 @@ impl Board for DeviceBoard {
     }
 
     fn voice_start(&mut self) -> Result<(), ()> {
+        if !AUDIO {
+            return Err(());
+        }
         mic::start_stream();
         Ok(())
     }
@@ -426,6 +441,9 @@ impl Board for DeviceBoard {
     }
 
     fn reply_audio(&mut self, audio: ReplyAudio) {
+        if !AUDIO {
+            return;
+        }
         if let Ok(mut replies) = audio::REPLIES.try_lock() {
             replies.apply(audio);
         }
@@ -443,11 +461,7 @@ async fn main(spawner: Spawner) -> ! {
     // The module's 8 MB octal PSRAM comes first, so the firmware's own allocations (JSON, looks, network
     // buffers) land there and internal RAM stays for the Wi-Fi driver, which asks for internal memory
     // explicitly. The flash runs at 40 MHz (the bootloader's header), and the PSRAM timing must agree.
-    esp_alloc::psram_allocator!(
-        peripherals.PSRAM,
-        esp_hal::psram,
-        esp_hal::psram::PsramConfig { flash_frequency: esp_hal::psram::FlashFreq::FlashFreq40m, ..Default::default() }
-    );
+    esp_alloc::psram_allocator!(peripherals.PSRAM, esp_hal::psram, esp_hal::psram::PsramConfig { flash_frequency: esp_hal::psram::FlashFreq::FlashFreq40m, ..Default::default() });
     // JSON parsing and the few lines of text in a frame live on the heap; 72 KB is enough.
     esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 73744);
     // A Character's look lives on the heap too (about 6 KB, plus as much again while it is read from
@@ -458,10 +472,7 @@ async fn main(spawner: Spawner) -> ! {
     esp_rtos::start(timg0.timer0, peripherals.FROM_CPU_INTR0);
 
     // Serial comes up first: the result of every later step is reported to the Mac.
-    let uart = Uart::new(peripherals.UART0, serial::uart_config(uart_rate::SLOW))
-        .expect("UART0 config")
-        .with_tx(peripherals.GPIO43)
-        .with_rx(peripherals.GPIO44);
+    let uart = Uart::new(peripherals.UART0, serial::uart_config(uart_rate::SLOW)).expect("UART0 config").with_tx(peripherals.GPIO43).with_rx(peripherals.GPIO44);
     serial::start_uart(uart);
     let (usb_rx, usb_tx) = UsbSerialJtag::new(peripherals.USB_DEVICE).into_async().split();
     spawner.spawn(serial::usb_rx_task(usb_rx).expect("USB read task"));
@@ -470,10 +481,7 @@ async fn main(spawner: Spawner) -> ! {
     // Wi-Fi starts idle; it joins a network once the firmware below names one.
     let stack = net::start(&spawner, peripherals.WIFI);
 
-    let i2c = I2c::new(peripherals.I2C0, I2cConfig::default().with_frequency(Rate::from_khz(400)))
-        .expect("I2C0 config")
-        .with_sda(peripherals.GPIO48)
-        .with_scl(peripherals.GPIO45);
+    let i2c = I2c::new(peripherals.I2C0, I2cConfig::default().with_frequency(Rate::from_khz(400))).expect("I2C0 config").with_sda(peripherals.GPIO48).with_scl(peripherals.GPIO45);
 
     let lcd_read = Output::new(peripherals.GPIO41, Level::High, OutputConfig::default());
     let lcd_cam = LcdCam::new(peripherals.LCD_CAM);
@@ -501,25 +509,28 @@ async fn main(spawner: Spawner) -> ! {
     // configured. The receiver shares the transmitter's BCLK and WS (signal loopback), as ESP-IDF sets up a
     // full-duplex channel pair on the same pins; it only runs while a voice command records and during the
     // microphone diagnostic.
-    let i2s = I2s::new(
-        peripherals.I2S0,
-        peripherals.DMA_CH1,
-        TdmConfig::new_tdm_philips()
-            .with_sample_rate(Rate::from_hz(SAMPLE_RATE))
-            .with_data_format(DataFormat::Data16Channel16)
-            .with_channels(Channels::STEREO)
-            .with_signal_loopback(true),
-    )
-    .expect("I2S0 config")
-    .into_async();
-    let i2s_tx = i2s.i2s_tx.with_bclk(peripherals.GPIO21).with_ws(peripherals.GPIO13).with_dout(peripherals.GPIO14).build();
-    let stream: DmaTxStreamBuf = dma_tx_stream_buffer!(STREAM_BYTES, STREAM_CHUNK);
-    // At a higher priority than the main loop, which can be busy for longer than the stream's headroom (audio.rs).
-    static AUDIO_EXECUTOR: static_cell::StaticCell<InterruptExecutor<1>> = static_cell::StaticCell::new();
-    let audio_spawner = AUDIO_EXECUTOR.init(InterruptExecutor::new(peripherals.FROM_CPU_INTR1)).start(Priority::Priority1);
-    audio_spawner.spawn(audio::start(audio::Output(i2s_tx, stream)).expect("audio start task"));
-    let i2s_rx = i2s.i2s_rx.with_din(peripherals.GPIO47).build();
-    spawner.spawn(mic::mic_task(i2s_rx).expect("mic task"));
+    #[cfg(feature = "audio")]
+    {
+        let i2s = I2s::new(
+            peripherals.I2S0,
+            peripherals.DMA_CH1,
+            TdmConfig::new_tdm_philips()
+                .with_sample_rate(Rate::from_hz(SAMPLE_RATE))
+                .with_data_format(DataFormat::Data16Channel16)
+                .with_channels(Channels::STEREO)
+                .with_signal_loopback(true),
+        )
+        .expect("I2S0 config")
+        .into_async();
+        let i2s_tx = i2s.i2s_tx.with_bclk(peripherals.GPIO21).with_ws(peripherals.GPIO13).with_dout(peripherals.GPIO14).build();
+        let stream: DmaTxStreamBuf = dma_tx_stream_buffer!(STREAM_BYTES, STREAM_CHUNK);
+        // At a higher priority than the main loop, which can be busy for longer than the stream's headroom (audio.rs).
+        static AUDIO_EXECUTOR: static_cell::StaticCell<InterruptExecutor<1>> = static_cell::StaticCell::new();
+        let audio_spawner = AUDIO_EXECUTOR.init(InterruptExecutor::new(peripherals.FROM_CPU_INTR1)).start(Priority::Priority1);
+        audio_spawner.spawn(audio::start(audio::Output(i2s_tx, stream)).expect("audio start task"));
+        let i2s_rx = i2s.i2s_rx.with_din(peripherals.GPIO47).build();
+        spawner.spawn(mic::mic_task(i2s_rx).expect("mic task"));
+    }
 
     let k0 = Input::new(peripherals.GPIO0, InputConfig::default().with_pull(Pull::Up));
 
@@ -562,7 +573,7 @@ async fn main(spawner: Spawner) -> ! {
         if let Some(link) = firmware.link() {
             net::advertise(&spawner, stack, vibebuddy_firmware_core::link::encode(&link.public_key()).into());
         }
-        start_relay(&spawner, stack, trng, &firmware);
+        relay::start(&spawner, stack, trng, &firmware);
     }
     let mut relay_box = RelayBox::new();
 
@@ -711,21 +722,4 @@ fn report_memory(board: &mut DeviceBoard) {
     let external = esp_alloc::HEAP.free_caps(esp_alloc::MemoryCapability::External.into());
     let line = alloc::format!("MEMORY INTERNAL {internal} PSRAM {external} TOTAL {}/{}\n", stats.size - stats.current_usage, stats.size);
     board.write(line.as_bytes());
-}
-
-/// TLS for the Relay (ADR-0012): mbedtls with the TRNG, embassy's clock for timeouts, and the SNTP wall
-/// clock for certificate dates. The task waits for Wi-Fi and the box's id.
-fn start_relay(spawner: &Spawner, stack: embassy_net::Stack<'static>, trng: &'static mut Trng, firmware: &Firmware) {
-    static TIMER: mbedtls_rs::sys::hook::backend::embassy::timer::EmbassyTimer = mbedtls_rs::sys::hook::backend::embassy::timer::EmbassyTimer;
-    static CLOCK: relay::WallClock = relay::WallClock;
-    // SAFETY: both hooks are statics, installed before any TLS session starts.
-    unsafe {
-        mbedtls_rs::sys::hook::timer::hook_timer(Some(&TIMER));
-        mbedtls_rs::sys::hook::wall_clock::hook_wall_clock(Some(&CLOCK));
-    }
-    let Ok(tls) = mbedtls_rs::Tls::new(trng) else { return };
-    let Some(link) = firmware.link() else { return };
-    relay::BOX_ID.signal(vibebuddy_firmware_core::link::encode(&link.public_key()));
-    relay::URL.signal(firmware.relay_url().into());
-    spawner.spawn(relay::task(stack, tls).expect("Relay task"));
 }

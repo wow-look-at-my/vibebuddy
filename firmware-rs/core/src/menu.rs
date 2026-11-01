@@ -95,7 +95,12 @@ impl Default for Menu {
 
 impl Menu {
     pub fn new() -> Self {
-        Self { view: None, selected: Row::Volume, computers_selected: 0, last_key_ms: 0 }
+        Self {
+            view: None,
+            selected: Row::Volume,
+            computers_selected: 0,
+            last_key_ms: 0,
+        }
     }
 
     pub fn is_open(&self) -> bool {
@@ -130,12 +135,16 @@ impl Menu {
 
     /// The selected row's index in the COMPUTERS view.
     pub fn computers_selected(&self, context: Context) -> usize {
-        self.computers_selected.min(Self::computers_rows(context).len() - 1)
+        self.computers_selected
+            .min(Self::computers_rows(context).len() - 1)
     }
 
     /// The selected row's index among `rows(context)`; the first row if it has gone.
     pub fn selected(&self, context: Context) -> usize {
-        Self::rows(context).iter().position(|&row| row == self.selected).unwrap_or(0)
+        Self::rows(context)
+            .iter()
+            .position(|&row| row == self.selected)
+            .unwrap_or(0)
     }
 
     /// Always opens on the first row.
@@ -164,7 +173,8 @@ impl Menu {
                 self.selected = rows[(self.selected(context) + 1) % rows.len()];
                 Action::Redraw
             }
-            (View::List, ButtonEvent::K0Short) => match Self::rows(context)[self.selected(context)] {
+            (View::List, ButtonEvent::K0Short) => match Self::rows(context)[self.selected(context)]
+            {
                 Row::StopPhase => {
                     self.close();
                     Action::StopPhase
@@ -180,15 +190,20 @@ impl Menu {
             },
             (View::Network | View::Status, ButtonEvent::K0Short) => self.show(View::List),
             (View::Computers, ButtonEvent::K1Short) => {
-                self.computers_selected = (self.computers_selected(context) + 1) % Self::computers_rows(context).len();
+                self.computers_selected =
+                    (self.computers_selected(context) + 1) % Self::computers_rows(context).len();
                 Action::Redraw
             }
-            (View::Computers, ButtonEvent::K0Short) => match Self::computers_rows(context)[self.computers_selected(context)] {
-                ComputersRow::ForgetAll => self.show(View::Forget),
-                ComputersRow::NewIdentity => self.show(View::NewIdentity),
-                ComputersRow::Back => self.show(View::List),
-            },
-            (View::Forget | View::NewIdentity | View::Sure, ButtonEvent::K1Short) => self.show(View::Computers),
+            (View::Computers, ButtonEvent::K0Short) => {
+                match Self::computers_rows(context)[self.computers_selected(context)] {
+                    ComputersRow::ForgetAll => self.show(View::Forget),
+                    ComputersRow::NewIdentity => self.show(View::NewIdentity),
+                    ComputersRow::Back => self.show(View::List),
+                }
+            }
+            (View::Forget | View::NewIdentity | View::Sure, ButtonEvent::K1Short) => {
+                self.show(View::Computers)
+            }
             (View::Forget, ButtonEvent::K0Short) => {
                 self.view = Some(View::List);
                 Action::ForgetComputers
@@ -210,7 +225,9 @@ impl Menu {
                 Some(&row) => self.selected = row,
                 None => return Action::None,
             },
-            Some(View::Computers) if index < Self::computers_rows(context).len() => self.computers_selected = index,
+            Some(View::Computers) if index < Self::computers_rows(context).len() => {
+                self.computers_selected = index
+            }
             _ => return Action::None,
         }
         self.key(ButtonEvent::K0Short, context, now_ms)
@@ -234,7 +251,11 @@ impl Menu {
 /// The next volume step above `current`, wrapping to the lowest. A level set from the app that
 /// isn't a step moves to the next step up.
 pub fn next_volume(current: u32) -> u32 {
-    VOLUME_STEPS.iter().copied().find(|&step| step > current).unwrap_or(VOLUME_STEPS[0])
+    VOLUME_STEPS
+        .iter()
+        .copied()
+        .find(|&step| step > current)
+        .unwrap_or(VOLUME_STEPS[0])
 }
 
 /// A build stamp as the status view shows it: the version and the build time, short enough for
@@ -243,7 +264,10 @@ pub fn next_volume(current: u32) -> u32 {
 /// release), and `!` marks uncommitted changes since the font has no `+` or `*`. The daemon's stamp
 /// leads with the app version (`0.3.1 v0.3.1-12-ga4a667c ...`); the git description after it wins.
 pub fn short_build(build: &[u8]) -> (Text<16>, Text<12>) {
-    let mut words: Vec<&[u8]> = build.split(|&byte| byte == b' ').filter(|word| !word.is_empty()).collect();
+    let mut words: Vec<&[u8]> = build
+        .split(|&byte| byte == b' ')
+        .filter(|word| !word.is_empty())
+        .collect();
     let mut time = Text::new();
     if let [.., date, clock] = words[..]
         && date.len() == 10
@@ -269,7 +293,9 @@ pub fn short_build(build: &[u8]) -> (Text<16>, Text<12>) {
     let mut parts = describe.rsplitn(3, |&byte| byte == b'-');
     let describe = match (parts.next(), parts.next(), parts.next()) {
         (Some(hash), Some(count), Some(tag))
-            if hash.first() == Some(&b'g') && !count.is_empty() && count.iter().all(u8::is_ascii_digit) =>
+            if hash.first() == Some(&b'g')
+                && !count.is_empty()
+                && count.iter().all(u8::is_ascii_digit) =>
         {
             &describe[..tag.len() + 1 + count.len()]
         }
@@ -294,29 +320,68 @@ mod tests {
 
     fn short(build: &str) -> (String, String) {
         let (version, time) = short_build(build.as_bytes());
-        (String::from_utf8(version.as_bytes().to_vec()).unwrap(), String::from_utf8(time.as_bytes().to_vec()).unwrap())
+        (
+            String::from_utf8(version.as_bytes().to_vec()).unwrap(),
+            String::from_utf8(time.as_bytes().to_vec()).unwrap(),
+        )
     }
 
     #[test]
     fn short_build_keeps_the_version_and_the_time() {
         let pair = |version: &str, time: &str| (version.to_string(), time.to_string());
-        assert_eq!(short("v0.3.2-11-g0adc18b 2026-10-06 16:34"), pair("0.3.2-11", "10-06 16:34"));
-        assert_eq!(short("0.3.1 v0.3.1-12-ga4a667c 2026-10-06 16:26"), pair("0.3.1-12", "10-06 16:26"));
-        assert_eq!(short("v0.3.2-11-g0adc18b-dirty 2026-10-06 16:34"), pair("0.3.2-11!", "10-06 16:34"));
-        assert_eq!(short("v0.3.2 2026-10-06 16:34"), pair("0.3.2", "10-06 16:34"));
-        assert_eq!(short("abc1234-dirty 2026-09-16 13:11"), pair("abc1234!", "09-16 13:11"));
+        assert_eq!(
+            short("v0.3.2-11-g0adc18b 2026-10-06 16:34"),
+            pair("0.3.2-11", "10-06 16:34")
+        );
+        assert_eq!(
+            short("0.3.1 v0.3.1-12-ga4a667c 2026-10-06 16:26"),
+            pair("0.3.1-12", "10-06 16:26")
+        );
+        assert_eq!(
+            short("v0.3.2-11-g0adc18b-dirty 2026-10-06 16:34"),
+            pair("0.3.2-11!", "10-06 16:34")
+        );
+        assert_eq!(
+            short("v0.3.2 2026-10-06 16:34"),
+            pair("0.3.2", "10-06 16:34")
+        );
+        assert_eq!(
+            short("abc1234-dirty 2026-09-16 13:11"),
+            pair("abc1234!", "09-16 13:11")
+        );
         assert_eq!(short("v0.2.0-rc1-3-gabc1234"), pair("0.2.0-rc1-3", ""));
         assert_eq!(short("abc1234"), pair("abc1234", ""));
         assert_eq!(short(""), pair("?", ""));
     }
 
-    const PLAIN: Context = Context { phase_active: false, paired: 0, identity: false };
-    const FULL: Context = Context { phase_active: true, paired: 2, identity: true };
+    const PLAIN: Context = Context {
+        phase_active: false,
+        paired: 0,
+        identity: false,
+    };
+    const FULL: Context = Context {
+        phase_active: true,
+        paired: 2,
+        identity: true,
+    };
 
     #[test]
     fn rows_follow_the_context() {
-        assert_eq!(Menu::rows(PLAIN), [Row::Volume, Row::Mute, Row::Network, Row::Status]);
-        assert_eq!(Menu::rows(FULL), [Row::StopPhase, Row::Volume, Row::Mute, Row::Computers, Row::Network, Row::Status]);
+        assert_eq!(
+            Menu::rows(PLAIN),
+            [Row::Volume, Row::Mute, Row::Network, Row::Status]
+        );
+        assert_eq!(
+            Menu::rows(FULL),
+            [
+                Row::StopPhase,
+                Row::Volume,
+                Row::Mute,
+                Row::Computers,
+                Row::Network,
+                Row::Status
+            ]
+        );
     }
 
     #[test]
@@ -332,12 +397,20 @@ mod tests {
         assert_eq!(menu.tap_row(9, FULL, 0), Action::None, "below the last row");
         menu.tap_row(5, FULL, 0);
         assert_eq!(menu.view(), Some(View::Status));
-        assert_eq!(menu.tap_row(0, FULL, 0), Action::None, "a view of facts has no rows");
+        assert_eq!(
+            menu.tap_row(0, FULL, 0),
+            Action::None,
+            "a view of facts has no rows"
+        );
     }
 
     #[test]
     fn forgetting_computers_asks_first() {
-        let paired = Context { phase_active: false, paired: 1, identity: true };
+        let paired = Context {
+            phase_active: false,
+            paired: 1,
+            identity: true,
+        };
         let mut menu = Menu::new();
         menu.open(paired, 0);
         menu.key(ButtonEvent::K1Short, paired, 0);
@@ -346,18 +419,37 @@ mod tests {
         assert_eq!(menu.view(), Some(View::Computers));
         assert_eq!(menu.key(ButtonEvent::K0Short, paired, 0), Action::Redraw);
         assert_eq!(menu.view(), Some(View::Forget));
-        assert_eq!(menu.key(ButtonEvent::K1Short, paired, 0), Action::Redraw, "K1 backs out");
+        assert_eq!(
+            menu.key(ButtonEvent::K1Short, paired, 0),
+            Action::Redraw,
+            "K1 backs out"
+        );
         assert_eq!(menu.view(), Some(View::Computers));
         menu.key(ButtonEvent::K0Short, paired, 0);
-        assert_eq!(menu.key(ButtonEvent::K0Short, paired, 0), Action::ForgetComputers);
+        assert_eq!(
+            menu.key(ButtonEvent::K0Short, paired, 0),
+            Action::ForgetComputers
+        );
         assert_eq!(menu.view(), Some(View::List));
-        let after = Context { phase_active: false, paired: 0, identity: true };
-        assert_eq!(Menu::computers_rows(after), [ComputersRow::NewIdentity, ComputersRow::Back], "nothing to forget");
+        let after = Context {
+            phase_active: false,
+            paired: 0,
+            identity: true,
+        };
+        assert_eq!(
+            Menu::computers_rows(after),
+            [ComputersRow::NewIdentity, ComputersRow::Back],
+            "nothing to forget"
+        );
     }
 
     #[test]
     fn a_new_identity_asks_twice() {
-        let context = Context { phase_active: false, paired: 1, identity: true };
+        let context = Context {
+            phase_active: false,
+            paired: 1,
+            identity: true,
+        };
         let mut menu = Menu::new();
         menu.open(context, 0);
         menu.key(ButtonEvent::K1Short, context, 0);
@@ -368,11 +460,18 @@ mod tests {
         assert_eq!(menu.view(), Some(View::NewIdentity));
         assert_eq!(menu.key(ButtonEvent::K0Short, context, 0), Action::Redraw);
         assert_eq!(menu.view(), Some(View::Sure));
-        assert_eq!(menu.key(ButtonEvent::K1Short, context, 0), Action::Redraw, "either step backs out");
+        assert_eq!(
+            menu.key(ButtonEvent::K1Short, context, 0),
+            Action::Redraw,
+            "either step backs out"
+        );
         assert_eq!(menu.view(), Some(View::Computers));
         menu.key(ButtonEvent::K0Short, context, 0);
         menu.key(ButtonEvent::K0Short, context, 0);
-        assert_eq!(menu.key(ButtonEvent::K0Short, context, 0), Action::NewIdentity);
+        assert_eq!(
+            menu.key(ButtonEvent::K0Short, context, 0),
+            Action::NewIdentity
+        );
         assert!(!menu.is_open());
         menu.open(context, 0);
         menu.key(ButtonEvent::K1Short, context, 0);
@@ -380,14 +479,22 @@ mod tests {
         menu.key(ButtonEvent::K0Short, context, 0);
         menu.key(ButtonEvent::K1Short, context, 0);
         menu.key(ButtonEvent::K1Short, context, 0);
-        assert_eq!(menu.key(ButtonEvent::K0Short, context, 0), Action::Redraw, "BACK");
+        assert_eq!(
+            menu.key(ButtonEvent::K0Short, context, 0),
+            Action::Redraw,
+            "BACK"
+        );
         assert_eq!(menu.view(), Some(View::List));
     }
 
     #[test]
     fn k1_steps_down_and_wraps_and_k2_closes() {
         let mut menu = Menu::new();
-        assert_eq!(menu.key(ButtonEvent::K1Short, PLAIN, 0), Action::None, "closed: keys are not the menu's");
+        assert_eq!(
+            menu.key(ButtonEvent::K1Short, PLAIN, 0),
+            Action::None,
+            "closed: keys are not the menu's"
+        );
         menu.open(PLAIN, 0);
         assert_eq!(menu.selected(PLAIN), 0);
         assert_eq!(menu.key(ButtonEvent::K1Short, PLAIN, 10), Action::Redraw);
@@ -415,7 +522,11 @@ mod tests {
         menu.key(ButtonEvent::K1Short, PLAIN, 0);
         assert_eq!(menu.key(ButtonEvent::K0Short, PLAIN, 0), Action::Redraw);
         assert_eq!(menu.view(), Some(View::Status));
-        assert_eq!(menu.key(ButtonEvent::K1Short, PLAIN, 0), Action::None, "the status view has no rows");
+        assert_eq!(
+            menu.key(ButtonEvent::K1Short, PLAIN, 0),
+            Action::None,
+            "the status view has no rows"
+        );
         assert_eq!(menu.key(ButtonEvent::K0Short, PLAIN, 0), Action::Redraw);
         assert_eq!(menu.view(), Some(View::List));
         assert_eq!(menu.selected(PLAIN), 3, "back on STATUS");
@@ -427,7 +538,11 @@ mod tests {
         menu.open(FULL, 0);
         assert_eq!(menu.key(ButtonEvent::K0Short, FULL, 0), Action::StopPhase);
         assert!(!menu.is_open());
-        let after = Context { phase_active: false, paired: 2, identity: true };
+        let after = Context {
+            phase_active: false,
+            paired: 2,
+            identity: true,
+        };
         menu.open(after, 0);
         assert_eq!(Menu::rows(after)[menu.selected(after)], Row::Volume);
     }
@@ -436,7 +551,11 @@ mod tests {
     fn long_presses_mean_nothing_inside() {
         let mut menu = Menu::new();
         menu.open(PLAIN, 0);
-        for event in [ButtonEvent::K0Long, ButtonEvent::K1Long, ButtonEvent::K2Long] {
+        for event in [
+            ButtonEvent::K0Long,
+            ButtonEvent::K1Long,
+            ButtonEvent::K2Long,
+        ] {
             assert_eq!(menu.key(event, PLAIN, 0), Action::None);
         }
         assert!(menu.is_open());
@@ -456,7 +575,11 @@ mod tests {
     #[test]
     fn volume_steps_up_and_wraps() {
         assert_eq!(next_volume(65), 80);
-        assert_eq!(next_volume(70), 80, "a level from the app moves to the next step");
+        assert_eq!(
+            next_volume(70),
+            80,
+            "a level from the app moves to the next step"
+        );
         assert_eq!(next_volume(100), 20);
         assert_eq!(next_volume(20), 35);
     }

@@ -79,7 +79,12 @@ impl VoiceKeys {
     pub fn new(config_dir: Option<&Path>) -> Self {
         let file = config_dir.map(|dir| dir.join(FILE));
         let saved = file.as_deref().map(load).unwrap_or_default();
-        Self { file, saved: Mutex::new(saved), refused: Mutex::default(), changed: watch::channel(()).0 }
+        Self {
+            file,
+            saved: Mutex::new(saved),
+            refused: Mutex::default(),
+            changed: watch::channel(()).0,
+        }
     }
 
     /// Changes each time a key is set or cleared, or a provider refuses or takes one.
@@ -90,8 +95,14 @@ impl VoiceKeys {
     pub fn status(&self) -> VoiceKeysStatus {
         let mut saved = self.saved.lock().unwrap().clone();
         let refused = *self.refused.lock().unwrap();
-        let mut of = |provider: Provider| KeyStatus { set: saved.key(provider).is_some(), refused: refused[provider as usize] };
-        VoiceKeysStatus { elevenlabs: of(Provider::ElevenLabs), volc: of(Provider::Volc) }
+        let mut of = |provider: Provider| KeyStatus {
+            set: saved.key(provider).is_some(),
+            refused: refused[provider as usize],
+        };
+        VoiceKeysStatus {
+            elevenlabs: of(Provider::ElevenLabs),
+            volc: of(Provider::Volc),
+        }
     }
 
     pub fn key(&self, provider: Provider) -> Option<String> {
@@ -106,9 +117,16 @@ impl VoiceKeys {
         let mut saved = self.saved.lock().unwrap();
         let mut next = saved.clone();
         for (provider, key) in changes {
-            *next.key(*provider) = key.as_deref().map(str::trim).filter(|key| !key.is_empty()).map(str::to_owned);
+            *next.key(*provider) = key
+                .as_deref()
+                .map(str::trim)
+                .filter(|key| !key.is_empty())
+                .map(str::to_owned);
         }
-        crate::resident_claude::write_private(file, &serde_json::to_string(&next).expect("serializes"))?;
+        crate::resident_claude::write_private(
+            file,
+            &serde_json::to_string(&next).expect("serializes"),
+        )?;
         *saved = next;
         let mut refused = self.refused.lock().unwrap();
         for (provider, _) in changes {
@@ -129,7 +147,9 @@ impl VoiceKeys {
 }
 
 fn load(path: &Path) -> Saved {
-    let Ok(text) = std::fs::read_to_string(path) else { return Saved::default() };
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Saved::default();
+    };
     serde_json::from_str(&text).unwrap_or_else(|_| {
         warn!(path = %path.display(), "the own keys file is not a JSON object of keys; ignored");
         Saved::default()
@@ -145,7 +165,11 @@ pub(crate) mod tests {
     pub(crate) fn scratch(tag: &str) -> PathBuf {
         let mut bytes = [0u8; 8];
         getrandom::fill(&mut bytes).unwrap();
-        std::env::temp_dir().join(format!("vibebuddy-voice-keys-{tag}-{}-{}", std::process::id(), u64::from_le_bytes(bytes)))
+        std::env::temp_dir().join(format!(
+            "vibebuddy-voice-keys-{tag}-{}-{}",
+            std::process::id(),
+            u64::from_le_bytes(bytes)
+        ))
     }
 
     #[test]
@@ -153,20 +177,46 @@ pub(crate) mod tests {
         let dir = scratch("file");
         let keys = VoiceKeys::new(Some(&dir));
         assert_eq!(keys.status(), VoiceKeysStatus::default());
-        keys.set(&[(Provider::ElevenLabs, Some(" sk_eleven_secret \n".to_owned())), (Provider::Volc, None)]).unwrap();
+        keys.set(&[
+            (
+                Provider::ElevenLabs,
+                Some(" sk_eleven_secret \n".to_owned()),
+            ),
+            (Provider::Volc, None),
+        ])
+        .unwrap();
         let path = dir.join(FILE);
-        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), r#"{"elevenlabs":"sk_eleven_secret"}"#);
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            r#"{"elevenlabs":"sk_eleven_secret"}"#
+        );
         let status = keys.status();
         assert!(status.elevenlabs.set && !status.volc.set);
         assert!(!serde_json::to_string(&status).unwrap().contains("secret"));
 
         // Read back at start; an empty key clears it, and a key left out stays.
         let again = VoiceKeys::new(Some(&dir));
-        assert_eq!(again.key(Provider::ElevenLabs).as_deref(), Some("sk_eleven_secret"));
-        again.set(&[(Provider::Volc, Some("volc_secret".to_owned()))]).unwrap();
-        again.set(&[(Provider::ElevenLabs, Some(" ".to_owned()))]).unwrap();
-        assert_eq!((again.key(Provider::ElevenLabs), again.key(Provider::Volc).as_deref()), (None, Some("volc_secret")));
+        assert_eq!(
+            again.key(Provider::ElevenLabs).as_deref(),
+            Some("sk_eleven_secret")
+        );
+        again
+            .set(&[(Provider::Volc, Some("volc_secret".to_owned()))])
+            .unwrap();
+        again
+            .set(&[(Provider::ElevenLabs, Some(" ".to_owned()))])
+            .unwrap();
+        assert_eq!(
+            (
+                again.key(Provider::ElevenLabs),
+                again.key(Provider::Volc).as_deref()
+            ),
+            (None, Some("volc_secret"))
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -178,17 +228,36 @@ pub(crate) mod tests {
         let changes = keys.watch();
         keys.refused(Provider::Volc, true);
         assert!(changes.has_changed().unwrap());
-        assert_eq!(keys.status().volc, KeyStatus { set: true, refused: true });
+        assert_eq!(
+            keys.status().volc,
+            KeyStatus {
+                set: true,
+                refused: true
+            }
+        );
         assert!(!keys.status().elevenlabs.refused);
-        keys.set(&[(Provider::Volc, Some("k2".to_owned()))]).unwrap();
-        assert_eq!(keys.status().volc, KeyStatus { set: true, refused: false });
+        keys.set(&[(Provider::Volc, Some("k2".to_owned()))])
+            .unwrap();
+        assert_eq!(
+            keys.status().volc,
+            KeyStatus {
+                set: true,
+                refused: false
+            }
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
     fn voices_name_their_provider() {
-        assert_eq!(Provider::of("elevenlabs:abc"), Some((Provider::ElevenLabs, "abc")));
-        assert_eq!(Provider::of("volc:zh_female_wanwanxiaohe_moon_bigtts"), Some((Provider::Volc, "zh_female_wanwanxiaohe_moon_bigtts")));
+        assert_eq!(
+            Provider::of("elevenlabs:abc"),
+            Some((Provider::ElevenLabs, "abc"))
+        );
+        assert_eq!(
+            Provider::of("volc:zh_female_wanwanxiaohe_moon_bigtts"),
+            Some((Provider::Volc, "zh_female_wanwanxiaohe_moon_bigtts"))
+        );
         assert_eq!(Provider::of("en-US-JennyNeural"), None);
     }
 }

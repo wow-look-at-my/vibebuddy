@@ -23,9 +23,14 @@ bench = false
 # For on-device acceptance: compresses leisure's five minutes to five seconds and the pomodoro's
 # 25 minutes to 25 seconds.
 fast-clock = ["vibebuddy-firmware-core/fast-clock"]
+# The microphone and the speaker, which share I2S0. Off: the bus is never set up, the amplifier is held off and the
+# codec stays unconfigured.
+audio = []
+# Taking a firmware image over USB, the LAN or the Relay into the other OTA slot. Off: the box refuses it.
+firmware-update = ["vibebuddy-firmware-core/firmware-update"]
 
 [dependencies]
-vibebuddy-firmware-core = { path = "../core" }
+vibebuddy-firmware-core = { path = "../core", default-features = false }
 
 esp-hal = { version = "~1.2.2", features = ["esp32s3", "unstable"] }
 esp-rtos = { version = "0.4.0", features = ["embassy", "esp-alloc", "esp-radio", "esp32s3"] }

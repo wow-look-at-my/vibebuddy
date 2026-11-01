@@ -48,7 +48,9 @@ impl Agent {
     }
 
     pub fn from_argument(argument: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|agent| agent.argument() == argument)
+        Self::ALL
+            .into_iter()
+            .find(|agent| agent.argument() == argument)
     }
 
     pub fn display_name(self) -> &'static str {
@@ -106,7 +108,9 @@ impl Agent {
                         ((*event).to_owned(), json!([entry]))
                     })
                     .collect();
-                let mut text = serde_json::to_string_pretty(&json!({ "version": 1, "hooks": hooks })).unwrap_or_default();
+                let mut text =
+                    serde_json::to_string_pretty(&json!({ "version": 1, "hooks": hooks }))
+                        .unwrap_or_default();
                 text.push('\n');
                 text
             }
@@ -119,21 +123,40 @@ impl Agent {
 pub fn plugin_payload(agent: Agent, source: &Value) -> Option<Map<String, Value>> {
     let event = source.get("event")?.as_str()?;
     let reply = source.get("last_assistant_message").and_then(Value::as_str);
-    payload(agent, event, source.get("session_id"), source.get("turn_id"), source.get("cwd"), reply)
+    payload(
+        agent,
+        event,
+        source.get("session_id"),
+        source.get("turn_id"),
+        source.get("cwd"),
+        reply,
+    )
 }
 
 /// Copilot doesn't name the event in camelCase payloads, so the hooks file passes it as an argument.
 pub fn copilot_payload(copilot_event: &str, source: &Value) -> Option<Map<String, Value>> {
-    let (_, event) = COPILOT_EVENTS.iter().find(|(name, _)| *name == copilot_event)?;
+    let (_, event) = COPILOT_EVENTS
+        .iter()
+        .find(|(name, _)| *name == copilot_event)?;
     if copilot_event == "notification" {
-        let kind = source.get("notification_type").and_then(Value::as_str).unwrap_or_default();
+        let kind = source
+            .get("notification_type")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         if !COPILOT_WAITING.split('|').any(|waiting| waiting == kind) {
             return None;
         }
     }
     // Copilot hands over no reply text at the end of a turn, only a transcript path; a question left in the
     // reply is announced as done.
-    payload(Agent::Copilot, event, source.get("sessionId"), None, source.get("cwd"), None)
+    payload(
+        Agent::Copilot,
+        event,
+        source.get("sessionId"),
+        None,
+        source.get("cwd"),
+        None,
+    )
 }
 
 fn payload(
@@ -153,7 +176,10 @@ fn payload(
     payload.insert("session_id".to_owned(), Value::from(session_id));
     payload.insert("event".to_owned(), Value::from(event));
     for (key, value) in [("turn_id", turn_id), ("cwd", cwd)] {
-        if let Some(value) = value.and_then(Value::as_str).filter(|value| !value.is_empty()) {
+        if let Some(value) = value
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+        {
             payload.insert(key.to_owned(), Value::from(value));
         }
     }
@@ -191,7 +217,11 @@ mod tests {
         assert!(!payload.contains_key("last_assistant_message"));
 
         let done = json!({ "event": "done", "session_id": "ses_1", "last_assistant_message": "All tests pass." });
-        assert!(!plugin_payload(Agent::OpenCode, &done).expect("payload").contains_key("response_kind"));
+        assert!(
+            !plugin_payload(Agent::OpenCode, &done)
+                .expect("payload")
+                .contains_key("response_kind")
+        );
     }
 
     #[test]
@@ -200,8 +230,11 @@ mod tests {
         let question = "我检测到：询问意图 — 用户要我提出一个单一问题以询问其偏好的编程语言。我的方法：直接提问。\n\n你更喜欢哪种编程语言？";
         let answer = "我检测到简单（trivial）意图 — 用户要求一个单词回复。我的方法：直接回答。\nok";
         let judged = |reply: &str| {
-            let source = json!({ "event": "done", "session_id": "ses_1", "last_assistant_message": reply });
-            plugin_payload(Agent::OpenCode, &source).expect("payload").contains_key("response_kind")
+            let source =
+                json!({ "event": "done", "session_id": "ses_1", "last_assistant_message": reply });
+            plugin_payload(Agent::OpenCode, &source)
+                .expect("payload")
+                .contains_key("response_kind")
         };
         assert!(judged(question));
         assert!(!judged(answer));
@@ -209,7 +242,13 @@ mod tests {
 
     #[test]
     fn unknown_events_and_missing_sessions_are_dropped() {
-        assert!(plugin_payload(Agent::OpenCode, &json!({ "event": "rm -rf", "session_id": "ses_1" })).is_none());
+        assert!(
+            plugin_payload(
+                Agent::OpenCode,
+                &json!({ "event": "rm -rf", "session_id": "ses_1" })
+            )
+            .is_none()
+        );
         assert!(plugin_payload(Agent::OpenCode, &json!({ "event": "done" })).is_none());
         assert!(copilot_payload("preToolUse", &json!({ "sessionId": "s1" })).is_none());
     }
@@ -227,22 +266,32 @@ mod tests {
     #[test]
     fn only_copilot_notifications_that_wait_on_the_user_count() {
         let asking = json!({ "sessionId": "s1", "notification_type": "permission_prompt" });
-        assert_eq!(copilot_payload("notification", &asking).expect("payload")["event"], "needs_input");
+        assert_eq!(
+            copilot_payload("notification", &asking).expect("payload")["event"],
+            "needs_input"
+        );
         let background = json!({ "sessionId": "s1", "notification_type": "shell_completed" });
         assert!(copilot_payload("notification", &background).is_none());
     }
 
     #[test]
     fn the_copilot_file_runs_the_hook_without_a_shell_for_every_event() {
-        let text = Agent::Copilot.file_contents("/Users/me/Library/Application Support/VibeBuddy/bin/vibebuddy-hook");
+        let text = Agent::Copilot
+            .file_contents("/Users/me/Library/Application Support/VibeBuddy/bin/vibebuddy-hook");
         let config: Value = serde_json::from_str(&text).expect("valid JSON");
         assert_eq!(config["version"], 1);
         for (event, _) in COPILOT_EVENTS {
             let entry = &config["hooks"][event][0];
-            assert_eq!(entry["exec"], "/Users/me/Library/Application Support/VibeBuddy/bin/vibebuddy-hook");
+            assert_eq!(
+                entry["exec"],
+                "/Users/me/Library/Application Support/VibeBuddy/bin/vibebuddy-hook"
+            );
             assert_eq!(entry["args"], json!(["copilot", event]));
         }
-        assert_eq!(config["hooks"]["notification"][0]["matcher"], COPILOT_WAITING);
+        assert_eq!(
+            config["hooks"]["notification"][0]["matcher"],
+            COPILOT_WAITING
+        );
     }
 
     #[test]
