@@ -3082,7 +3082,7 @@ mod tests {
             .await;
             publish_device_message(&state, build()).await;
             let expected = if enabled {
-                vec![serde_json::json!(true); 6]
+                vec![serde_json::json!(true); 5]
             } else {
                 Vec::new()
             };
