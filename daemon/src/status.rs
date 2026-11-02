@@ -37,7 +37,7 @@ pub struct DeviceState {
     /// duty / pomodoro / leisure
     pub mode: Option<String>,
     pub firmware_build: Option<String>,
-    /// The firmware version, such as `0.2.2`, which orders releases; firmware older than ADR-0010 reports none.
+    /// The firmware version, such as `0.2.2`, which orders releases; older firmware reports none.
     pub firmware_version: Option<String>,
     /// The firmware takes firmware images over any link (`TRANSFER 1`, ADR-0016), so updating needs no cable.
     pub transfer: bool,
@@ -52,7 +52,7 @@ pub struct DeviceState {
     pub screens: Option<String>,
     /// The connected port's USB serial number, which tells this device from another ESP32-S3.
     pub usb_serial: Option<String>,
-    /// The box's public key (ADR-0012); None for firmware that can't pair.
+    /// The box's public key; None for firmware that can't pair.
     pub box_key: Option<String>,
     /// The box has confirmed it is paired with this computer.
     pub paired: bool,
@@ -383,9 +383,9 @@ pub struct Status {
     pub hooks: HooksSeen,
     pub operation: Option<Operation>,
     pub config: Config,
-    /// Which of the user's own keys for spoken replies are set, and refused (ADR-0020); never a key.
+    /// Which of the user's own keys for spoken replies are set, and refused; never a key.
     pub voice_keys: crate::voice_keys::VoiceKeysStatus,
-    /// The Character being made, or the last one made, since the daemon started (ADR-0020).
+    /// The Character being made, or the last one made, since the daemon started.
     pub making: Option<crate::making::MakingStatus>,
 }
 

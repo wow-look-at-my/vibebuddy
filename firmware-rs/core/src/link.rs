@@ -1,4 +1,4 @@
-//! The box's side of pairing (ADR-0012): its own Ed25519 key, made from hardware entropy the first
+//! The box's side of pairing: its own Ed25519 key, made from hardware entropy the first
 //! time it boots this firmware, and the computers paired with it. Both live in the `link` partition,
 //! which no flash of firmware touches, so a box keeps its identity and its pairings across updates.
 //!

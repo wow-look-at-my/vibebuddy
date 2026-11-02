@@ -244,7 +244,7 @@ pub struct Firmware {
     volume: u32,
     audio_ready: bool,
     build: Vec<u8>,
-    /// The firmware version, which orders releases (ADR-0010); the build ID only identifies the exact build.
+    /// The firmware version, which orders releases; the build ID only identifies the exact build.
     version: alloc::string::String,
     /// The Mac side's build stamp, from the heartbeat. Kept when the link drops: which version was
     /// connected last is exactly what's worth knowing then.
@@ -2183,7 +2183,7 @@ impl Firmware {
             "voice.audio" => self.on_voice_audio(board, fields),
             _ if event.starts_with("voice.") => self.handle_voice_event(board, fields, event),
             _ if event.starts_with("xfer.") => self.handle_transfer(board, fields, event),
-            // Pairing is the computer at the other end of the cable telling the box who it is (ADR-0012).
+            // Pairing is the computer at the other end of the cable telling
             // Only over the cable: whoever is at the box decides who may link and which network it joins.
             "device.pair" | "device.unpair" | "device.pairs" | "device.wifi.set"
             | "device.wifi.forget" | "device.wifi.scan" | "device.baud"

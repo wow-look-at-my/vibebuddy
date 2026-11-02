@@ -1,4 +1,4 @@
-//! The computer's side of the local network link (ADR-0012, docs/protocol.md "Local network link"):
+//! The computer's side of the local network link (docs/protocol.md "Local network link"). This is where the box is (remembered from USB. It found by
 //! where the box is (remembered from USB, or found by mDNS when it moved), and the handshake in which both ends prove their keys before any VibeBuddy
 //! Protocol line goes over the connection. Firmware that opens with `link.noise` gets a Noise session and every line
 //! after it is sealed (ADR-0015, [`crate::noise_link`]); older firmware opens with `link.challenge` and links in the

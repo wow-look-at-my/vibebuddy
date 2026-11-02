@@ -71,8 +71,7 @@ pub enum DeviceMessage {
         bridge: bool,
         usb_serial: Option<String>,
     },
-    /// Linked over the local network, to the box at this address (ADR-0012). Moving between this and the cable
-    /// is not a drop: no Disconnected comes in between.
+    /// Linked over the local network, to the box at this address.
     ConnectedNetwork {
         address: String,
     },

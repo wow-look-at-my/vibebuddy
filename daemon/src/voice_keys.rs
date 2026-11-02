@@ -1,4 +1,4 @@
-//! The user's own keys for spoken replies (ADR-0020, "Own key"): an ElevenLabs key, in `voice-keys.json` in the config
+//! The user's own keys for spoken replies: an ElevenLabs key, in `voice-keys.json` in the config
 //! directory, `{"elevenlabs"?}`, a later mode. A file of its own, as `speech.json` is, because `PUT /v1/config`
 //! `speech.json` is, because `PUT /v1/config` replaces the whole config and an older App would wipe a key it doesn't
 //! know. A reply whose voice is from a provider with an own key goes straight to that provider ([`crate::synthesis`]).

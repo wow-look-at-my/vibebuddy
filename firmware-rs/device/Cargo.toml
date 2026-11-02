@@ -34,7 +34,7 @@ vibebuddy-firmware-core = { path = "../core", default-features = false }
 
 esp-hal = { version = "~1.2.2", features = ["esp32s3", "unstable"] }
 esp-rtos = { version = "0.4.0", features = ["embassy", "esp-alloc", "esp-radio", "esp32s3"] }
-# Wi-Fi (ADR-0012, src/net.rs). beta.2 was yanked; beta.1 is the one that matches esp-hal 1.2 and esp-rtos 0.4.
+# Wi-Fi (src/net.rs). beta.2 was yanked; beta.1 is the one that matches esp-hal 1.2 and esp-rtos 0.4.
 esp-radio = { version = "=1.0.0-beta.1", features = ["esp32s3", "wifi", "unstable"] }
 embassy-net = { version = "0.9.1", features = ["dhcpv4", "medium-ethernet", "proto-ipv4", "tcp", "udp", "dns", "multicast"] }
 # mDNS (src/net.rs): the box advertises _vibebuddy._tcp so computers find it after its address changes.

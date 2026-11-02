@@ -107,9 +107,9 @@ struct AppState {
     /// What the App said about the Character pack it last wrote (who lends a custom one, the form of address),
     /// kept in [`persona::RECORD_FILE`] in the state directory.
     written: Arc<Mutex<persona::Written>>,
-    /// The user's own keys for spoken replies (ADR-0020); none can be set in tests unless one sets it.
+    /// The user's own keys for spoken replies; none can be set in tests unless one sets it.
     voice_keys: Arc<voice_keys::VoiceKeys>,
-    /// Making a Character's line audio (ADR-0020); nothing can be made in tests unless one sets it.
+    /// Making a Character's line audio; nothing can be made in tests unless one sets it.
     making: Arc<making::Maker>,
 }
 
@@ -231,7 +231,7 @@ async fn main() {
         None => None,
     };
     let mut serial_config = SerialConfig::from_env(known_box_file());
-    // Paired, the box can also be reached over the local network when it isn't on the cable (ADR-0012).
+    // Paired, the box can also be reached over the local network when it isn't on the cable.
     if let (Some(identity), Some(state_dir)) = (&identity, config::state_dir()) {
         serial_config = serial_config.with_lan(lan::LanConfig {
             identity: identity.clone(),
@@ -367,8 +367,8 @@ async fn publish_device_message(state: &AppState, message: DeviceMessage) {
     if booted && let Some(greeting) = state.activities.lock().await.daily_greeting() {
         send_event(state, greeting);
     }
-    // A box that reports its key can pair, and one at the end of this cable is ours to pair with
-    // (ADR-0012). Pairing again is harmless: the box only writes flash when something changed.
+    // A box that reports its key can pair, and one at the end of this cable is ours to pair with.
+    // Pairing again is harmless: the box only writes flash when something changed.
     // Over the network the box refuses pairing, and what it says there isn't news about the cable.
     let on_cable = !state.device.lock().await.network;
     // The box says `LINK NOISE` just before `BOX KEY` when it links off the cable only through a Noise session
@@ -398,7 +398,7 @@ async fn publish_device_message(state: &AppState, message: DeviceMessage) {
     {
         send_event(state, pair_command(identity));
         send_event(state, device_command("device.pairs"));
-        // Remembered so the box can be found and checked over the network later (ADR-0012). Only from the cable:
+        // Remembered so the box can be found and checked over the network later. Only from the cable:
         // a key reported over the network could be anyone's, and a new key after the box made itself. A new
         // a new identity is believed only from the box itself (#122).
         if let Some(dir) = &state.state_dir {
@@ -449,7 +449,7 @@ async fn publish_device_message(state: &AppState, message: DeviceMessage) {
 
 /// Voice commands (docs/protocol.md, "Voice commands"): offered on every report of the box's build, which follows
 /// report of the box's build. Which follows hello on each new link and every once it runs fast enough: the audio
-/// once it runs fast enough: the audio always comes over the link (ADR-0018). On the bridge the offer waits until the
+/// follows hello on each new link and every once it runs fast enough: the
 /// box and the serial worker have settled its rate ([`DeviceMessage::BridgeRate`]).
 async fn handle_voice_line(state: &AppState, line: &str) -> Option<tokio::task::JoinHandle<()>> {
     if line.contains(serial_transport::BUILD_MARKER)
@@ -1983,7 +1983,7 @@ async fn set_anthropic_key(state: AppState, key: Option<String>) -> axum::respon
     get_resident(State(state)).await.into_response()
 }
 
-/// Sets or clears the user's own keys for spoken replies (ADR-0020): `{"elevenlabs"?}`, each a key, or null
+/// Sets or clears the user's own keys for spoken replies: `{"elevenlabs"?}`, each a key, or null
 /// or "" to clear it; one left out stays. Answers which are set, as in the status; a key is never sent back or logged.
 async fn put_voice_keys(
     State(state): State<AppState>,

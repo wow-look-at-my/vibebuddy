@@ -1,4 +1,4 @@
-//! The box's side of a link over the local network (ADR-0011, ADR-0012, ADR-0015): who may connect, and
+//! The box's side of a link over the local network (ADR-0011, ADR-0015): who may connect, and
 //! which one computer the box is linked to. The device layer runs the TCP server and hands each connection
 //! here by a number; this decides, and says what to send, what to close and which lines to act on.
 //!

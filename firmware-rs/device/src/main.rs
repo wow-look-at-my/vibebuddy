@@ -218,8 +218,8 @@ impl Board for DeviceBoard {
         self.write_lan(bytes);
     }
 
-    /// `VOICE DATA`, several KB/s of it: USB and the local network
-    /// (ADR-0018). A line that doesn't fit the UART's send ring right now is
+    /// `VOICE DATA`, several KB/s of it: USB and the local network.
+    /// A line that doesn't fit the UART's send ring right now is
     /// dropped, as a full network buffer drops one.
     fn write_stream(&mut self, line: &[u8]) {
         self.transport.write_usb(line);
