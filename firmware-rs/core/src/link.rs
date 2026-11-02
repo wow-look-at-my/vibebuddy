@@ -14,7 +14,7 @@ use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use crate::storage::{Flash, FlashError, Region, SECTOR_BYTES};
 use crate::voice_pack::crc32;
 
-/// Most computers a box remembers, the same limit the Relay enforces.
+/// Most computers a box remembers.
 pub const MAX_PAIRED: usize = 16;
 /// Longest computer name kept, in bytes; longer names are cut at a character boundary.
 pub const MAX_NAME_BYTES: usize = 32;

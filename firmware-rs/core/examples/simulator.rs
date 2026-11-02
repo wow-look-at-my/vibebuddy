@@ -5,8 +5,6 @@
 //! Usage: python3 tools/simulate-device.py (it opens a pseudo-terminal and attaches this program to it).
 //! `--tcp <port>` also listens on the local network side, as a box on Wi-Fi does (docs/protocol.md,
 //! "Local network link"); pair over the pseudo-terminal first, as a box is paired over USB.
-//! `--relay <url>` also plays the box on the Relay (docs/relay-protocol.md), e.g. `ws://127.0.0.1:8787`
-//! under `wrangler dev`: it reports its pairings and its own links, and carries a linked computer's lines.
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -19,9 +17,7 @@ use vibebuddy_firmware_core::buttons::Levels;
 use vibebuddy_firmware_core::canvas::FRAME_BYTES;
 use vibebuddy_firmware_core::display::Screen;
 use vibebuddy_firmware_core::firmware::{AudioStatus, Board, Firmware, FrameAction, VolumeError};
-use vibebuddy_firmware_core::link;
 use vibebuddy_firmware_core::noise::{SealedLines, Sealer};
-use vibebuddy_firmware_core::relay_box::{self, RelayBox};
 use vibebuddy_firmware_core::storage::{Flash, FlashError};
 
 struct MemoryFlash(Vec<u8>);
@@ -63,9 +59,6 @@ struct SimulatedBoard {
     conns: HashMap<u32, TcpStream>,
     /// The connection linked, and its session's sealer for the box's output.
     peer: Option<(u32, SealedLines)>,
-    /// Messages for the Relay thread, and the session with a computer linked through it.
-    relay: Option<mpsc::Sender<String>>,
-    relay_peer: Option<SealedLines>,
 }
 
 /// What the main loop hears from the stdin and network threads.
@@ -74,10 +67,6 @@ enum Input {
     Opened(u32, TcpStream),
     Received(u32, Vec<u8>),
     Closed(u32),
-    /// From the Relay thread: a new connection's challenge, then what the Relay says.
-    RelayChallenge(String),
-    RelayMessage(serde_json::Value),
-    RelayGone,
 }
 
 impl Screen for SimulatedBoard {
@@ -110,16 +99,6 @@ impl Board for SimulatedBoard {
                 },
             );
         }
-        // Through the Relay, every line goes as one data message.
-        if let (Some(lines), Some(relay)) = (&mut self.relay_peer, &self.relay) {
-            lines.lines(
-                bytes,
-                |_| true,
-                |line| {
-                    let _ = relay.send(relay_box::data(line));
-                },
-            );
-        }
     }
 
     fn lan_send(&mut self, conn: u32, bytes: &[u8]) {
@@ -141,9 +120,6 @@ impl Board for SimulatedBoard {
         {
             let _ = stream.write_all(format!("{line}\n").as_bytes());
         }
-    }
-    fn relay_peer(&mut self, sealer: Option<Sealer>) {
-        self.relay_peer = sealer.map(SealedLines::new);
     }
     // Not secret: the simulator's key is fixed anyway. Only fresh enough for each session's ephemeral key.
     fn random(&mut self) -> Option<[u8; 32]> {
@@ -238,80 +214,6 @@ fn listen(port: u16, sender: mpsc::Sender<Input>) {
     });
 }
 
-/// Keeps a socket to the Relay open as the box, reconnecting with backoff. The main loop signs and decides;
-/// this thread only moves text both ways and sends pings.
-fn relay(
-    url: String,
-    box_id: String,
-    sender: mpsc::Sender<Input>,
-    outgoing: mpsc::Receiver<String>,
-) {
-    use tungstenite::Message;
-    std::thread::spawn(move || {
-        let mut backoff = Duration::from_secs(1);
-        loop {
-            let target = format!("{}/v1/boxes/{box_id}", url.trim_end_matches('/'));
-            let Ok((mut socket, _)) = tungstenite::connect(&target) else {
-                std::thread::sleep(backoff);
-                backoff = (backoff * 2).min(Duration::from_secs(60));
-                continue;
-            };
-            // A short read timeout lets this thread also send what the main loop queued.
-            let tcp = match socket.get_ref() {
-                tungstenite::stream::MaybeTlsStream::Plain(stream) => Some(stream),
-                tungstenite::stream::MaybeTlsStream::NativeTls(stream) => Some(stream.get_ref()),
-                _ => None,
-            };
-            if let Some(tcp) = tcp {
-                let _ = tcp.set_read_timeout(Some(Duration::from_millis(20)));
-            }
-            backoff = Duration::from_secs(1);
-            let mut pinged = Instant::now();
-            loop {
-                match socket.read() {
-                    Ok(Message::Text(text)) => {
-                        let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
-                            continue;
-                        };
-                        let input = match value["t"].as_str() {
-                            Some("challenge") => Input::RelayChallenge(
-                                value["nonce"].as_str().unwrap_or_default().to_owned(),
-                            ),
-                            _ => Input::RelayMessage(value),
-                        };
-                        if sender.send(input).is_err() {
-                            return;
-                        }
-                    }
-                    Ok(Message::Close(_)) => break,
-                    Ok(_) => {}
-                    Err(tungstenite::Error::Io(error))
-                        if matches!(
-                            error.kind(),
-                            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
-                        ) => {}
-                    Err(_) => break,
-                }
-                while let Ok(text) = outgoing.try_recv() {
-                    if socket.send(Message::text(text)).is_err() {
-                        break;
-                    }
-                }
-                // A ping frame for NATs, and the text ping the Relay counts as a sign of life.
-                if pinged.elapsed() >= Duration::from_secs(30) {
-                    let _ = socket.send(Message::Ping(Vec::new().into()));
-                    let _ = socket.send(Message::text(vibebuddy_firmware_core::relay_box::PING));
-                    pinged = Instant::now();
-                }
-            }
-            if sender.send(Input::RelayGone).is_err() {
-                return;
-            }
-            std::thread::sleep(backoff);
-        }
-    });
-}
-
 fn main() {
     let (sender, receiver) = mpsc::channel::<Input>();
     let cable = sender.clone();
@@ -335,7 +237,6 @@ fn main() {
     if let Some(port) = option("--tcp") {
         listen(port.parse().expect("--tcp takes a port"), sender.clone());
     }
-    let relay_url = option("--relay");
     let mut board = SimulatedBoard {
         start: Instant::now(),
         flash: flash_with_partitions(),
@@ -343,8 +244,6 @@ fn main() {
         out: std::io::stdout(),
         conns: HashMap::new(),
         peer: None,
-        relay: None,
-        relay_peer: None,
     };
     let build = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -353,12 +252,6 @@ fn main() {
     .unwrap_or_else(|_| "simulator".to_owned());
     let mut firmware = Firmware::new(1, board.now_ms(), build.trim().as_bytes(), "0.0.0");
     firmware.boot(&mut board);
-    let mut relay_box = RelayBox::new();
-    if let (Some(url), Some(link)) = (relay_url, firmware.link()) {
-        let (outgoing, from_main) = mpsc::channel();
-        relay(url, link::encode(&link.public_key()), sender, from_main);
-        board.relay = Some(outgoing);
-    }
     loop {
         while let Ok(input) = receiver.try_recv() {
             match input {
@@ -373,29 +266,9 @@ fn main() {
                     board.conns.remove(&conn);
                     firmware.lan_closed(&mut board, conn);
                 }
-                Input::RelayChallenge(nonce) => {
-                    if let (Some(hello), Some(relay)) =
-                        (relay_box.hello(&firmware, &nonce), &board.relay)
-                    {
-                        let _ = relay.send(hello);
-                    }
-                }
-                Input::RelayMessage(value) => {
-                    for message in relay_box.message(&mut firmware, &mut board, &value) {
-                        if let Some(relay) = &board.relay {
-                            let _ = relay.send(message);
-                        }
-                    }
-                }
-                Input::RelayGone => relay_box.gone(&mut firmware, &mut board),
             }
         }
         firmware.poll(&mut board);
-        if let Some(relay) = &board.relay {
-            for message in relay_box.report(&firmware, board.now_ms()) {
-                let _ = relay.send(message);
-            }
-        }
         std::thread::sleep(Duration::from_millis(10));
     }
 }

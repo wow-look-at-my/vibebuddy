@@ -4,7 +4,7 @@
 //! The box speaks first with [`opener`]. The computer answers with the first handshake message, which
 //! carries its key and a payload; the box answers with the second ([`accept`]). Every line after that is
 //! one transport message: the ciphertext of one protocol line, as unpadded base64url. Over the local
-//! network those are lines on the TCP stream; over the Relay, the `line` of a `data` message.
+//! network those are lines on the TCP stream.
 //!
 //! The two directions are separate [`Sealer`] and [`Opener`] halves, so the board can seal the box's
 //! output while the firmware opens what comes in.
@@ -302,7 +302,7 @@ mod tests {
         let line = to_box
             .seal(br#"{"version":1,"event":"device.hello"}"#)
             .unwrap();
-        assert!(!line.contains("device.hello"), "the Relay sees ciphertext");
+        assert!(!line.contains("device.hello"), "the network sees ciphertext");
         assert_eq!(
             box_opener.open(line.as_bytes()).unwrap(),
             br#"{"version":1,"event":"device.hello"}"#

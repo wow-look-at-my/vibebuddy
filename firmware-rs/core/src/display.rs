@@ -1211,7 +1211,7 @@ impl Display {
             identify_until: None,
             identify_next_toggle: 0,
             muted: false,
-            link: (None, false),
+            link: None,
             ring_alarm: false,
             ring_alarm_phase: Phase::Focus,
             ring_alarm_shake_frames: 0,
@@ -2636,7 +2636,7 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
 }
 
 /// Runs per `SHOT` line in a [`Snapshot`]: at most 11 bytes each, so a line stays under 2 KB, which fits the
-/// box's 4 KB network pipe and the Relay's 8 KiB messages with room to spare.
+/// box's 4 KB network pipe with room to spare.
 const SNAPSHOT_RUNS: usize = 180;
 /// The longest line a [`Snapshot`] gives, newline included.
 pub const SNAPSHOT_LINE_BYTES: usize = 4 + SNAPSHOT_RUNS * 11 + 1;

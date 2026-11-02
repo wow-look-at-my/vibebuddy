@@ -601,23 +601,6 @@ mod tests {
     }
 
     #[test]
-    fn a_relay_link_holds_off_other_computers_but_not_its_own() {
-        let a = Computer::new(2);
-        let b = Computer::new(3);
-        let (mut lan, link) = setup(&[&a, &b]);
-        lan.relay_linked(Some(a.public()), 0);
-        assert_eq!(
-            first_event(&connect(&mut lan, &link, 1, &b, false, 10).1),
-            "link.busy"
-        );
-        assert_eq!(
-            first_event(&connect(&mut lan, &link, 2, &a, false, 20).1),
-            "link.welcome",
-            "the same computer moves to the network"
-        );
-    }
-
-    #[test]
     fn a_slow_handshake_is_closed() {
         let a = Computer::new(2);
         let (mut lan, link) = setup(&[&a]);

@@ -745,9 +745,8 @@ impl Firmware {
         self.tend_leisure(board);
         let now = board.now_ms();
         // The cable goes quiet and links come and go without a line to the screen; this only redraws on a change.
-        let (path, staging) = self.link_mark(now);
-        self.display
-            .set_link(board, &scene!(self, now), path, staging);
+        let path = self.link_path(now);
+        self.display.set_link(board, &scene!(self, now), path);
         self.display.tick(board, &scene!(self, now));
     }
 
