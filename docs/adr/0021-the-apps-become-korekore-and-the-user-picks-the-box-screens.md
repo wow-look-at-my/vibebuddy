@@ -14,7 +14,7 @@ status: accepted
 ## Considered options
 
 - **A setting for the apps' style too.** Rejected: one style in the apps is less to build, test and explain, and the korekore style is the one we want people to see.
-- **One firmware image per set of screens, flashed when the user switches.** Rejected: switching would take a minute or more over the Relay and could fail halfway, each release would ship two images, and every update would have to remember which one a box runs.
+- **One firmware image per set of screens, flashed when the user switches.** Rejected: switching will take a minute or more and can fail halfway. Each release will ship images, and every update will have to remember which a box runs.
 - **Keep the hidden switch and decide later.** Rejected: the decision is made; a switch that only developers can reach would keep two app UIs alive for no one.
 
 ## Consequences

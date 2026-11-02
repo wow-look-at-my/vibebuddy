@@ -4,7 +4,7 @@ status: accepted
 
 # The link partition never moves; box identity stays out of eFuse
 
-The `link` partition (0xa12000, 8 KB) holds the box's key and the computers paired with it (ADR-0012). The box's key is its id on the Relay. A later partition table that moved or resized `link` would leave the old bytes behind, so every box would make a new key on its next boot: its pairings and its Relay id would be gone without a word. So the `link` partition's offset and size never change, whatever else the table does.
+The `link` partition (0xa12000, 8 KB) holds the box's key and the computers paired with it. A later partition table that moved or resized `link` will leave the old bytes. Behind, so every box will make a new key on its next boot. Its pairings will be gone without a word. So the `link` partition's offset and size never change, whatever else the table does.
 
 ## Considered options
 

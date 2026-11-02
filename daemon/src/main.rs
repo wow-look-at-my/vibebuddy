@@ -1867,8 +1867,7 @@ struct ResidentInfo {
     brain_setting: resident::BrainChoice,
     /// Whether an Anthropic API key is stored; the key itself is never sent back.
     anthropic_key_set: bool,
-    /// Why the box can't take voice commands right now besides `problem`: `bridge_firmware`, `bridge_slow`,
-    /// `signed_out`, `allowance` or `global_cap` (see [`voice_off`]).
+    /// Why the box can't take voice commands right now besides `problem`: `bridge_firmware` or `bridge_slow`.
     voice_off: Option<String>,
 }
 
