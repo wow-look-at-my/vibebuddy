@@ -1,5 +1,4 @@
-//! The user's own key (ADR-0020) and making a Character in the korekore look. The design has no boards for them, so
-//! they use its cards, rows and pills; the state and messages are the current tabs' in main.rs.
+//! The user's own key (ADR-0020) and making a Character in the korekore look.
 
 use iced::widget::{Space, button, column, container, image, row, text};
 use iced::{Alignment, Border, Element, Length, Padding};
@@ -307,7 +306,7 @@ impl crate::App {
     }
 
     /// Making a Character of the user's own, in place of the Character page: start from a preset, bring a look, change
-    /// its lines (occasions stay, each keeps a line) and pick a voice. With only a look nothing is made: the drawings
+    /// its lines (occasions stay, each keeps a line). It pick a voice. With only a look nothing is made: the drawings
     /// go to the box with the preset lending its voice. With new lines or another voice, the daemon makes the audio.
     pub(super) fn kk_make_form<'a>(&'a self, form: &'a MakeForm) -> Element<'a, Message> {
         let bases: Vec<Lender> = self.voices.iter().map(Lender::of).collect();
@@ -567,7 +566,7 @@ impl crate::App {
         super::pages::page(page)
     }
 
-    /// The last voice row: a voice cloned or designed in the user's own account, tried with their own key on the first
+    /// The last voice row. A voice cloned or designed in the user's own account, tried with their own key on the first
     /// line before it is kept.
     fn kk_own_voice_form<'a>(
         &'a self,
