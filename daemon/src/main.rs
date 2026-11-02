@@ -54,7 +54,7 @@ use session_titles::SessionTitles;
 use status::{
     DaemonInfo, DeviceState, HooksSeen, Operation, OperationKind, OperationState, Status,
 };
-use tokio::sync::{Mutex, Notify, broadcast};
+use tokio::sync::{Mutex, broadcast};
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::BroadcastStream;
 use tracing::{info, warn};
@@ -2807,7 +2807,7 @@ mod tests {
         };
 
         let response =
-            put(serde_json::json!({"elevenlabs": "sk_eleven_secret", "volc": "volc_secret"})).await;
+            put(serde_json::json!({"elevenlabs": "sk_eleven_secret"})).await;
         assert_eq!(response.status(), StatusCode::OK);
         let body = http_body_util::BodyExt::collect(response.into_body())
             .await
@@ -2816,7 +2816,7 @@ mod tests {
         let answer: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(
             answer,
-            serde_json::json!({"elevenlabs": {"set": true, "refused": false}, "volc": {"set": true, "refused": false}})
+            serde_json::json!({"elevenlabs": {"set": true, "refused": false}})
         );
         let status = serde_json::to_string(&state.snapshot().await).unwrap();
         assert!(
@@ -2825,25 +2825,19 @@ mod tests {
         );
         assert!(!status.contains("secret") && !String::from_utf8_lossy(&body).contains("secret"));
 
-        let response = put(serde_json::json!({"volc": null})).await;
+        let response = put(serde_json::json!({"elevenlabs": null})).await;
         let body = http_body_util::BodyExt::collect(response.into_body())
             .await
             .unwrap()
             .to_bytes();
         let answer: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(
-            (
-                answer["elevenlabs"]["set"].as_bool(),
-                answer["volc"]["set"].as_bool()
-            ),
-            (Some(true), Some(false))
-        );
+        assert_eq!(answer["elevenlabs"]["set"].as_bool(), Some(false));
         assert_eq!(
             put(serde_json::json!({"openai": "k"})).await.status(),
             StatusCode::BAD_REQUEST
         );
         assert_eq!(
-            put(serde_json::json!({"volc": 1})).await.status(),
+            put(serde_json::json!({"elevenlabs": 1})).await.status(),
             StatusCode::BAD_REQUEST
         );
         let _ = std::fs::remove_dir_all(dir);
@@ -2855,8 +2849,6 @@ mod tests {
         let mut state = test_state(Arc::new(RecordingTransport::default()));
         state.making = Arc::new(making::Maker::new(
             Some(dir.clone()),
-            None,
-            state.account.clone(),
             state.voice_keys.clone(),
             Arc::new(own_voices::OwnVoices::new(Some(&dir))),
         ));
@@ -2864,7 +2856,7 @@ mod tests {
         assert!(
             voices
                 .iter()
-                .any(|voice| voice.id == "wanwanxiaohe" && voice.provider == "volc" && !voice.own)
+                .any(|voice| voice.id == "wanwanxiaohe" && voice.provider == "elevenlabs" && !voice.own)
         );
         let post = |voice: &str| {
             let body = serde_json::json!({"name": "Owl", "base": "ada", "voice": voice, "lines": [{"occasion": "done", "text": "Done."}]});
@@ -2889,8 +2881,6 @@ mod tests {
         let mut state = test_state(Arc::new(RecordingTransport::default()));
         state.making = Arc::new(making::Maker::new(
             Some(dir.clone()),
-            None,
-            state.account.clone(),
             state.voice_keys.clone(),
             Arc::new(own_voices::OwnVoices::new(Some(&dir))),
         ));
@@ -2902,7 +2892,7 @@ mod tests {
             )
         };
         assert_eq!(
-            post("volc").await.status(),
+            post("elevenlabs").await.status(),
             StatusCode::BAD_REQUEST,
             "no own key"
         );
@@ -2925,8 +2915,6 @@ mod tests {
         let mut state = test_state(Arc::new(RecordingTransport::default()));
         state.making = Arc::new(making::Maker::new(
             Some(dir.clone()),
-            None,
-            state.account.clone(),
             state.voice_keys.clone(),
             Arc::new(own_voices::OwnVoices::new(Some(&dir))),
         ));
@@ -2946,7 +2934,7 @@ mod tests {
             .to_owned();
         let delete =
             |id: &str| delete_character(State(state.clone()), axum::extract::Path(id.to_owned()));
-        // No service: the job fails at once, leaving its manifest; wait for that.
+        // No own key: the job fails at once, leaving its manifest; wait for that.
         for _ in 0..200 {
             if state
                 .making

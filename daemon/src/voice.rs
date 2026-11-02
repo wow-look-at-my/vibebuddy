@@ -1700,7 +1700,7 @@ pub mod tests {
         let path = std::env::var("VIBEBUDDY_E2E_WAV").expect("VIBEBUDDY_E2E_WAV names a recording");
         let (left, rate) = left_channel(&std::fs::read(path).unwrap());
         assert_eq!(rate, SAMPLE_RATE, "the box records at 24 kHz");
-        let recognizer = crate::speech::from_env(None).expect("a speech recognizer is configured");
+        let recognizer = crate::speech::from_env().expect("a speech recognizer is configured");
         let dir = temp_dir("voice-e2e");
         let resident = Arc::new(Resident::new(
             true,
