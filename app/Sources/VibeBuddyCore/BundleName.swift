@@ -1,9 +1,8 @@
 import Foundation
 
 /// The app's bundle file was `Vibe Buddy.app` until 2026-10-09 and is `VibeBuddy.app` since, matching the product
-/// name. Sparkle updates a bundle in place and keeps its file name, and a new DMG brings the new name next to an old
-/// copy, so an installed copy sorts this out itself when it starts. Only copies in an Applications folder are
-/// touched; a development build elsewhere is left alone.
+/// name. A new DMG brings the new name next to an old copy, so an installed copy sorts this out itself when it
+/// starts. Only copies in an Applications folder are touched; a development build elsewhere is left alone.
 public enum BundleName {
     public static let current = "VibeBuddy.app"
     public static let old = "Vibe Buddy.app"

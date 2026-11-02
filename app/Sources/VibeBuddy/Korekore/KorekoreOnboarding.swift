@@ -179,7 +179,6 @@ struct KorekoreOnboarding: View {
             switch operation.state {
             case .failed:
                 KNote(String(localized: "Hold K0 on the box and replug the cable to put it in download mode, then retry."))
-                Button(String(localized: "Try again")) { model.updateFirmware() }.buttonStyle(KBigButtonStyle(.sun))
             case .replug:
                 KNote(String(localized: "The firmware is on the box, but it didn't start. Unplug the box and plug it back in. Don't hold K0 this time."))
             default:
@@ -206,11 +205,7 @@ struct KorekoreOnboarding: View {
             if model.foreignFirmware {
                 VStack(alignment: .leading, spacing: 8) {
                     KNote(String(localized: "This box runs other firmware. Put korekore on it? Its current firmware will be replaced."), color: Theme.Colors.ink)
-                    if model.firmwareDownloaded {
-                        Button(String(localized: "Flash korekore")) { KorekoreFlash.foreign(then: model.updateFirmware) }.kButton(.pink)
-                    } else {
-                        KorekoreFirmwareUnavailable(model: model)
-                    }
+                    KNote(String(localized: "This build doesn't download firmware. Use Flash from file… on the Device page."))
                 }
                 .padding(.vertical, 10)
                 .padding(.horizontal, 14)
@@ -223,20 +218,6 @@ struct KorekoreOnboarding: View {
                 }
                 if notThisOne {
                     KNote(String(localized: "Unplug it, then plug in your box. If several devices are plugged in, korekore asks which one is yours."))
-                }
-                // The cable is in and someone is watching: the best moment to bring older factory firmware up to date.
-                // Firmware without TRANSFER 1 is flashed over the cable only (ADR-0016), as the Device page says.
-                if model.firmwareUpdateAvailable, device.network == true, device.transfer != true {
-                    KNote(String(localized: "Plug in the cable to update the box's firmware."))
-                } else if model.firmwareUpdateAvailable, let offer = model.offeredFirmware {
-                    KCard {
-                        HStack(spacing: 8) {
-                            (Text("Newer firmware is available").bold().foregroundColor(Theme.Colors.ink) + Text(" for this box (\(offer.version)).").foregroundColor(Theme.Colors.muted))
-                                .font(.rounded(13, weight: 400))
-                            Spacer()
-                            Button(String(localized: "Update now")) { KorekoreFlash.update(offer, then: model.updateFirmware) }.kButton(.sun)
-                        }
-                    }
                 }
             }
         } else if !model.daemonAlive {
@@ -272,7 +253,6 @@ struct KorekoreOnboarding: View {
 
     private func portLine(_ device: DeviceState) -> String {
         let port = (device.port ?? "").replacingOccurrences(of: "/dev/cu.", with: "")
-        if device.relay == true { return String(localized: "Relay") }
         if device.network == true { return "\(port) · \(String(localized: "Wi-Fi"))" }
         return "\(port) · \(device.bridge ? String(localized: "UART bridge") : String(localized: "native USB"))"
     }

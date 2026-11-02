@@ -101,13 +101,7 @@ struct KorekoreDevicePage: View {
             KCard(dashed: true) {
                 VStack(alignment: .leading, spacing: 8) {
                     KHeading(String(localized: "The box isn't running korekore firmware"))
-                    if model.firmwareDownloaded {
-                        KNote(String(localized: "Flash korekore to use it; its current firmware will be replaced."))
-                        Button(String(localized: "Flash korekore")) { KorekoreFlash.foreign(then: model.updateFirmware) }.kButton(.pink)
-                            .disabled(model.operationRunning)
-                    } else {
-                        KorekoreFirmwareUnavailable(model: model)
-                    }
+                    KNote(String(localized: "This build doesn't download firmware. Use Flash from file… on the Device page."))
                     Text("If flashing can't start: hold K0 while plugging in, to enter download mode.")
                         .font(.rounded(12, weight: 400)).foregroundStyle(Theme.Colors.muted)
                 }
@@ -162,22 +156,12 @@ struct KorekoreDevicePage: View {
             VStack(alignment: .leading, spacing: 10) {
                 KHeading(String(localized: "The box"))
                 field(String(localized: "Link")) { Text(verbatim: linkText) }
-                if !connected, let relayRefusal {
-                    KNote(relayRefusal, color: Theme.Colors.korePinkText)
-                }
                 field(String(localized: "Firmware")) { firmwareLine }
                 field(String(localized: "Box screens")) { screensChoice }
                 if connected, device?.screens == nil {
                     KNote(String(localized: "Update the box's firmware to choose its screens."))
                 }
                 Spacer(minLength: 8)
-                if model.firmwareUpdateAvailable, connected, !canFlash {
-                    KNote(String(localized: "Plug in the cable to update the box's firmware."))
-                } else if model.firmwareUpdateAvailable, let offer = model.offeredFirmware {
-                    Button(String(localized: "Update to \(offer.version)")) { KorekoreFlash.update(offer, then: model.updateFirmware) }
-                        .kButton(.pink, size: 13).frame(maxWidth: .infinity)
-                        .disabled(model.operationRunning || !connected)
-                }
                 Button { model.identify() } label: { Text("Make the box blink").frame(maxWidth: .infinity) }
                     .kButton(.sun, size: 13)
                     .disabled(model.operationRunning || !connected)
@@ -208,26 +192,8 @@ struct KorekoreDevicePage: View {
         }
     }
 
-    @ViewBuilder private var firmwareLine: some View {
-        let version = device?.firmwareVersion ?? model.boxFirmware ?? "—"
-        if model.firmwareUpdateAvailable, let offer = model.offeredFirmware {
-            Text(verbatim: "\(version) ") + Text(String(localized: "· \(offer.version) available").uppercased()).foregroundColor(Theme.Colors.waitText)
-        } else if connected, model.offeredFirmware != nil || model.updates?.lastCheck != nil {
-            Text(verbatim: "\(version) ") + Text(String(localized: "· up to date").uppercased()).foregroundColor(Theme.Colors.doneText)
-        } else {
-            Text(verbatim: version)
-        }
-    }
-
-    /// Why the Relay won't carry the link, shown while the box is away (ADR-0020).
-    private var relayRefusal: String? {
-        guard AccountPlan.shown else { return nil }
-        return switch device?.relayRefused {
-        case nil: nil
-        case "signed_out": String(localized: "Sign in to use the Relay.")
-        case "plan": String(localized: "The Relay needs the Paid plan.")
-        default: String(localized: "The Relay can't check the account right now. VibeBuddy tries again later.")
-        }
+    private var firmwareLine: some View {
+        Text(verbatim: device?.firmwareVersion ?? model.boxFirmware ?? "—")
     }
 
     private var linkText: String {
@@ -235,7 +201,6 @@ struct KorekoreDevicePage: View {
         guard device.connected else {
             return device.candidates?.isEmpty == false ? String(localized: "Several devices found") : String(localized: "Box not found")
         }
-        if device.relay == true { return String(localized: "Relay") }
         let port = (device.port ?? "").replacingOccurrences(of: "/dev/cu.", with: "")
         if device.network == true { return "\(String(localized: "Wi-Fi")) · \(port)" }
         return "USB · \(port)"
@@ -277,7 +242,7 @@ struct KorekoreDevicePage: View {
                             KNote(String(localized: "Before retrying, hold K0 on the box and replug the cable to put it in download mode."))
                         }
                         HStack {
-                            Button(String(localized: "Try again")) { model.updateFirmware() }.kButton().disabled(!canFlash)
+                            Button(String(localized: "Try again")) { flashFromFile() }.kButton().disabled(!canFlash)
                             Button(String(localized: "Report a problem…")) { model.reportProblem() }.kButton()
                         }
                     }
@@ -289,13 +254,11 @@ struct KorekoreDevicePage: View {
                     Text("The update didn't take").font(.rounded(15)).foregroundStyle(Theme.Colors.korePinkText)
                     KNote(String(localized: "The box went back to firmware \(model.boxFirmware ?? "—") and is fine. Try again later or report a problem."))
                     HStack {
-                        Button(String(localized: "Try again")) { model.updateFirmware() }.kButton().disabled(!canFlash)
+                        Button(String(localized: "Try again")) { flashFromFile() }.kButton().disabled(!canFlash)
                         Button(String(localized: "Report a problem…")) { model.reportProblem() }.kButton()
                     }
                 }
             }
-        } else if !model.foreignFirmware, model.offeredFirmware?.newerThanBox == true, !model.firmwareDownloaded {
-            KCard { KorekoreFirmwareUnavailable(model: model) }
         }
     }
 
@@ -349,35 +312,6 @@ struct KorekoreDevicePage: View {
             buttons: [String(localized: "Flash"), String(localized: "Cancel")],
             facts: [(String(localized: "Firmware package"), offered), (String(localized: "Box now"), current)]) { [model] answer in
             if answer.button == 0 { model.flashFirmware(package) }
-        }
-    }
-}
-
-/// Why there's no firmware to flash yet, and what to do about it.
-struct KorekoreFirmwareUnavailable: View {
-    @ObservedObject var model: AppModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if !UpdateSwitch.compiledIn {
-                KNote(String(localized: "This build doesn't download firmware. Use Flash from file… on the Device page."))
-            } else if let updates = model.updates, updates.enabled {
-                if let error = updates.error {
-                    KTag(String(localized: "Couldn't get the firmware: \(error)"), color: Theme.Colors.korePinkText)
-                } else if model.offeredFirmware != nil {
-                    KTag(String(localized: "Downloading the firmware…"))
-                } else {
-                    KTag(String(localized: "Looking for firmware…"))
-                }
-                Button(String(localized: "Check again")) { model.checkForUpdates() }.kButton()
-            } else {
-                KNote(String(localized: "Update checks are off, so korekore doesn't download firmware. Turn them on in General, or get it from Releases."))
-            }
-            if UpdateSwitch.compiledIn {
-                Link(destination: Resources.releasesPage) {
-                    Text("Releases").font(.rounded(13, weight: 400)).foregroundStyle(Theme.Colors.korePinkText)
-                }
-            }
         }
     }
 }

@@ -18,12 +18,8 @@ enum KorekoreSnapshots {
        "wifi_network":"ByteTrade","wifi_address":"192.168.1.160","transfer":true,"screens":"korekore"},
      "today":{"done":7,"asks":3,"busy_seconds":15120},
      "hooks":{"codex":"2026-10-21T16:40:00+08:00","claude":"2026-10-21T17:03:00+08:00"},
-     "config":{"notify_link":true,"check_updates":true,"relay":false},
-     "updates":{"enabled":true,"last_check":"2026-10-21T13:51:00+08:00","unsupported_app":false},
-     "account":{"available":true,"signed_in":true,"github_id":1,"github_login":"kore-sample",
-       "today":{"day":"2026-10-21","commands":12,"commands_limit":200},
-       "plan":{"name":"paid","period_end":"2026-11-24T00:00:00Z","characters":12300,"characters_limit":100000}},
-     "voice_keys":{"elevenlabs":{"set":true,"refused":false},"volc":{"set":false,"refused":false}},
+     "config":{"notify_link":true},
+     "voice_keys":{"elevenlabs":{"set":true,"refused":false}},
      "activities":[{"agent":"claude-code","title":"CC:Add Chinese to the box","state":"working"},
                    {"agent":"codex","title":"CX:Fix voice reply","state":"working"},
                    {"agent":"github-actions","title":"CI:App tests","state":"working"}]}
@@ -63,7 +59,7 @@ enum KorekoreSnapshots {
                 capture(KorekoreSettingsWindow(rootView: KorekoreSettingsRoot(model: model, initial: section)), as: "live-\(section.rawValue)", in: folder)
             }
             let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 600), styleMask: [.borderless], backing: .buffered, defer: false)
-            let actions = KorekoreMenuActions(settings: {}, checkForUpdates: {}, reportProblem: {}, quit: {}, restartDaemon: {})
+            let actions = KorekoreMenuActions(settings: {}, reportProblem: {}, quit: {}, restartDaemon: {})
             let hosting = NSHostingView(rootView: KorekorePanelRoot(model: model, actions: actions).padding(20).background(Color(korekoreRGB: 0xC9C3D8)))
             panel.setContentSize(hosting.fittingSize)
             panel.contentView = hosting

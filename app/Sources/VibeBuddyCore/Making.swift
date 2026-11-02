@@ -7,7 +7,7 @@ import Foundation
 /// user's own account (`own`), which only their own key speaks and which has no language of its own.
 public struct CharacterVoice: Codable, Equatable, Identifiable, Sendable {
     public var id: String
-    /// `elevenlabs` or `volc`.
+    /// `elevenlabs`.
     public var provider: String
     public var voice: String
     public var language: String
@@ -33,11 +33,6 @@ public struct CharacterVoice: Codable, Equatable, Identifiable, Sendable {
     /// The Character whose preview is said in this voice: voices.tsv lists each preset's voice under the preset's id,
     /// and Jessica's is the robot's, the built-in lines.
     public var previewID: String { id == "jessica" ? "robot" : id }
-
-    /// The provider as the UI names it.
-    public var providerName: String {
-        provider == "volc" ? String(localized: "Volcano Engine") : "ElevenLabs"
-    }
 
     /// Voices in `language` first, then the rest of ours, then the user's own; the daemon's order otherwise kept.
     public static func sorted(_ voices: [CharacterVoice], preferring language: VoiceLanguage?) -> [CharacterVoice] {
@@ -103,7 +98,7 @@ public struct MakingStatus: Codable, Equatable, Sendable {
     /// Pieces of audio made, of all there are.
     public var done: Int
     public var total: Int
-    /// Why a failed job stopped: `plan`, `monthly`, `global_cap`, `signed_out`, `own_key`, `internal`, or nil with `error`.
+    /// Why a failed job stopped: `own_key`, `internal`, or nil with `error`.
     public var reason: String?
     public var error: String?
     public init(id: String, name: String, state: String, done: Int, total: Int, reason: String? = nil, error: String? = nil) {
@@ -114,52 +109,35 @@ public struct MakingStatus: Codable, Equatable, Sendable {
     public var failed: Bool { state == "failed" }
     public var progress: Double { total > 0 ? Double(done) / Double(total) : 0 }
 
-    /// Why it stopped, said for the user; `provider` names the voice's provider. Nil unless it failed.
-    public func explanation(provider: String) -> String? {
+    /// Why it stopped, said for the user. Nil unless it failed.
+    public func explanation() -> String? {
         guard failed else { return nil }
         switch reason {
-        case "plan" where !AccountPlan.shown: return String(localized: "Set your own key for \(provider) on the Account tab first.")
-        case "plan": return String(localized: "Making a Character with VibeBuddy's voices needs the Paid plan, or your own key for \(provider).")
-        case "monthly": return String(localized: "This month's Characters on the Paid plan are used up. The lines made so far are kept: resume next month, or with your own key for \(provider).")
-        case "global_cap": return String(localized: "VibeBuddy's voices are paused for today. The lines made so far are kept: resume tomorrow.")
-        case "signed_out": return String(localized: "Sign in on the Account tab, or set your own key for \(provider) there, then resume.")
-        case "own_key": return String(localized: "\(provider) refused your own key. Set another one on the Account tab, then resume.")
+        case "own_key": return String(localized: "ElevenLabs refused your own key. Set another one on the General tab, then resume.")
         case "internal": return String(localized: "Making the Character stopped unexpectedly. Resume to try again.")
         default: return String(localized: "Making the Character failed: \(error ?? "")")
         }
     }
 }
 
-/// Whether a Character can be made in a voice, before starting: the daemon only finds out about the plan once the
-/// voice service answers, so the App says what it can tell.
+/// Whether a Character can be made, before starting: making needs the user's own ElevenLabs key.
 public enum MakingReadiness: Equatable, Sendable {
-    /// The user's own key for the voice's provider: nothing else is needed.
+    /// The key is set and ElevenLabs hasn't refused it.
     case ownKey
-    /// Signed in without an own key: VibeBuddy's voices, which need the Paid plan.
-    case paidPlan
-    /// Not signed in and no own key: nothing can make it yet.
-    case signIn
-    /// No service to sign in to in this build, and no own key.
-    case ownKeyOnly
+    /// No usable key yet.
+    case needsKey
 
-    public var canStart: Bool { self == .ownKey || self == .paidPlan }
+    public var canStart: Bool { self == .ownKey }
 
-    public static func of(_ voice: CharacterVoice, keys: VoiceKeysStatus?, account: AccountStatus?) -> MakingReadiness {
-        let key = voice.provider == "volc" ? keys?.volc : keys?.elevenlabs
-        if let key, key.set, !key.refused { return .ownKey }
-        // A voice in the user's own account: VibeBuddy's voice service can't speak it. Nor, while the Paid plan is
-        // hidden, any voice.
-        if voice.own || !AccountPlan.shown { return .ownKeyOnly }
-        if account?.signedIn == true { return .paidPlan }
-        return account?.available == true ? .signIn : .ownKeyOnly
+    public static func of(keys: VoiceKeysStatus?) -> MakingReadiness {
+        if let key = keys?.elevenlabs, key.set, !key.refused { return .ownKey }
+        return .needsKey
     }
 
-    public func explanation(provider: String) -> String {
+    public var explanation: String {
         switch self {
-        case .ownKey: return String(localized: "Made with your own key for \(provider), billed to your account there.")
-        case .paidPlan: return String(localized: "Without your own key for \(provider), making a Character with VibeBuddy's voices needs the Paid plan.")
-        case .signIn: return String(localized: "Sign in on the Account tab for the Paid plan, or set your own key for \(provider) there.")
-        case .ownKeyOnly: return String(localized: "Set your own key for \(provider) on the Account tab first.")
+        case .ownKey: return String(localized: "Made with your own ElevenLabs key, billed to your account there.")
+        case .needsKey: return String(localized: "Set your own ElevenLabs key on the General tab first.")
         }
     }
 }

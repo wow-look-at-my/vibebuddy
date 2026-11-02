@@ -28,7 +28,6 @@ final class AppModel: ObservableObject {
     let client = DaemonClient()
     let supervisor = DaemonSupervisor()
     let preview = VoicePreview()
-    let updater = Updater()
     /// Whether the app manages the daemon itself; false when an old LaunchAgent was found and the user kept it.
     var managesDaemon = true
 
@@ -39,8 +38,6 @@ final class AppModel: ObservableObject {
     /// Taken out of the defaults at start, so it is tried in this run only and never surprises the user days later.
     private var pendingVoice: String?
     private static let pendingVoiceKey = "pendingVoice"
-    /// The last firmware version a notification was posted for, so each new one is announced once.
-    private static let notifiedFirmwareKey = "notifiedFirmware"
 
     init() {
         preview.onFinish = { [weak self] in self?.previewingVoice = nil }
@@ -108,8 +105,6 @@ final class AppModel: ObservableObject {
         self.status = status
         daemonAlive = true
         refreshForeignFirmware()
-        notifyNewFirmware(status)
-        updater.follow(checks: status.updates?.enabled ?? false)
         // Wait for the build ID: the box has answered, not just had its port opened (which resets it).
         if let voice = pendingVoice, status.device.connected, status.device.firmwareBuild != nil, !operationRunning {
             pendingVoice = nil
@@ -141,15 +136,6 @@ final class AppModel: ObservableObject {
     private func refreshForeignFirmware() {
         let foreign = status.map { Firmware.foreign($0.device) } ?? false
         if foreign != foreignFirmware { foreignFirmware = foreign }
-    }
-
-    /// One notification per new firmware version, only while the box is there to take it and once it's downloaded.
-    private func notifyNewFirmware(_ status: Status) {
-        guard UpdateSwitch.compiledIn, status.device.connected, Firmware.updateAvailable(status.updates), let offer = status.updates?.firmware,
-              UserDefaults.standard.string(forKey: Self.notifiedFirmwareKey) != offer.version else { return }
-        UserDefaults.standard.set(offer.version, forKey: Self.notifiedFirmwareKey)
-        Notifier.notify(title: String(localized: "Box firmware \(offer.version) is available"),
-                        body: String(localized: "Update it from Settings › Device."))
     }
 
     /// Notify once after the link has been down for 30 seconds (debounced); reset when it's plugged back in.
@@ -198,35 +184,6 @@ final class AppModel: ObservableObject {
         guard var config = status?.config else { return }
         config.notifyLink = enabled
         run { _ = try await self.client.putConfig(config) }
-    }
-
-    func setRelay(_ enabled: Bool) {
-        guard var config = status?.config else { return }
-        config.relay = enabled
-        run { _ = try await self.client.putConfig(config) }
-    }
-
-    func setCheckUpdates(_ enabled: Bool) {
-        guard UpdateSwitch.compiledIn, var config = status?.config else { return }
-        config.checkUpdates = enabled
-        run { _ = try await self.client.putConfig(config) }
-    }
-
-    /// The daemon reads the manifest (firmware, and the App on Linux); on the Mac, Sparkle checks the App with its own window.
-    func checkForUpdates() {
-        guard UpdateSwitch.compiledIn else { return }
-        run { try await self.client.checkForUpdates() }
-        updater.checkForUpdates()
-    }
-
-    /// Installs a newer App: Sparkle when this build has it, otherwise the download page.
-    func installApp(_ offer: AppOffer) {
-        guard UpdateSwitch.compiledIn else { return }
-        if updater.available {
-            updater.checkForUpdates()
-        } else if let url = URL(string: offer.url) {
-            NSWorkspace.shared.open(url)
-        }
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {
@@ -401,7 +358,7 @@ final class AppModel: ObservableObject {
     }
 
     /// Writes a made Character to the box: the daemon's pack of its lines, said with the form of address picked for its
-    /// language, wearing its look. Works on any plan: nothing is synthesized again.
+    /// language, wearing its look: nothing is synthesized again.
     func writeMadeCharacter(_ made: MadeCharacter) {
         let directory = Resources.madeCharacterDirectory(made.id)
         let form = language(of: made).flatMap(formOfAddress)
@@ -415,8 +372,8 @@ final class AppModel: ObservableObject {
     }
 
     /// Tries a voice in the user's own account and, when it speaks, keeps it and plays what it said.
-    func addOwnVoice(provider: String, voice: String, name: String, text: String) async throws -> CharacterVoice {
-        let (added, wav) = try await client.addOwnVoice(provider: provider, voice: voice, name: name, text: text)
+    func addOwnVoice(voice: String, name: String, text: String) async throws -> CharacterVoice {
+        let (added, wav) = try await client.addOwnVoice(voice: voice, name: name, text: text)
         characterVoices.removeAll { $0.id == added.id }
         characterVoices.append(added)
         preview.play(wav: wav, as: added.id)
@@ -446,7 +403,6 @@ final class AppModel: ObservableObject {
         App \(Resources.displayVersion)
         daemon \(status?.daemon.build ?? "not connected")
         firmware \(boxFirmware ?? "—")
-        offered firmware \(offeredFirmware?.version ?? "—")
         voice \(status?.device.voice ?? "—")
         macOS \(ProcessInfo.processInfo.operatingSystemVersionString)
         """
@@ -460,18 +416,6 @@ final class AppModel: ObservableObject {
     /// The box's firmware as shown in the interface: version and build ID.
     var boxFirmware: String? {
         Firmware.label(version: status?.device.firmwareVersion, build: status?.device.firmwareBuild)
-    }
-
-    var updates: UpdateStatus? { status?.updates }
-    var offeredFirmware: FirmwareOffer? { updates?.firmware }
-    var firmwareUpdateAvailable: Bool { UpdateSwitch.compiledIn && Firmware.updateAvailable(updates) }
-    /// The offered firmware is on disk, so a box (including a factory one) can be flashed with it.
-    var firmwareDownloaded: Bool { Firmware.files(of: offeredFirmware) != nil }
-
-    /// Flashes the firmware the daemon downloaded from the update manifest.
-    func updateFirmware() {
-        guard let files = Firmware.files(of: offeredFirmware) else { lastError = String(localized: "The firmware hasn't been downloaded yet"); return }
-        run { try await self.client.flashFirmware(bootloader: files.bootloader, partitionTable: files.partitionTable, app: files.app) }
     }
 
     /// A firmware package the user obtained (the zip CI publishes): unzip to a temp directory and verify the three images before the confirmation dialog.

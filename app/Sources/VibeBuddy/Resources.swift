@@ -1,8 +1,8 @@
 import AppKit
 import VibeBuddyCore
 
-/// Where things live in the app bundle: the two helpers and the voice packs. Firmware isn't bundled; the daemon
-/// downloads it (ADR-0010).
+/// Where things live in the app bundle: the two helpers and the voice packs. Firmware isn't bundled; the user flashes
+/// a package from a file.
 enum Resources {
     /// Semantic version, reported to the device with the heartbeat.
     static var bundleVersion: String {
@@ -16,9 +16,6 @@ enum Resources {
 
     static var displayVersion: String { "\(bundleVersion) (\(bundleBuild))" }
 
-    /// Where every release lives, for downloading firmware by hand when the daemon can't.
-    static let releasesPage = URL(string: "https://github.com/second-state/vibebuddy/releases")!
-
     /// OpenAI's page on installing the Codex CLI, which voice commands need.
     static let codexInstallPage = URL(string: "https://learn.chatgpt.com/docs/codex/cli")!
 
@@ -28,11 +25,8 @@ enum Resources {
     /// The Claude Console, where the user makes the Anthropic API key Claude Code answers voice commands with.
     static let anthropicConsole = URL(string: "https://platform.claude.com/")!
 
-    /// Where the user makes their own key for spoken replies in ElevenLabs' voices.
+    /// Where the user makes their own key for spoken replies and made Characters.
     static let elevenLabsKeys = URL(string: "https://elevenlabs.io/app/settings/api-keys")!
-
-    /// Volcano Engine's speech console, where the user makes their own key for the Doubao voices.
-    static let volcConsole = URL(string: "https://console.volcengine.com/speech/")!
 
     static var macOSDirectory: URL {
         Bundle.main.executableURL!.deletingLastPathComponent()
