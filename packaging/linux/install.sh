@@ -46,8 +46,7 @@ systemctl --user enable --now vibebuddyd.service
 
 "${bin}/vibebuddy-hook" install
 
-# What the Mac app carries in its bundle lives here instead: the Character packs for the Character tab. Firmware isn't
-# installed; the daemon downloads it (ADR-0010).
+# What the Mac app carries in its bundle lives here instead: the Character packs for the Character tab.
 assets="${data}/vibebuddy"
 mkdir -p "${assets}/voices"
 # Characters a release retired go away with it, rather than sitting next to the new ones.
@@ -66,19 +65,8 @@ else
         done
     done
 fi
-# Firmware from earlier versions of this script; the daemon keeps its own now.
+# Firmware isn't installed; an earlier install may have left some here.
 rm -rf "${assets}/firmware"
-
-# Omarchy 4 shows the buddy's face in its bar through a shell plugin; while it's there, the app leaves out its tray
-# icon. Added once, like the tray pin: if the user removes the plugin later, running this again doesn't bring it back.
-plugin_marker="${XDG_STATE_HOME:-${HOME}/.local/state}/vibebuddy/omarchy-plugin-added"
-if [[ ! -e "${plugin_marker}" ]] && command -v omarchy >/dev/null && omarchy plugin list >/dev/null 2>&1; then
-    if omarchy plugin add https://github.com/second-state/omarchy-vibebuddy-plugin --enable --yes; then
-        mkdir -p "$(dirname "${plugin_marker}")" && touch "${plugin_marker}"
-    else
-        echo "Could not add VibeBuddy's Omarchy bar plugin; the app's tray icon stays instead."
-    fi
-fi
 
 # Start the tray now rather than at the next login. systemd-run hands it the graphical session's environment,
 # which a shell over SSH doesn't have.

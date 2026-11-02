@@ -18,7 +18,7 @@ The Mac app (`app/`) and the Linux app (`desktop/`) are one product on two platf
 
 ### Issue tracker
 
-Issues and specs both live in GitHub Issues (second-state/vibebuddy), managed with `gh`. See `docs/agents/issue-tracker.md`.
+Issues and specs both live in GitHub Issues (wow-look-at-my/vibebuddy), managed with `gh`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

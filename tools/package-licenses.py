@@ -48,7 +48,7 @@ def dependency_notices(manifest, target):
 def main():
     resources = Path(sys.argv[1])
     # The Rust target the app's binaries are built for: the Mac app by default, the Linux package passes its own.
-    # `--firmware` writes the notices for the firmware zip instead, which ships on its own (ADR-0010).
+    # `--firmware` writes the notices for the firmware zip instead, which ships on its own.
     app_target = sys.argv[2] if len(sys.argv) > 2 else "aarch64-apple-darwin"
     firmware = app_target == "--firmware"
     licenses = resources / "licenses"
@@ -88,9 +88,9 @@ def main():
 
 Source revision: {revision}
 Source and build/install scripts:
-https://github.com/second-state/vibebuddy/tree/{revision}
+https://github.com/wow-look-at-my/vibebuddy/tree/{revision}
 Source archive:
-https://github.com/second-state/vibebuddy/archive/{revision}.tar.gz
+https://github.com/wow-look-at-my/vibebuddy/archive/{revision}.tar.gz
 Build instructions: CONTRIBUTING.md and README.md at that revision.
 
 Rust dependency versions and checksums are recorded in {lockfile}.
