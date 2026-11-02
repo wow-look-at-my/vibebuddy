@@ -237,7 +237,7 @@ pub(crate) mod tests {
             Provider::of("elevenlabs:abc"),
             Some((Provider::ElevenLabs, "abc"))
         );
-        assert_eq!(Provider::of("volc:speaker"), None);
+        assert_eq!(Provider::of("other:speaker"), None);
         assert_eq!(Provider::of("en-US-JennyNeural"), None);
     }
 }
