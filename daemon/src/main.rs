@@ -1,4 +1,3 @@
-mod account;
 mod activity;
 mod agent_hooks;
 mod app_server;
@@ -14,7 +13,6 @@ mod noise_link;
 mod occasions;
 mod own_voices;
 mod persona;
-mod relay;
 mod resident;
 mod resident_claude;
 mod rom_flasher;
@@ -26,7 +24,6 @@ mod speech;
 mod status;
 mod synthesis;
 mod transfer;
-mod updates;
 mod voice;
 mod voice_keys;
 mod voice_writer;
@@ -62,7 +59,6 @@ use tokio_stream::StreamExt;
 use tokio_stream::wrappers::BroadcastStream;
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
-use updates::Updates;
 use vibebuddy_protocol::{Event, VERSION};
 
 /// Once the last session hangs there are no more hook events; only a periodic sweep can free the screen.
@@ -98,15 +94,9 @@ struct AppState {
     serial: Option<Arc<SerialTransport>>,
     /// This computer's pairing key; None when it couldn't be read or made, and then nothing is paired.
     identity: Option<Arc<identity::Identity>>,
-    /// Where the Relay is; the update manifest may move it.
-    relay: Option<relay::RelayConfig>,
     /// Where the box's key and address are remembered; None in tests unless one sets it, so they never write
     /// over the user's own.
     state_dir: Option<PathBuf>,
-    /// The update manifest and the firmware it offers; with no source, nothing is ever checked.
-    updates: Arc<Mutex<Updates>>,
-    /// "Check for updates" pressed: checks now instead of waiting for the daily one.
-    check_updates: Arc<Notify>,
     /// The resident session voice commands go to (ADR-0017); None without a state directory, and in tests
     /// unless one sets it. Present even when switched off, so its hook events are still recognised.
     resident: Option<Arc<resident::Resident>>,
@@ -117,8 +107,6 @@ struct AppState {
     /// What the App said about the Character pack it last wrote (who lends a custom one, the form of address),
     /// kept in [`persona::RECORD_FILE`] in the state directory.
     written: Arc<Mutex<persona::Written>>,
-    /// The person's VibeBuddy account (ADR-0018); unavailable in tests unless one sets it.
-    account: Arc<account::Account>,
     /// The user's own keys for spoken replies (ADR-0020); none can be set in tests unless one sets it.
     voice_keys: Arc<voice_keys::VoiceKeys>,
     /// Making a Character's line audio (ADR-0020); nothing can be made in tests unless one sets it.
@@ -135,7 +123,6 @@ impl AppState {
         let config = config_path.as_deref().map(Config::load).unwrap_or_default();
         let (device_bus, _) = broadcast::channel(1024);
         let (status_changed, _) = broadcast::channel(64);
-        let account = Arc::new(account::Account::new(None, None, 7331));
         let voice_keys = Arc::new(voice_keys::VoiceKeys::new(None));
         Self {
             transport,
@@ -153,34 +140,18 @@ impl AppState {
                 .filter(|value| !value.is_empty()),
             serial: None,
             identity: None,
-            relay: None,
             state_dir: None,
-            updates: Arc::new(Mutex::new(Updates::new(None, None))),
-            check_updates: Arc::new(Notify::new()),
             resident: None,
             voice: Arc::new(voice::Voice::new(None, None)),
             noise_seen: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             written: Arc::default(),
             making: Arc::new(making::Maker::new(
                 None,
-                None,
-                account.clone(),
                 voice_keys.clone(),
                 Arc::new(own_voices::OwnVoices::new(None)),
             )),
-            account,
             voice_keys,
         }
-    }
-
-    async fn update_checks_enabled(&self) -> bool {
-        updates::COMPILED_IN
-            && self
-                .config
-                .lock()
-                .await
-                .check_updates
-                .unwrap_or_else(updates::enabled_by_default)
     }
 
     fn notify_status(&self) {
@@ -188,13 +159,7 @@ impl AppState {
     }
 
     async fn snapshot(&self) -> Status {
-        let mut device = self.device.lock().await.clone();
-        device.relay_refused = self.relay.as_ref().and_then(relay::RelayConfig::refused);
-        let updates = self
-            .updates
-            .lock()
-            .await
-            .status(&device, self.update_checks_enabled().await);
+        let device = self.device.lock().await.clone();
         let (today, activities) = {
             let tracker = self.activities.lock().await;
             (tracker.today(), tracker.summaries())
@@ -211,8 +176,6 @@ impl AppState {
             hooks: self.hooks_seen.lock().await.clone(),
             operation: self.operation.lock().await.clone(),
             config: self.config.lock().await.clone(),
-            updates,
-            account: self.account.status(),
             voice_keys: self.voice_keys.status(),
             making: self.making.status(),
         }
@@ -267,16 +230,7 @@ async fn main() {
         }
         None => None,
     };
-    let account = Arc::new(account::Account::new(
-        synthesis::service_base(
-            env::var(synthesis::BASE_URL_VARIABLE).ok(),
-            relay::release(),
-        ),
-        config::config_dir().as_deref(),
-        bind_address.port(),
-    ));
     let mut serial_config = SerialConfig::from_env(known_box_file());
-    let mut relay_config = None;
     // Paired, the box can also be reached over the local network when it isn't on the cable (ADR-0012).
     if let (Some(identity), Some(state_dir)) = (&identity, config::state_dir()) {
         serial_config = serial_config.with_lan(lan::LanConfig {
@@ -285,15 +239,6 @@ async fn main() {
             fixed_address: std::env::var("VIBEBUDDY_LAN_ADDR").ok(),
             discovery: lan::Discovery::default(),
         });
-        // VIBEBUDDY_RELAY_URL points at another Relay, such as `ws://127.0.0.1:8787` under `wrangler dev`.
-        let relay = relay::RelayConfig::new(
-            identity.clone(),
-            std::env::var("VIBEBUDDY_RELAY_URL").ok(),
-            relay::release(),
-        )
-        .with_account(account.clone());
-        serial_config = serial_config.with_relay(relay.clone());
-        relay_config = Some(relay);
     }
     let pin = serial_config.pin();
     if let Some(pin) = &pin {
@@ -312,14 +257,11 @@ async fn main() {
         SessionTitles::from_home(),
         config::config_file(),
     );
-    serial_transport.set_relay_enabled(state.config.lock().await.relay);
     state.serial = Some(serial_transport);
     if let Some(identity) = &identity {
         state.device.lock().await.computer_key = Some(identity.public_key());
     }
     state.identity = identity;
-    state.relay = relay_config;
-    state.account = account;
     state.state_dir = config::state_dir();
     if let Some(dir) = &state.state_dir {
         state.written = Arc::new(Mutex::new(persona::Written::load(
@@ -342,9 +284,8 @@ async fn main() {
             None => resident,
         })
     });
-    let session = Some(state.account.clone());
     state.voice_keys = Arc::new(voice_keys::VoiceKeys::new(config::config_dir().as_deref()));
-    let synthesizer = synthesis::from_env(session.clone(), state.voice_keys.clone());
+    let synthesizer = synthesis::from_env(state.voice_keys.clone());
     let made = config::config_dir().map(|dir| dir.join("characters"));
     if let Some(made) = &made {
         let _ = making::DIR.set(made.clone());
@@ -353,16 +294,11 @@ async fn main() {
     let _ = making::OWN.set((own_voices.clone(), state.voice_keys.clone()));
     state.making = Arc::new(making::Maker::new(
         made,
-        synthesis::service_base(
-            env::var(synthesis::BASE_URL_VARIABLE).ok(),
-            relay::release(),
-        ),
-        state.account.clone(),
         state.voice_keys.clone(),
         own_voices,
     ));
     state.voice = Arc::new(
-        voice::Voice::new(speech::from_env(session), state.resident.clone())
+        voice::Voice::new(speech::from_env(), state.resident.clone())
             .with_synthesizer(Some(synthesizer)),
     );
     if let Some(resident) = state.resident.clone() {
@@ -370,28 +306,14 @@ async fn main() {
         tokio::spawn(async move { resident.warm(&wearing).await });
     }
     state.device.lock().await.pin = pin;
-    state.updates = Arc::new(Mutex::new(Updates::new(
-        updates::Source::configured(),
-        config::state_dir().map(|dir| dir.join("updates")),
-    )));
-    if let (Some(relay), Some(url)) = (&state.relay, state.updates.lock().await.relay_url()) {
-        relay.offer(&url);
-    }
-    if let Some(relay) = &state.relay {
-        state.device.lock().await.relay_server = Some(relay.url());
-    }
     tokio::spawn(watch_parent());
     tokio::spawn(sweep_expired_activities(state.clone()));
     tokio::spawn(send_heartbeats(state.clone()));
     tokio::spawn(poll_ci(state.clone()));
     tokio::spawn(handle_device_events(state.clone(), device_events));
-    if updates::COMPILED_IN {
-        tokio::spawn(check_for_updates(state.clone()));
-    }
     if let Some(resident) = state.resident.clone().filter(|resident| resident.enabled()) {
         follow_resident_readiness(&state, resident);
     }
-    follow_account(&state);
     follow_voice_keys(&state);
     follow_making(&state);
     // On macOS the app reports a lost link; elsewhere there is no app, so the daemon does it.
@@ -476,15 +398,8 @@ async fn publish_device_message(state: &AppState, message: DeviceMessage) {
     {
         send_event(state, pair_command(identity));
         send_event(state, device_command("device.pairs"));
-        // The box uses the Relay its computer on the cable uses, so a development build and its box
-        // meet on staging and a release and its box on production (docs/relay-protocol.md, "Which Relay").
-        if let Some(url) = state.relay.as_ref().and_then(relay::RelayConfig::for_box) {
-            let mut event = device_command("device.relay.set");
-            event.extra.insert("url".to_owned(), url.into());
-            send_event(state, event);
-        }
         // Remembered so the box can be found and checked over the network later (ADR-0012). Only from the cable:
-        // a key reported over the network or the Relay could be anyone's, and a new key after the box made itself
+        // a key reported over the network could be anyone's, and a new key after the box made itself. A new
         // a new identity is believed only from the box itself (#122).
         if let Some(dir) = &state.state_dir {
             lan::remember(&lan::box_key_file(dir), key.trim());
@@ -509,7 +424,6 @@ async fn publish_device_message(state: &AppState, message: DeviceMessage) {
         message,
         DeviceMessage::Connected { .. }
             | DeviceMessage::ConnectedNetwork { .. }
-            | DeviceMessage::ConnectedRelay { .. }
     ) {
         send_event(state, device_command("device.hello"));
         // Then this computer's cards, which replace any the box kept from another computer.
@@ -534,7 +448,7 @@ async fn publish_device_message(state: &AppState, message: DeviceMessage) {
 }
 
 /// Voice commands (docs/protocol.md, "Voice commands"): offered on every report of the box's build, which follows
-/// hello on each new link and every reboot, and taken over native USB, the local network, the Relay and the UART bridge
+/// report of the box's build. Which follows hello on each new link and every once it runs fast enough: the audio
 /// once it runs fast enough: the audio always comes over the link (ADR-0018). On the bridge the offer waits until the
 /// box and the serial worker have settled its rate ([`DeviceMessage::BridgeRate`]).
 async fn handle_voice_line(state: &AppState, line: &str) -> Option<tokio::task::JoinHandle<()>> {
@@ -580,8 +494,7 @@ async fn voice_offer(state: &AppState) -> Option<Event> {
 }
 
 /// Why voice commands can't be taken right now, for the Conversation tab: the bridge at 115200 (`bridge_firmware`
-/// when the firmware can't move it, `bridge_slow` when moving it failed), or the account's refusal (`signed_out`,
-/// `allowance`, `global_cap`). The resident session not being ready is the tab's `problem` already.
+/// move it, `bridge_slow` when moving it failed). The resident session not being ready is the tab's `problem` already.
 async fn voice_off(state: &AppState) -> Option<String> {
     let device = state.device.lock().await.clone();
     if device.connected
@@ -617,8 +530,7 @@ async fn wearing(state: &AppState) -> persona::Wearing {
 }
 
 /// Tells a box that has reported its build whether voice is on now, and if not why, after the resident session's
-/// readiness or the account flipped (the user's Codex installed or gone, logged in or out, the service refusing
-/// voice for the day or the day ending), or the UART bridge's rate settled. Told `false`, a long K0 gives up the
+/// out), or the UART bridge's rate settled. Told `false`, a long K0 gives up the Pomodoro phase as it did before
 /// Pomodoro phase as it did before voice.
 async fn offer_voice_again(state: &AppState) {
     let booted = {
@@ -628,50 +540,6 @@ async fn offer_voice_again(state: &AppState) {
     if booted && let Some(event) = voice_offer(state).await {
         info!(on = ?event.extra.get("on"), "telling the box whether voice is on");
         send_event(state, event);
-    }
-}
-
-/// Signing in or out, here or by the service refusing the session, changes the status and whether voice works.
-fn follow_account(state: &AppState) {
-    let mut changes = state.account.watch();
-    let follower = state.clone();
-    tokio::spawn(async move {
-        while changes.changed().await.is_ok() {
-            follower.notify_status();
-            offer_voice_again(&follower).await;
-        }
-    });
-    // Today's usage is only shown. A refusal for the day also withdraws voice until the UTC day ends or a read of
-    // the account shows voice again; the day's end changes both without a word from the service.
-    let mut usage = state.account.watch_usage();
-    let follower = state.clone();
-    let mut refusal = state.account.voice_refusal();
-    tokio::spawn(async move {
-        loop {
-            let now = chrono::Utc::now();
-            let day_ends = account::next_utc_day(now) - now;
-            tokio::select! {
-                changed = usage.changed() => if changed.is_err() { break },
-                // A second late, so the clock is surely in the new day.
-                () = tokio::time::sleep(day_ends.to_std().unwrap_or_default() + Duration::from_secs(1)) => {}
-            }
-            follower.notify_status();
-            let today = follower.account.voice_refusal();
-            if today != refusal {
-                refusal = today;
-                offer_voice_again(&follower).await;
-            }
-        }
-    });
-    // So is why the Relay turned this computer away.
-    if let Some(relay) = &state.relay {
-        let mut refusal = relay.watch_refusal();
-        let follower = state.clone();
-        tokio::spawn(async move {
-            while refusal.changed().await.is_ok() {
-                follower.notify_status();
-            }
-        });
     }
 }
 
@@ -855,7 +723,6 @@ fn app(state: AppState) -> Router {
         .route("/v1/device/screenshot", post(post_screenshot))
         .route("/v1/device/firmware", post(post_firmware))
         .route("/v1/daemon/restart", post(post_restart))
-        .route("/v1/updates/check", post(post_check_updates))
         .route("/v1/resident", get(get_resident))
         .route("/v1/resident/say", post(post_resident_say))
         .route("/v1/resident/history", get(get_resident_history))
@@ -874,11 +741,6 @@ fn app(state: AppState) -> Router {
             "/v1/characters/{id}",
             axum::routing::delete(delete_character),
         )
-        .route("/v1/account", axum::routing::delete(delete_account))
-        .route("/v1/account/sign-in", post(post_sign_in))
-        .route("/v1/account/callback", get(get_account_callback))
-        .route("/v1/account/sign-out", post(post_sign_out))
-        .route("/v1/account/refresh", post(post_account_refresh))
         .with_state(state)
 }
 
@@ -932,99 +794,7 @@ async fn get_config(State(state): State<AppState>) -> Json<Config> {
     Json(state.config.lock().await.clone())
 }
 
-/// At start, once a day, and when asked. The first check waits a little, so the box has reported the firmware
-/// version that goes with the request; being asked doesn't wait.
-async fn check_for_updates(state: AppState) {
-    let mut wait = Duration::from_secs(30);
-    loop {
-        tokio::select! {
-            _ = tokio::time::sleep(wait) => {}
-            _ = state.check_updates.notified() => {}
-        }
-        if state.update_checks_enabled().await {
-            check_once(&state).await;
-        }
-        wait = updates::CHECK_EVERY;
-    }
-}
-
-async fn check_once(state: &AppState) {
-    let Some(source) = state.updates.lock().await.source.clone() else {
-        return;
-    };
-    let firmware_version = state.device.lock().await.firmware_version.clone();
-    let fetched = tokio::task::spawn_blocking(move || {
-        updates::fetch(
-            &source,
-            env!("CARGO_PKG_VERSION"),
-            firmware_version.as_deref(),
-        )
-    })
-    .await
-    .unwrap_or_else(|error| Err(error.to_string()));
-    let wanted = match fetched {
-        Ok((text, manifest)) => {
-            let mut updates = state.updates.lock().await;
-            let accepted = updates
-                .accept(&text, manifest)
-                .map(|firmware| (firmware, updates.firmware_root()));
-            if let (Some(relay), Some(url)) = (&state.relay, updates.relay_url()) {
-                relay.offer(&url);
-                state.device.lock().await.relay_server = Some(relay.url());
-            }
-            accepted
-        }
-        Err(error) => Err(error),
-    };
-    let error = match wanted {
-        Ok((Some(firmware), Some(root))) => {
-            let version = firmware.download.version.clone();
-            let downloaded =
-                tokio::task::spawn_blocking(move || updates::download(&firmware, &root))
-                    .await
-                    .unwrap_or_else(|error| Err(error.to_string()));
-            match downloaded {
-                Ok(dir) => {
-                    info!(%version, dir = %dir.display(), "downloaded firmware");
-                    None
-                }
-                Err(error) => Some(error),
-            }
-        }
-        Ok(_) => None,
-        Err(error) => Some(error),
-    };
-    if let Some(error) = &error {
-        warn!(%error, "update check failed");
-    }
-    state.updates.lock().await.finish(error);
-    state.notify_status();
-}
-
-async fn post_check_updates(State(state): State<AppState>) -> (StatusCode, Json<ApiResponse>) {
-    if !state.update_checks_enabled().await || state.updates.lock().await.source.is_none() {
-        return (
-            StatusCode::CONFLICT,
-            Json(ApiResponse {
-                accepted: false,
-                message: "update checks are off".to_owned(),
-            }),
-        );
-    }
-    state.check_updates.notify_one();
-    (
-        StatusCode::ACCEPTED,
-        Json(ApiResponse {
-            accepted: true,
-            message: "checking for updates".to_owned(),
-        }),
-    )
-}
-
 async fn put_config(State(state): State<AppState>, Json(config): Json<Config>) -> Json<Config> {
-    if let Some(serial) = &state.serial {
-        serial.set_relay_enabled(config.relay);
-    }
     state.save_config(|current| *current = config).await;
     Json(state.config.lock().await.clone())
 }
@@ -1209,7 +979,7 @@ async fn post_unpair(
     post_event(State(state), Json(event)).await
 }
 
-/// The user chose to take the box from the computer that has it: the next try over the network or the Relay
+/// The user chose to take the box from the computer that has it: the next try over the network
 /// asks for it outright (ADR-0011). Not from another computer's cable, which the box refuses.
 async fn post_takeover(State(state): State<AppState>) -> (StatusCode, Json<ApiResponse>) {
     let refusal = {
@@ -2213,7 +1983,7 @@ async fn set_anthropic_key(state: AppState, key: Option<String>) -> axum::respon
     get_resident(State(state)).await.into_response()
 }
 
-/// Sets or clears the user's own keys for spoken replies (ADR-0020): `{"elevenlabs"?, "volc"?}`, each a key, or null
+/// Sets or clears the user's own keys for spoken replies (ADR-0020): `{"elevenlabs"?}`, each a key, or null
 /// or "" to clear it; one left out stays. Answers which are set, as in the status; a key is never sent back or logged.
 async fn put_voice_keys(
     State(state): State<AppState>,
@@ -2233,7 +2003,7 @@ async fn put_voice_keys(
     let mut changes = Vec::new();
     for (name, value) in request {
         let Some(provider) = voice_keys::Provider::named(&name) else {
-            return refuse(format!("{name} is not a provider: elevenlabs or volc"));
+            return refuse(format!("{name} is not a provider: elevenlabs"));
         };
         match value {
             serde_json::Value::Null => changes.push((provider, None)),
@@ -2455,121 +2225,6 @@ async fn post_character(
         .into_response()
 }
 
-#[derive(Serialize)]
-struct SignInResponse {
-    url: String,
-}
-
-/// Starts signing in to the VibeBuddy account (ADR-0018): the App opens the URL in the browser, which comes back to
-/// [`get_account_callback`].
-async fn post_sign_in(State(state): State<AppState>) -> axum::response::Response {
-    use axum::response::IntoResponse;
-    match state.account.start() {
-        Ok(url) => Json(SignInResponse { url }).into_response(),
-        Err(error) => account_refusal(&error).into_response(),
-    }
-}
-
-#[derive(serde::Deserialize)]
-struct CallbackQuery {
-    code: Option<String>,
-    state: Option<String>,
-}
-
-async fn get_account_callback(
-    State(state): State<AppState>,
-    axum::extract::Query(query): axum::extract::Query<CallbackQuery>,
-) -> (StatusCode, axum::response::Html<String>) {
-    let account = state.account.clone();
-    let result = match (query.code, query.state) {
-        (Some(code), Some(sign_in)) => {
-            tokio::task::spawn_blocking(move || account.finish(&code, &sign_in))
-                .await
-                .unwrap_or_else(|error| Err(account::AccountError::Service(error.to_string())))
-        }
-        _ => Err(account::AccountError::UnknownSignIn),
-    };
-    if let Err(error) = &result {
-        warn!(%error, "signing in to the account failed");
-    }
-    state.notify_status();
-    let (status, page) = account::callback_page(&result);
-    (
-        StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY),
-        axum::response::Html(page),
-    )
-}
-
-async fn post_sign_out(State(state): State<AppState>) -> (StatusCode, Json<ApiResponse>) {
-    let account = state.account.clone();
-    let result = tokio::task::spawn_blocking(move || account.sign_out())
-        .await
-        .unwrap_or_else(|error| Err(account::AccountError::Service(error.to_string())));
-    state.notify_status();
-    match result {
-        Ok(()) => (
-            StatusCode::OK,
-            Json(ApiResponse {
-                accepted: true,
-                message: "signed out".to_owned(),
-            }),
-        ),
-        Err(error) => account_refusal(&error),
-    }
-}
-
-/// Reads today's voice use and the plan from the service, for the App's Account tab; the status stream carries them.
-async fn post_account_refresh(State(state): State<AppState>) -> (StatusCode, Json<ApiResponse>) {
-    let account = state.account.clone();
-    match tokio::task::spawn_blocking(move || account.refresh_usage())
-        .await
-        .unwrap_or_else(|error| Err(account::AccountError::Service(error.to_string())))
-    {
-        Ok(()) => (
-            StatusCode::OK,
-            Json(ApiResponse {
-                accepted: true,
-                message: "refreshed".to_owned(),
-            }),
-        ),
-        Err(error) => account_refusal(&error),
-    }
-}
-
-async fn delete_account(State(state): State<AppState>) -> (StatusCode, Json<ApiResponse>) {
-    let account = state.account.clone();
-    let result = tokio::task::spawn_blocking(move || account.delete())
-        .await
-        .unwrap_or_else(|error| Err(account::AccountError::Service(error.to_string())));
-    state.notify_status();
-    match result {
-        Ok(()) => (
-            StatusCode::OK,
-            Json(ApiResponse {
-                accepted: true,
-                message: "account deleted".to_owned(),
-            }),
-        ),
-        Err(error) => account_refusal(&error),
-    }
-}
-
-fn account_refusal(error: &account::AccountError) -> (StatusCode, Json<ApiResponse>) {
-    let status = match error {
-        account::AccountError::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
-        account::AccountError::NotSignedIn => StatusCode::CONFLICT,
-        account::AccountError::UnknownSignIn => StatusCode::BAD_REQUEST,
-        account::AccountError::Service(_) => StatusCode::BAD_GATEWAY,
-    };
-    (
-        status,
-        Json(ApiResponse {
-            accepted: false,
-            message: error.to_string(),
-        }),
-    )
-}
-
 fn no_state_directory() -> axum::response::Response {
     use axum::response::IntoResponse;
     (
@@ -2730,41 +2385,6 @@ mod tests {
         )
     }
 
-    #[tokio::test]
-    async fn the_account_routes_answer_without_a_service() {
-        let state = test_state(Arc::new(RecordingTransport::default()));
-        let response = post_sign_in(State(state.clone())).await;
-        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
-        let (status, _) = post_sign_out(State(state.clone())).await;
-        assert_eq!(status, StatusCode::CONFLICT);
-        assert!(!state.snapshot().await.account.available);
-    }
-
-    #[tokio::test]
-    async fn a_callback_this_daemon_did_not_start_shows_a_refusal_page() {
-        let mut state = test_state(Arc::new(RecordingTransport::default()));
-        let dir = std::env::temp_dir().join(format!("vibebuddy-callback-{}", std::process::id()));
-        state.account = Arc::new(account::Account::new(
-            Some("http://127.0.0.1:9".to_owned()),
-            Some(&dir),
-            7331,
-        ));
-        let callback = |code: Option<&str>, sign_in: Option<&str>| {
-            get_account_callback(
-                State(state.clone()),
-                axum::extract::Query(CallbackQuery {
-                    code: code.map(Into::into),
-                    state: sign_in.map(Into::into),
-                }),
-            )
-        };
-        let (status, page) = callback(Some("c"), Some("forged")).await;
-        assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert!(page.0.contains("Not signed in"));
-        assert_eq!(callback(None, None).await.0, StatusCode::BAD_REQUEST);
-        assert!(!state.snapshot().await.account.signed_in);
-    }
-
     #[tokio::test(start_paused = true)]
     async fn a_flash_is_done_only_once_the_new_firmware_reports_ready() {
         let state = test_state(Arc::new(RecordingTransport::default()));
@@ -2886,29 +2506,6 @@ mod tests {
         assert_eq!(pair.event, "device.pair");
         assert_eq!(pair.extra["key"], key.as_str());
         assert_eq!(pair.extra["name"], "dragon's MacBook");
-        assert!(
-            !transport
-                .events()
-                .iter()
-                .any(|event| event.event == "device.relay.set"),
-            "nothing to give the box without a Relay"
-        );
-        state.relay = Some(relay::RelayConfig::new(
-            state.identity.clone().unwrap(),
-            None,
-            false,
-        ));
-        publish_device_message(
-            &state,
-            DeviceMessage::Line("BOX KEY 1Uc4Vh8Aby1bV4I08TphnmbwAm0AzHkw5RelizUGdRE".to_owned()),
-        )
-        .await;
-        let set = transport
-            .events()
-            .into_iter()
-            .find(|event| event.event == "device.relay.set")
-            .expect("the Relay for the box");
-        assert_eq!(set.extra["url"], relay::STAGING_URL);
         std::fs::remove_dir_all(dir).ok();
     }
 
@@ -2942,19 +2539,16 @@ mod tests {
         publish_device_message(&state, DeviceMessage::Line(format!("BOX KEY {old}"))).await;
         assert_eq!(remembered().as_deref(), Some(old));
 
-        // A box on the network or the Relay saying it has a new identity is not believed.
-        for linked in [
+        // A box on the network saying it has a new identity is not believed.
+        publish_device_message(
+            &state,
             DeviceMessage::ConnectedNetwork {
                 address: "192.168.1.23:7340".to_owned(),
             },
-            DeviceMessage::ConnectedRelay {
-                url: "wss://relay.example".to_owned(),
-            },
-        ] {
-            publish_device_message(&state, linked).await;
-            publish_device_message(&state, DeviceMessage::Line(format!("BOX KEY {new}"))).await;
-            assert_eq!(remembered().as_deref(), Some(old));
-        }
+        )
+        .await;
+        publish_device_message(&state, DeviceMessage::Line(format!("BOX KEY {new}"))).await;
+        assert_eq!(remembered().as_deref(), Some(old));
 
         // The box itself, on the cable, after a reset.
         publish_device_message(
@@ -3474,21 +3068,6 @@ mod tests {
             };
             assert_eq!(offers(&transport), expected);
 
-            // Over the Relay too: the audio comes over the link, which is end-to-end encrypted there (ADR-0018).
-            publish_device_message(
-                &state,
-                DeviceMessage::ConnectedRelay {
-                    url: "wss://relay.example".to_owned(),
-                },
-            )
-            .await;
-            publish_device_message(&state, build()).await;
-            let expected = if enabled {
-                vec![serde_json::json!(true); 4]
-            } else {
-                Vec::new()
-            };
-            assert_eq!(offers(&transport), expected, "over the Relay");
             // Over the UART bridge only once it runs fast; until its rate settles, nothing.
             publish_device_message(
                 &state,
@@ -3690,110 +3269,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
-    /// Asks the account why voice is off, as the voice service does.
-    struct AccountRecognizer(Arc<account::Account>);
-
-    impl speech::Recognizer for AccountRecognizer {
-        fn recognize(&self, _wav: &[u8]) -> Result<speech::Transcript, speech::RecognitionError> {
-            Ok(speech::Transcript::default())
-        }
-
-        fn refusal(&self) -> Option<&'static str> {
-            if self.0.token().is_none() {
-                return Some("signed_out");
-            }
-            self.0.voice_refusal()
-        }
-    }
-
-    #[tokio::test]
-    async fn a_refusal_for_the_day_withdraws_voice_with_its_reason_until_a_read_shows_voice_again()
-    {
-        let dir = resident::tests::temp_dir("main-refusal-offer");
-        let transport = Arc::new(RecordingTransport::default());
-        let mut state = test_state(transport.clone());
-        let resident = Arc::new(resident::tests::resident(
-            &dir,
-            &resident::tests::logged_in(),
-            Arc::default(),
-        ));
-        resident.note(None);
-        state.account = Arc::new(account::signed_in_for_tests(&dir.join("config"), "tok"));
-        state.voice = Arc::new(voice::Voice::new(
-            Some(Arc::new(AccountRecognizer(state.account.clone()))),
-            Some(resident),
-        ));
-        let offers = || {
-            transport
-                .events()
-                .iter()
-                .filter(|event| event.event == "voice.available")
-                .map(|event| {
-                    (
-                        event.extra["on"].clone(),
-                        event.extra.get("reason").cloned(),
-                        event.message.clone(),
-                    )
-                })
-                .collect::<Vec<_>>()
-        };
-        let settle = || tokio::time::sleep(Duration::from_millis(50));
-        publish_device_message(
-            &state,
-            DeviceMessage::Connected {
-                port: "/dev/cu.x".to_owned(),
-                bridge: false,
-                usb_serial: None,
-            },
-        )
-        .await;
-        publish_device_message(
-            &state,
-            DeviceMessage::Line("DISPLAY READY BUILD v9 2026-10-01".to_owned()),
-        )
-        .await;
-        follow_account(&state);
-        assert_eq!(offers(), [(serde_json::json!(true), None, None)]);
-
-        state.account.note_refusal("allowance");
-        settle().await;
-        let (on, reason, message) = offers()[1].clone();
-        assert_eq!(
-            (on, reason),
-            (
-                serde_json::json!(false),
-                Some(serde_json::json!("allowance"))
-            )
-        );
-        assert_eq!(message, voice::refusal_message("allowance"));
-        // A rebooted box is told again, reason and all.
-        publish_device_message(
-            &state,
-            DeviceMessage::Line("DISPLAY READY BUILD v9 2026-10-01".to_owned()),
-        )
-        .await;
-        assert_eq!(offers().len(), 3);
-        assert_eq!(offers()[2].1, Some(serde_json::json!("allowance")));
-
-        // Usage that leaves the refusal as it was tells the box nothing new.
-        state.account.read_usage_for_tests(20, 20);
-        settle().await;
-        assert_eq!(offers().len(), 3);
-        // A read that shows commands left (a higher limit) brings voice back.
-        state.account.read_usage_for_tests(20, 100);
-        settle().await;
-        assert_eq!(offers().len(), 4);
-        assert_eq!(offers()[3], (serde_json::json!(true), None, None));
-
-        state.account.forget();
-        settle().await;
-        assert_eq!(
-            offers().last().unwrap().1,
-            Some(serde_json::json!("signed_out"))
-        );
-        let _ = std::fs::remove_dir_all(dir);
-    }
-
     #[tokio::test]
     async fn the_resident_info_carries_a_revision_without_starting_the_app_server() {
         let dir = resident::tests::temp_dir("main-revision");
@@ -3918,31 +3393,11 @@ mod tests {
         let wanted = Config {
             voice: Some("hsiaochen".to_owned()),
             notify_link: false,
-            check_updates: Some(true),
-            relay: false,
         };
         let Json(returned) = put_config(State(state.clone()), Json(wanted.clone())).await;
         assert_eq!(returned, wanted);
         assert_eq!(Config::load(&path), wanted);
         let _ = std::fs::remove_dir_all(dir);
-    }
-
-    #[tokio::test]
-    async fn update_checks_follow_the_compile_time_switch_not_the_config() {
-        let state = test_state(Arc::new(RecordingTransport::default()));
-        state.config.lock().await.check_updates = Some(true);
-        assert_eq!(state.update_checks_enabled().await, updates::COMPILED_IN);
-        let (status, Json(response)) = post_check_updates(State(state.clone())).await;
-        if !updates::COMPILED_IN {
-            assert_eq!(status, StatusCode::CONFLICT);
-            assert!(!response.accepted);
-        }
-        let snapshot = state.snapshot().await;
-        assert!(
-            !snapshot.updates.enabled,
-            "a test state has no update source"
-        );
-        assert!(snapshot.updates.app.is_none() && snapshot.updates.firmware.is_none());
     }
 
     #[tokio::test]

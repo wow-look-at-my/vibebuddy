@@ -1,5 +1,5 @@
-//! The user's own keys for spoken replies (ADR-0020, "Own key"): an ElevenLabs key and a Volcano Engine key, in
-//! `voice-keys.json` in the config directory, `{"elevenlabs"?, "volc"?}`, mode 0600. A file of its own, as
+//! The user's own keys for spoken replies (ADR-0020, "Own key"): an ElevenLabs key, in `voice-keys.json` in the config
+//! directory, `{"elevenlabs"?}`, a later mode. A file of its own, as `speech.json` is, because `PUT /v1/config`
 //! `speech.json` is, because `PUT /v1/config` replaces the whole config and an older App would wipe a key it doesn't
 //! know. A reply whose voice is from a provider with an own key goes straight to that provider ([`crate::synthesis`]).
 //! Only which keys are set, and whether a provider refused one, leave the daemon; a key is never sent back or logged.
@@ -16,7 +16,6 @@ pub const FILE: &str = "voice-keys.json";
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Provider {
     ElevenLabs,
-    Volc,
 }
 
 impl Provider {
@@ -24,12 +23,11 @@ impl Provider {
     pub fn named(name: &str) -> Option<Self> {
         match name {
             "elevenlabs" => Some(Self::ElevenLabs),
-            "volc" => Some(Self::Volc),
             _ => None,
         }
     }
 
-    /// The provider of a voice service voice (`elevenlabs:<id>`, `volc:<speaker>`), and its id there.
+    /// The provider of a voice (`elevenlabs:<id>`), and its id there.
     pub fn of(voice: &str) -> Option<(Self, &str)> {
         let (vendor, id) = voice.split_once(':')?;
         Some((Self::named(vendor)?, id))
@@ -40,15 +38,12 @@ impl Provider {
 struct Saved {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     elevenlabs: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    volc: Option<String>,
 }
 
 impl Saved {
     fn key(&mut self, provider: Provider) -> &mut Option<String> {
         match provider {
             Provider::ElevenLabs => &mut self.elevenlabs,
-            Provider::Volc => &mut self.volc,
         }
     }
 }
@@ -57,7 +52,6 @@ impl Saved {
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct VoiceKeysStatus {
     pub elevenlabs: KeyStatus,
-    pub volc: KeyStatus,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
@@ -71,7 +65,7 @@ pub struct VoiceKeys {
     /// None without a config directory, and in tests unless one sets it; then no key can be set.
     file: Option<PathBuf>,
     saved: Mutex<Saved>,
-    refused: Mutex<[bool; 2]>,
+    refused: Mutex<[bool; 1]>,
     changed: watch::Sender<()>,
 }
 
@@ -101,7 +95,6 @@ impl VoiceKeys {
         };
         VoiceKeysStatus {
             elevenlabs: of(Provider::ElevenLabs),
-            volc: of(Provider::Volc),
         }
     }
 
@@ -182,7 +175,6 @@ pub(crate) mod tests {
                 Provider::ElevenLabs,
                 Some(" sk_eleven_secret \n".to_owned()),
             ),
-            (Provider::Volc, None),
         ])
         .unwrap();
         let path = dir.join(FILE);
@@ -195,7 +187,7 @@ pub(crate) mod tests {
             r#"{"elevenlabs":"sk_eleven_secret"}"#
         );
         let status = keys.status();
-        assert!(status.elevenlabs.set && !status.volc.set);
+        assert!(status.elevenlabs.set);
         assert!(!serde_json::to_string(&status).unwrap().contains("secret"));
 
         // Read back at start; an empty key clears it, and a key left out stays.
@@ -205,18 +197,9 @@ pub(crate) mod tests {
             Some("sk_eleven_secret")
         );
         again
-            .set(&[(Provider::Volc, Some("volc_secret".to_owned()))])
-            .unwrap();
-        again
             .set(&[(Provider::ElevenLabs, Some(" ".to_owned()))])
             .unwrap();
-        assert_eq!(
-            (
-                again.key(Provider::ElevenLabs),
-                again.key(Provider::Volc).as_deref()
-            ),
-            (None, Some("volc_secret"))
-        );
+        assert_eq!(again.key(Provider::ElevenLabs), None);
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -224,22 +207,22 @@ pub(crate) mod tests {
     fn a_refusal_shows_until_the_key_changes() {
         let dir = scratch("refused");
         let keys = VoiceKeys::new(Some(&dir));
-        keys.set(&[(Provider::Volc, Some("k".to_owned()))]).unwrap();
+        keys.set(&[(Provider::ElevenLabs, Some("k".to_owned()))])
+            .unwrap();
         let changes = keys.watch();
-        keys.refused(Provider::Volc, true);
+        keys.refused(Provider::ElevenLabs, true);
         assert!(changes.has_changed().unwrap());
         assert_eq!(
-            keys.status().volc,
+            keys.status().elevenlabs,
             KeyStatus {
                 set: true,
                 refused: true
             }
         );
-        assert!(!keys.status().elevenlabs.refused);
-        keys.set(&[(Provider::Volc, Some("k2".to_owned()))])
+        keys.set(&[(Provider::ElevenLabs, Some("k2".to_owned()))])
             .unwrap();
         assert_eq!(
-            keys.status().volc,
+            keys.status().elevenlabs,
             KeyStatus {
                 set: true,
                 refused: false
@@ -254,10 +237,7 @@ pub(crate) mod tests {
             Provider::of("elevenlabs:abc"),
             Some((Provider::ElevenLabs, "abc"))
         );
-        assert_eq!(
-            Provider::of("volc:zh_female_wanwanxiaohe_moon_bigtts"),
-            Some((Provider::Volc, "zh_female_wanwanxiaohe_moon_bigtts"))
-        );
+        assert_eq!(Provider::of("volc:speaker"), None);
         assert_eq!(Provider::of("en-US-JennyNeural"), None);
     }
 }

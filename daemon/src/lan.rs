@@ -333,27 +333,6 @@ pub async fn link(
     last
 }
 
-/// Whether the paired box answers on the local network, at the remembered address or one mDNS found: while
-/// linked through the Relay, a reason to move over.
-pub async fn reachable(lan: &LanConfig) -> bool {
-    let Some(box_key) = lan.box_key() else {
-        return false;
-    };
-    let remembered = lan.target().map(|target| target.address);
-    let found = lan
-        .advertised(&box_key)
-        .into_iter()
-        .filter(|address| remembered.as_ref() != Some(address));
-    for address in remembered.clone().into_iter().chain(found) {
-        if let Ok(Ok(_)) =
-            tokio::time::timeout(Duration::from_secs(1), TcpStream::connect(&address)).await
-        {
-            return true;
-        }
-    }
-    false
-}
-
 /// Runs the handshake the box opens with; a session when it speaks Noise, None when it links in the clear.
 pub async fn handshake<S: AsyncRead + AsyncWrite + Unpin>(
     stream: &mut S,
@@ -879,7 +858,7 @@ mod tests {
     #[tokio::test]
     async fn an_unmatched_key_falls_back_to_the_remembered_address() {
         // Nothing listens at the remembered address and mDNS found no box with this key: the link reports the
-        // remembered address as unreachable, as before discovery, and the daemon moves on to the Relay.
+        // with this key.
         let dir = std::env::temp_dir().join(format!(
             "vibebuddy-lan-fallback-{}-{}",
             std::process::id(),

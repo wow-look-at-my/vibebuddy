@@ -1,7 +1,5 @@
-//! The user's own voices (docs/characters.md, "Your own voice"): a voice in the user's own ElevenLabs or Volcano
-//! Engine account, cloned or designed there, which a made Character can speak with through the user's own key for
-//! that provider. Kept in `own-voices.json` in the config directory: where the voice is (the provider, its id there,
-//! the Volcano Engine resource it answered on) and the name the user gave it, never audio or a key.
+//! The user's own voices (docs/characters.md, "Your own voice"). A voice in the user's own ElevenLabs account, cloned or designed there, which a made Character can speak with through the
+//! user's own key. Kept in `own-voices.json` in the config directory: where the voice is (the provider and its id there) and the name the user gave it, never audio or a key.
 //! [`crate::making`] tries a voice before it is kept.
 
 use std::path::{Path, PathBuf};
@@ -16,15 +14,11 @@ pub const FILE: &str = "own-voices.json";
 pub struct OwnVoice {
     /// `own-` and eight hex digits, as a made Character's manifest names it.
     pub id: String,
-    /// `elevenlabs` or `volc`.
+    /// `elevenlabs`.
     pub provider: String,
-    /// The provider's id for it: an ElevenLabs voice id, a Volcano Engine speaker.
+    /// The provider's id for it: an ElevenLabs voice id.
     pub voice: String,
     pub name: String,
-    /// The Volcano Engine resource it answered on (`seed-icl-2.0` for a voice cloned with 2.0, and so on); None for
-    /// ElevenLabs.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub resource: Option<String>,
 }
 
 pub struct OwnVoices {
@@ -62,7 +56,6 @@ impl OwnVoices {
         provider: &str,
         voice: &str,
         name: &str,
-        resource: Option<String>,
     ) -> std::io::Result<OwnVoice> {
         let mut voices = self.voices.lock().unwrap();
         let mut next = voices.clone();
@@ -72,7 +65,6 @@ impl OwnVoices {
         {
             Some(kept) => {
                 kept.name = name.to_owned();
-                kept.resource = resource;
                 kept.clone()
             }
             None => {
@@ -83,7 +75,6 @@ impl OwnVoices {
                     provider: provider.to_owned(),
                     voice: voice.to_owned(),
                     name: name.to_owned(),
-                    resource,
                 };
                 next.push(kept.clone());
                 kept
@@ -140,28 +131,15 @@ mod tests {
     fn a_voice_is_kept_once_per_provider_and_id_and_survives_a_restart() {
         let scratch = crate::voice_keys::tests::scratch("own-voices");
         let own = OwnVoices::new(Some(&scratch));
-        let first = own
-            .add("volc", "S_abc", "Me", Some("seed-icl-2.0".to_owned()))
-            .unwrap();
+        let first = own.add("elevenlabs", "abc", "Me").unwrap();
         assert!(first.id.starts_with("own-") && first.id.len() == 12);
-        let again = own
-            .add(
-                "volc",
-                "S_abc",
-                "Me, again",
-                Some("seed-icl-1.0".to_owned()),
-            )
-            .unwrap();
+        let again = own.add("elevenlabs", "abc", "Me, again").unwrap();
         assert_eq!(again.id, first.id);
-        own.add("elevenlabs", "abc", "Studio", None).unwrap();
+        own.add("elevenlabs", "def", "Studio").unwrap();
 
         let reloaded = OwnVoices::new(Some(&scratch));
         assert_eq!(reloaded.list().len(), 2);
         assert_eq!(reloaded.get(&first.id).unwrap().name, "Me, again");
-        assert_eq!(
-            reloaded.get(&first.id).unwrap().resource.as_deref(),
-            Some("seed-icl-1.0")
-        );
         assert!(reloaded.remove(&first.id).unwrap());
         assert!(!reloaded.remove(&first.id).unwrap());
         assert_eq!(OwnVoices::new(Some(&scratch)).list().len(), 1);
@@ -171,7 +149,7 @@ mod tests {
     fn without_a_config_directory_nothing_is_kept() {
         assert!(
             OwnVoices::new(None)
-                .add("elevenlabs", "abc", "Me", None)
+                .add("elevenlabs", "abc", "Me")
                 .is_err()
         );
     }
