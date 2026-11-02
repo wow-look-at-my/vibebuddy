@@ -195,7 +195,7 @@ fn main() {
     preview.snapshot("voice-error");
 
     // Voice off for a reason: a long K0 with Pomodoro idle says why, and records nothing.
-    preview.send(r#"{"version":1,"event":"voice.available","on":false,"reason":"allowance","message":"Today's voice is used up. It comes back at 08:00."}"#);
+    preview.send(r#"{"version":1,"event":"voice.available","on":false,"reason":"not_ready","message":"My session on the computer isn't ready. Open the App."}"#);
     preview.hold_k0(1500, 0.0);
     preview.release_k0();
     preview.snapshot("voice-off");

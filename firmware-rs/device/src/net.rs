@@ -28,8 +28,8 @@ use static_cell::StaticCell;
 const PORT: u16 = 7340;
 /// Connections served at once: the linked computer, and one more so a takeover can get through.
 const SLOTS: usize = 2;
-/// Sockets beyond the servers: DHCP, DNS, SNTP and mDNS, with one spare.
-const EXTRA_SOCKETS: usize = 5;
+/// Sockets beyond the servers: DHCP, DNS and mDNS, with one spare.
+const EXTRA_SOCKETS: usize = 4;
 /// The receive window: a firmware update keeps several 5.7 KB sealed chunks in flight, and the main loop reads the
 /// socket only between its passes, so a small window caps the update at a couple of KB per pass (ADR-0016).
 const SOCKET_RX_BYTES: usize = 32 * 1024;
@@ -53,8 +53,8 @@ pub static SCAN: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 /// waker for its state, so two tasks waiting on it at once keep waking each other: only [`address_task`] waits there.
 /// A `Watch` gives each reader its own waker, and the current value to one that starts late.
 pub static ADDRESS: Watch<CriticalSectionRawMutex, Option<core::net::Ipv4Addr>, ADDRESS_READERS> = Watch::new();
-/// The mDNS task, with one spare.
-const ADDRESS_READERS: usize = 2;
+/// The mDNS task.
+const ADDRESS_READERS: usize = 1;
 /// The network to join, or None to leave Wi-Fi; signalled at boot and whenever the user changes it.
 pub static CREDENTIALS: Signal<CriticalSectionRawMutex, Option<(String, String)>> = Signal::new();
 

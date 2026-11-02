@@ -2550,7 +2550,7 @@ fn with_voice_off_for_a_reason_a_long_k0_says_why_while_pomodoro_is_idle() {
     send(
         &mut firmware,
         &mut board,
-        r#"{"version":1,"event":"voice.available","on":false,"reason":"allowance","message":"Today's voice is used up. It comes back at 08:00."}"#,
+        r#"{"version":1,"event":"voice.available","on":false,"reason":"not_ready","message":"My session on the computer isn't ready. Open the App."}"#,
     );
     assert!(firmware.overlay().is_none(), "nothing shows until K0");
     let lines = hold_k0_talking(&mut firmware, &mut board, 1500);
@@ -2560,7 +2560,7 @@ fn with_voice_off_for_a_reason_a_long_k0_says_why_while_pomodoro_is_idle() {
     );
     assert!(board.stream.is_empty() && !board.voice_running);
     let panel = firmware.overlay().expect("the reason");
-    assert_eq!(panel.title, b"VOICE USED UP");
+    assert_eq!(panel.title, b"NOT READY");
     let text: Vec<String> = panel
         .lines
         .iter()
@@ -2568,7 +2568,7 @@ fn with_voice_off_for_a_reason_a_long_k0_says_why_while_pomodoro_is_idle() {
         .collect();
     assert_eq!(
         text.join(" "),
-        "Today's voice is used up. It comes back at 08:00."
+        "My session on the computer isn't ready. Open the App."
     );
     // It goes after 6 s.
     board.advance(6_000);
@@ -2595,10 +2595,10 @@ fn a_refusal_after_speaking_shows_its_title_and_the_computers_message() {
     send(
         &mut firmware,
         &mut board,
-        r#"{"version":1,"event":"voice.error","turn":1,"reason":"global_cap","message":"Voice is paused for everyone today. It comes back at 08:00."}"#,
+        r#"{"version":1,"event":"voice.error","turn":1,"reason":"not_ready","message":"My session on the computer isn't ready. Open the App."}"#,
     );
     let panel = firmware.overlay().expect("the error");
-    assert_eq!(panel.title, b"VOICE PAUSED");
+    assert_eq!(panel.title, b"NOT READY");
     let text: Vec<String> = panel
         .lines
         .iter()
@@ -2606,7 +2606,7 @@ fn a_refusal_after_speaking_shows_its_title_and_the_computers_message() {
         .collect();
     assert_eq!(
         text.join(" "),
-        "Voice is paused for everyone today. It comes back at 08:00."
+        "My session on the computer isn't ready. Open the App."
     );
 }
 
@@ -2624,7 +2624,7 @@ fn with_voice_off_and_no_reason_a_long_k0_shows_nothing() {
     send(
         &mut firmware,
         &mut board,
-        r#"{"version":1,"event":"voice.available","on":false,"reason":"signed_out"}"#,
+        r#"{"version":1,"event":"voice.available","on":false,"reason":"not_ready"}"#,
     );
     send(
         &mut firmware,
