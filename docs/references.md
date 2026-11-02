@@ -2,31 +2,27 @@
 
 This document records external implementations worth learning from. The reference projects are not treated as a source of hardware facts for VibeBuddy.
 
-## `second-state/echokit_box`
-
-Version checked: [`4484efca885c2ffd01ffb1acdbb5817421583bd8`](https://github.com/second-state/echokit_box/tree/4484efca885c2ffd01ffb1acdbb5817421583bd8)
+## `echokit_box`
 
 Worth borrowing:
 
-- The Rust firmware uses `esp-idf-svc` and pulls in C components through `esp-idf-sys`; this shows that "Rust on top + vendor/ESP-IDF C drivers" is a workable structure on the ESP32-S3. [Cargo.toml](https://github.com/second-state/echokit_box/blob/4484efca885c2ffd01ffb1acdbb5817421583bd8/Cargo.toml)
+- The Rust firmware uses `esp-idf-svc` and pulls in C components through `esp-idf-sys`. This shows that "Rust on top + vendor/ESP-IDF C drivers" is a workable structure on the ESP32-S3.
 - The project puts board-level differences in a board module/feature, which is worth referring to if a second piece of hardware ever actually appears; VibeBuddy's first board doesn't copy its multi-board abstraction in advance.
-- The repository pins `ESP_IDF_VERSION = "v5.4.1"` and uses `xtensa-esp32s3-espidf` and `espflash`. [`.cargo/config.toml`](https://github.com/second-state/echokit_box/blob/4484efca885c2ffd01ffb1acdbb5817421583bd8/.cargo/config.toml)
-- The README records that the EchoKit device enumerates as a JTAG serial port through the port labeled OTG/SLAVE, and gives a `/dev/cu.usbmodem...` example; this can serve as one troubleshooting hypothesis once the VibeBuddy board is plugged in, but not as a conclusion about the target board. [README](https://github.com/second-state/echokit_box/blob/4484efca885c2ffd01ffb1acdbb5817421583bd8/README.md)
+- The repository pins `ESP_IDF_VERSION = "v5.4.1"` and uses `xtensa-esp32s3-espidf` and `espflash`.
+- The README records that the EchoKit device enumerates as a JTAG serial port through the port labeled OTG/SLAVE, and gives a `/dev/cu.usbmodem...` example. This can serve as one troubleshooting hypothesis once the VibeBuddy board is plugged in, but not as a conclusion about the target board.
 
 Not adopted directly:
 
-- EchoKit's protocol is designed for Wi-Fi/WebSocket audio sessions, with server events in MessagePack and some device commands in JSON; VibeBuddy v1 is local USB serial NDJSON, with different goals and framing. [`src/protocol.rs`](https://github.com/second-state/echokit_box/blob/4484efca885c2ffd01ffb1acdbb5817421583bd8/src/protocol.rs)
+- EchoKit's protocol is designed for Wi-Fi/WebSocket audio sessions, with server events in MessagePack and some device commands in JSON. VibeBuddy v1 is local USB serial NDJSON, with different goals and framing.
 - The GPIO, ES8311, XL9555, 320×240 LCD and other parameters in `atom_box.rs` and `components/hal_driver` belong only to the corresponding EchoKit board. They must not be copied into VibeBuddy unless the exact PCB/schematic proves they match.
 - The repository is licensed under GPL-3.0. Until VibeBuddy's license compatibility strategy is settled, we borrow only ideas and don't copy implementation code.
 
-## `second-state/echokit_server`
-
-Version checked: [`d1d976596f122976095b7da4df3e946baf152b96`](https://github.com/second-state/echokit_server/tree/d1d976596f122976095b7da4df3e946baf152b96)
+## `echokit_server`
 
 Worth borrowing:
 
-- The server uses Rust, Tokio, Axum, Serde and the tracing/logging ecosystem, which matches the direction of the candidate stack for `vibebuddyd`. [Cargo.toml](https://github.com/second-state/echokit_server/blob/d1d976596f122976095b7da4df3e946baf152b96/Cargo.toml)
-- WebSocket I/O uses a separate message-handling loop and channels to separate the transport from the business pipeline; this division of responsibility is worth referring to when designing the serial send/receive/reconnect tasks in Stage 2. [`src/services/ws.rs`](https://github.com/second-state/echokit_server/blob/d1d976596f122976095b7da4df3e946baf152b96/src/services/ws.rs)
+- The server uses Rust, Tokio, Axum, Serde and the tracing/logging ecosystem, which matches the direction of the candidate stack for `vibebuddyd`.
+- WebSocket I/O uses a separate message-handling loop and channels to separate the transport from the business pipeline. This division of responsibility is worth referring to when designing the serial send/receive/reconnect tasks in Stage 2.
 
 Not adopted directly:
 
@@ -42,8 +38,6 @@ Not adopted directly:
 4. Until the license strategy is settled, the reference repositories are used only for architecture comparison and troubleshooting leads.
 
 ## Firmware currently running on the device: `78/xiaozhi-esp32`
-
-Version checked: [`v1.9.4 / 3ced7709c65a39494f5684e99111854a5bcbd8c7`](https://github.com/78/xiaozhi-esp32/tree/3ced7709c65a39494f5684e99111854a5bcbd8c7)
 
 On 2026-09-14 the hardware boot log reported the application `xiaozhi` 1.9.4, ESP-IDF v5.5 and the board `atk-dnesp32s3-box`, matching this pinned source version. This repository is therefore the primary implementation source for "the firmware currently running on the device", and can be used to understand the board configuration that currently works and to choose a compatible ESP-IDF version.
 

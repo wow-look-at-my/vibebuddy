@@ -52,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         terminationSignal = source
 
         korekoreItem = KorekoreStatusItem(model: model, actions: KorekoreMenuActions(
-            settings: { [weak self] in self?.showSettings() }, checkForUpdates: { [weak self] in self?.checkForUpdates() },
+            settings: { [weak self] in self?.showSettings() },
             reportProblem: { [weak self] in self?.reportProblem() }, quit: { [weak self] in self?.quit() },
             restartDaemon: { [weak self] in self?.restartDaemon() }))
         model.$lastError.receive(on: RunLoop.main).compactMap { $0 }.sink { message in
@@ -142,7 +142,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func restartDaemon() { model.restartDaemon() }
-    @objc private func checkForUpdates() { model.checkForUpdates() }
     @objc private func reportProblem() { model.reportProblem() }
 
     @objc func showSettings() {

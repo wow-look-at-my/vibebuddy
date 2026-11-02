@@ -9,7 +9,7 @@ public struct BoxPicture: Equatable {
     }
 
     public enum Link: String, Equatable, Sendable {
-        case usb = "USB", lan = "LAN", relay = "RELAY"
+        case usb = "USB", lan = "LAN"
     }
 
     /// A task card as the box shows it: the agent's tile and the title without its prefix.
@@ -39,7 +39,7 @@ public struct BoxPicture: Equatable {
         let activities = status?.activities ?? []
         let device = status?.device
         let linked = daemonAlive && device?.connected == true
-        let link: Link? = !linked ? nil : device?.relay == true ? .relay : device?.network == true ? .lan : .usb
+        let link: Link? = !linked ? nil : device?.network == true ? .lan : .usb
         let mood: Mood
         if !linked {
             mood = .noLink

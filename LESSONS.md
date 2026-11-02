@@ -325,7 +325,7 @@ The box's mDNS responder built, passed every host test, and answered nothing on 
 
 Before waiting on shared state from a second task, check how many waiters it holds; embassy's `Signal` and the stack's state waits hold one. Let one task own the wait and hand the result on through a channel or a `Signal` only the other task waits on. Diagnostic lines sent with `try_send` on a 16-slot channel also got dropped in the burst at boot, so "no line" didn't mean "never got there": for a diagnosis, send with `.await`.
 
-The same day, the fix and this lesson covered only the mDNS task. The Relay task had waited on `wait_config_up` alongside `address_task` since it was written, so on a box with no Wi-Fi set the two spun the whole time: a poll counter on the box read about 3 million polls every 5 s, and 3 once the Relay read the address from a `Watch` instead. Nothing looked wrong, because the spin ran only while there was no network to notice it on. When a lesson names a pattern, search the code for every other place it already occurs (`grep wait_config`), not just the one that broke. And a `Signal` with one reader is the same trap the next time someone adds a reader: where more than one task needs a value, use a `Watch`, which keeps a waker per reader.
+When a lesson names a pattern, search the code for every other place it already occurs (`grep wait_config`), not just the one that broke. And a `Signal` with one reader is the same trap the next time someone adds a reader. Where more than one task needs a value, use a `Watch`, which keeps a waker per reader.
 
 ## On the firmware, every new static in internal RAM comes out of the main stack
 
@@ -343,7 +343,7 @@ Count received data by the descriptors' lengths, never by the buffer's size, and
 
 `xfer.*` over the UART bridge failed for four reasons stacked on each other (#198), and each fix only showed the next one on the real box: a 2048-byte line cap that dropped the newline, flash writes long enough to overflow the UART FIFO, a CRC mismatch that ended the transfer, and a daemon that waited 20 s for each lost chunk. Unit tests passed at every step. Only the box, watched through the daemon log, showed what was left.
 
-The daemon fix went wrong twice. The box's `xfer.ack` said only which offset it wanted next, so "the same offset again" could mean a lost chunk, a copy the box already had, or an answer from before the link moved. A rule that guessed sent about 6500 chunks for 980 over the Relay, and a FakeBox that answered at once, with no answers in flight, never showed it. The fix was to have the answer carry what it answers (a `round` the box returns).
+The daemon fix went incorrect twice. The box's `xfer.ack` said only which offset it wanted next. "the same offset again" can mean a lost chunk, a copy the box already had, or an answer from before the link moved. A rule that guessed sent chunks for 980, and a FakeBox that answered at once, with no answers in flight, and never showed it. The fix was to have the answer carry what it answers (a `round` the box returns).
 
 Before you build retransmission on acknowledgements, make sure each answer says which send it belongs to. Test with answers that come late, twice, or from before a reconnect, not only with a peer that answers each message at once.
 

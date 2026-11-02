@@ -1,10 +1,9 @@
-//! Making a Character (ADR-0020, docs/characters.md): the lines the user wrote, spoken in a voice from
+//! Making a Character (docs/characters.md): the lines the user wrote, spoken in a voice from
 //! `characters/voices.tsv`, made into audio pools the App packs with a look.
 //!
-//! `POST /v1/characters` starts one job at a time on its own thread. Each line is synthesized as 16 kHz PCM: with the
-//! user's own key for the voice's provider, from that provider; otherwise from the voice service with `"for":"character"`
-//! and the account's session, which only the Paid plan gets. A voice of the user's own ([`crate::own_voices`]) is in
-//! their account, so only their own key speaks it, and its lines take the base preset's language. Then, as `tools/make-character.sh` does with ffmpeg, it is
+//! `POST /v1/characters` starts one job at a time on its own thread. Each line is synthesized as 16 kHz PCM with the
+//! user's own ElevenLabs key. A voice of the user's own ([`crate::own_voices`]) takes the base preset's language. Then,
+//! as `tools/make-character.sh` does with ffmpeg, it is trimmed of leading and trailing silence and normalized to a -1
 //! trimmed of leading and trailing silence and normalized to a -1 dBFS peak. Everything lands in
 //! `config_dir()/characters/<id>/`, laid out as `make-character.sh` lays out `characters/<id>/`:
 //!
@@ -14,8 +13,8 @@
 //!   ADPCM, no look), written once every line is made: the App reads them as it reads a preset's;
 //! - `manifest.json`: the name, base, voice and lines asked for.
 //!
-//! A line already made is never made again, so a refusal (`plan`, `monthly`, `global_cap`, `signed_out`, or the
-//! provider refusing the own key, `own_key`) stops the job, keeps the lines made, and starting the same Character again
+//! A line already made is never made again. A refusal (the provider refusing the own key, or no key, `own_key`)
+//! stops the job, keeps the lines made, and starting the same Character again (its `id`) picks up where it
 //! (its `id`) picks up where it stopped. Progress, the state and why it stopped are `making` in `/v1/status`.
 
 use std::path::{Path, PathBuf};
@@ -30,9 +29,8 @@ use tracing::{info, warn};
 use vibebuddy_firmware_core::adpcm::Encoder;
 use vibebuddy_firmware_core::audio::Occasion;
 
-use crate::account::Account;
 use crate::own_voices::{OwnVoice, OwnVoices};
-use crate::synthesis::{ELEVENLABS_MODEL, MAX_TEXT, VOLC_RESOURCE_ID};
+use crate::synthesis::{ELEVENLABS_MODEL, MAX_TEXT};
 use crate::voice_keys::{Provider, VoiceKeys};
 
 const VOICES: &str = include_str!("../../characters/voices.tsv");
@@ -55,11 +53,8 @@ pub struct Voice {
     pub language: String,
     pub gender: String,
     pub name: String,
-    /// In the user's own account: only their own key speaks it.
+    /// In the user's own account.
     pub own: bool,
-    /// The Volcano Engine resource one of the user's own answered on; None for ours, which use [`VOLC_RESOURCE_ID`].
-    #[serde(skip)]
-    pub resource: Option<String>,
 }
 
 impl From<&OwnVoice> for Voice {
@@ -72,19 +67,9 @@ impl From<&OwnVoice> for Voice {
             gender: String::new(),
             name: own.name.clone(),
             own: true,
-            resource: own.resource.clone(),
         }
     }
 }
-
-/// The Volcano Engine resources a speaker of the user's own may be on, tried in this order: cloned with 2.0 or 1.0,
-/// then Doubao's own 2.0 and 1.0 voices. A speaker id doesn't say which.
-const VOLC_RESOURCES: [&str; 4] = [
-    "seed-icl-2.0",
-    "seed-icl-1.0",
-    "seed-tts-2.0",
-    VOLC_RESOURCE_ID,
-];
 
 pub fn voices() -> Vec<Voice> {
     rows(VOICES)
@@ -97,7 +82,6 @@ pub fn voices() -> Vec<Voice> {
                 gender: gender.to_owned(),
                 name: name.to_owned(),
                 own: false,
-                resource: None,
             }),
             _ => None,
         })
@@ -270,7 +254,7 @@ pub struct MakingStatus {
     /// Pieces of audio made, of all there are: each line, and each form of address of those with one.
     pub done: usize,
     pub total: usize,
-    /// Why it stopped, for the App to explain: `plan`, `monthly`, `global_cap`, `signed_out`, `own_key` or `internal`; None for
+    /// Why it stopped, for the App to explain: `own_key` or `internal`; None for
     /// anything else, which `error` describes.
     pub reason: Option<&'static str>,
     pub error: Option<String>,
@@ -293,9 +277,8 @@ pub static DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
 /// The user's own voices and keys, for [`voice_of`]; set once at start, never in tests.
 pub static OWN: std::sync::OnceLock<(Arc<OwnVoices>, Arc<VoiceKeys>)> = std::sync::OnceLock::new();
 
-/// The voice service's name (`<provider>:<voice>`) for the voice of `id`, a Character made in `dir`. One of the user's
-/// own voices is `<provider>:<voice>` while their own key for it is set and not refused (a Volcano Engine one
-/// `volc:<speaker>#<resource>`), else the base preset's voice: the service can't speak a voice in someone's account.
+/// The name (`<provider>:<voice>`) of the voice of `id`, a Character made in
+/// `dir`.
 pub fn voice_of(dir: &Path, id: &str) -> Option<String> {
     voice_with(
         dir,
@@ -319,17 +302,9 @@ fn voice_with(dir: &Path, id: &str, own: Option<(&OwnVoices, &VoiceKeys)>) -> Op
     }
     let usable = own.and_then(|(voices, keys)| {
         let voice = voices.get(&manifest.voice)?;
-        let provider = Provider::named(&voice.provider)?;
-        let status = keys.status();
-        let key = if provider == Provider::ElevenLabs {
-            status.elevenlabs
-        } else {
-            status.volc
-        };
-        (key.set && !key.refused).then(|| match voice.resource {
-            Some(resource) => format!("{}:{}#{resource}", voice.provider, voice.voice),
-            None => format!("{}:{}", voice.provider, voice.voice),
-        })
+        Provider::named(&voice.provider)?;
+        let key = keys.status().elevenlabs;
+        (key.set && !key.refused).then(|| format!("{}:{}", voice.provider, voice.voice))
     });
     Some(usable.unwrap_or_else(|| crate::synthesis::voice_for(Some(&manifest.base))))
 }
@@ -404,14 +379,10 @@ impl From<String> for Stop {
 pub struct Maker {
     /// `config_dir()/characters`; None without a config directory, and in tests unless one sets it.
     dir: Option<PathBuf>,
-    /// The voice service's base URL, if there is one.
-    service: Option<String>,
-    account: Arc<Account>,
     keys: Arc<VoiceKeys>,
     own: Arc<OwnVoices>,
     /// The providers' base URLs; others only in tests.
     elevenlabs_url: String,
-    volc_url: String,
     status: Mutex<Option<MakingStatus>>,
     changed: watch::Sender<()>,
 }
@@ -419,19 +390,14 @@ pub struct Maker {
 impl Maker {
     pub fn new(
         dir: Option<PathBuf>,
-        service: Option<String>,
-        account: Arc<Account>,
         keys: Arc<VoiceKeys>,
         own: Arc<OwnVoices>,
     ) -> Self {
         Self {
             dir,
-            service,
-            account,
             keys,
             own,
             elevenlabs_url: crate::synthesis::ELEVENLABS_URL.to_owned(),
-            volc_url: crate::synthesis::VOLC_URL.to_owned(),
             status: Mutex::new(None),
             changed: watch::channel(()).0,
         }
@@ -490,12 +456,11 @@ impl Maker {
     ) -> Result<(Voice, Vec<i16>), OwnVoiceError> {
         let invalid = |message: String| OwnVoiceError::Invalid(message);
         let named = Provider::named(provider)
-            .ok_or_else(|| invalid(format!("{provider} is not a provider: elevenlabs or volc")))?;
+            .ok_or_else(|| invalid(format!("{provider} is not a provider: elevenlabs")))?;
         let (voice, name, text) = (voice.trim(), name.trim(), without_address(text.trim()));
         if voice.is_empty()
             || voice.len() > 128
             || voice.contains(char::is_whitespace)
-            || voice.contains('#')
         {
             return Err(invalid(
                 "a voice id is 1 to 128 characters, with no spaces".to_owned(),
@@ -513,37 +478,26 @@ impl Maker {
             .keys
             .key(named)
             .ok_or_else(|| invalid(format!("no own key for {provider}")))?;
-        let resources: &[&str] = if named == Provider::Volc {
-            &VOLC_RESOURCES
-        } else {
-            &[""]
-        };
-        let mut first_error = None;
-        for resource in resources {
-            let resource = Some(*resource).filter(|resource| !resource.is_empty());
-            match self.call(named, voice, &key, &text, resource) {
-                Ok(bytes) => {
-                    self.keys.refused(named, false);
-                    let samples = trim_and_normalize(&pcm(&bytes)).ok_or_else(|| {
-                        OwnVoiceError::Provider("the line came back silent".to_owned())
-                    })?;
-                    let kept = self
-                        .own
-                        .add(provider, voice, name, resource.map(str::to_owned))
-                        .map_err(|error| OwnVoiceError::Io(error.to_string()))?;
-                    info!(provider, resource, "kept a voice of the user's own");
-                    return Ok((Voice::from(&kept), samples));
+        match self.call(voice, &key, &text) {
+            Ok(bytes) => {
+                self.keys.refused(named, false);
+                let samples = trim_and_normalize(&pcm(&bytes)).ok_or_else(|| {
+                    OwnVoiceError::Provider("the line came back silent".to_owned())
+                })?;
+                let kept = self
+                    .own
+                    .add(provider, voice, name)
+                    .map_err(|error| OwnVoiceError::Io(error.to_string()))?;
+                info!(provider, "kept a voice of the user's own");
+                Ok((Voice::from(&kept), samples))
+            }
+            Err((status, message)) => {
+                if status == Some(401) {
+                    self.keys.refused(named, true);
                 }
-                Err((status, message)) => {
-                    // Only ElevenLabs says outright that the key is wrong; Volcano Engine's 403 may be a resource not opened.
-                    if named == Provider::ElevenLabs && status == Some(401) {
-                        self.keys.refused(named, true);
-                    }
-                    first_error.get_or_insert(message);
-                }
+                Err(OwnVoiceError::Provider(message))
             }
         }
-        Err(OwnVoiceError::Provider(first_error.unwrap_or_default()))
     }
 
     /// The voices in the account of the user's own ElevenLabs key, to pick one from rather than paste its id: the
@@ -814,30 +768,16 @@ impl Maker {
         Ok(())
     }
 
-    /// One line as 16 kHz mono PCM: from the provider with the user's own key for it, else from the voice service.
     fn synthesize(&self, voice: &Voice, text: &str) -> Result<Vec<i16>, Stop> {
         let provider = Provider::named(&voice.provider)
             .ok_or_else(|| format!("{} is not a provider", voice.provider))?;
-        let bytes = match self.keys.key(provider) {
-            Some(key) => self.own(
-                provider,
-                &voice.voice,
-                &key,
-                text,
-                voice.resource.as_deref(),
-            )?,
-            None if voice.own => {
-                return Err(Stop::because(
-                    "own_key",
-                    format!(
-                        "{} is in your own {} account: set your own key for it",
-                        voice.name, voice.provider
-                    ),
-                ));
-            }
-            None => self.service(&format!("{}:{}", voice.provider, voice.voice), text)?,
+        let Some(key) = self.keys.key(provider) else {
+            return Err(Stop::because(
+                "own_key",
+                format!("set your own {} key to make {}", voice.provider, voice.name),
+            ));
         };
-        Ok(pcm(&bytes))
+        Ok(pcm(&self.own(provider, &voice.voice, &key, text)?))
     }
 
     /// A line from the provider with the user's own key; a 401 or 403 marks the key refused.
@@ -847,14 +787,8 @@ impl Maker {
         voice: &str,
         key: &str,
         text: &str,
-        resource: Option<&str>,
     ) -> Result<Vec<u8>, Stop> {
-        let name = if provider == Provider::ElevenLabs {
-            "ElevenLabs"
-        } else {
-            "Volcano Engine"
-        };
-        match self.call(provider, voice, key, text, resource) {
+        match self.call(voice, key, text) {
             Ok(audio) => {
                 self.keys.refused(provider, false);
                 Ok(audio)
@@ -863,62 +797,35 @@ impl Maker {
                 self.keys.refused(provider, true);
                 Err(Stop::because(
                     "own_key",
-                    format!("{name} refused your own key ({status})"),
+                    format!("ElevenLabs refused your own key ({status})"),
                 ))
             }
             Err((_, message)) => Err(message.into()),
         }
     }
 
-    /// One line from the provider as 16 kHz PCM, on `resource` for Volcano Engine (ours when None); on failure, the
-    /// status it answered, if it answered, and what went wrong.
     fn call(
         &self,
-        provider: Provider,
         voice: &str,
         key: &str,
         text: &str,
-        resource: Option<&str>,
     ) -> Result<Vec<u8>, (Option<u16>, String)> {
-        let agent = agent();
-        let (name, request) = match provider {
-            Provider::ElevenLabs => {
-                let url = format!(
-                    "{}/v1/text-to-speech/{voice}/stream?output_format=pcm_16000",
-                    self.elevenlabs_url
-                );
-                let request = agent
-                    .post(&url)
-                    .header("xi-api-key", key)
-                    .header("Accept", "audio/pcm")
-                    .header("Content-Type", "application/json");
-                (
-                    "ElevenLabs",
-                    request.send(
-                        json!({"text": text, "model_id": ELEVENLABS_MODEL})
-                            .to_string()
-                            .as_bytes(),
-                    ),
-                )
-            }
-            Provider::Volc => {
-                let body = json!({
-                    "user": {"uid": "vibebuddy"},
-                    "req_params": {"text": text, "speaker": voice, "audio_params": {"format": "pcm", "sample_rate": SAMPLE_RATE}},
-                });
-                let request = agent
-                    .post(&self.volc_url)
-                    .header("X-Api-Key", key)
-                    .header("X-Api-Resource-Id", resource.unwrap_or(VOLC_RESOURCE_ID))
-                    .header(
-                        "X-Api-Request-Id",
-                        &crate::synthesis::request_id().map_err(|error| (None, error))?,
-                    )
-                    .header("Content-Type", "application/json");
-                ("Volcano Engine", request.send(body.to_string().as_bytes()))
-            }
-        };
-        let mut response = request.map_err(|error| (None, format!("calling {name}: {error}")))?;
+        let name = "ElevenLabs";
+        let url = format!(
+            "{}/v1/text-to-speech/{voice}/stream?output_format=pcm_16000",
+            self.elevenlabs_url
+        );
+        let mut response = agent()
+            .post(&url)
+            .header("xi-api-key", key)
+            .header("Accept", "audio/pcm")
+            .header("Content-Type", "application/json")
+            .send(
+                json!({"text": text, "model_id": ELEVENLABS_MODEL})
+                    .to_string()
+                    .as_bytes(),
+            )
+            .map_err(|error| (None, format!("calling {name}: {error}")))?;
         let status = response.status().as_u16();
         if status != 200 {
             let answer = response
@@ -935,68 +842,7 @@ impl Maker {
                 ),
             ));
         }
-        match provider {
-            Provider::ElevenLabs => {
-                read_all(&mut response, name).map_err(|stop| (None, stop.message))
-            }
-            Provider::Volc => {
-                let mut audio = Vec::new();
-                crate::synthesis::read_volc(response.into_body().into_reader(), &mut |piece| {
-                    audio.extend_from_slice(piece);
-                    true
-                })
-                .map_err(|error| (None, error))?;
-                Ok(audio)
-            }
-        }
-    }
-
-    fn service(&self, voice: &str, text: &str) -> Result<Vec<u8>, Stop> {
-        let base = self
-            .service
-            .as_deref()
-            .ok_or("no voice service, and no own key for this voice".to_owned())?;
-        let token = self
-            .account
-            .token()
-            .ok_or_else(|| Stop::because("signed_out", "not signed in"))?;
-        let url = format!("{}/v1/voice/speak", base.trim_end_matches('/'));
-        let mut response = agent()
-            .post(&url)
-            .header("Content-Type", "application/json")
-            .header("Authorization", &format!("Bearer {token}"))
-            .send(
-                json!({"text": text, "voice": voice, "for": "character"})
-                    .to_string()
-                    .as_bytes(),
-            )
-            .map_err(|error| format!("calling the voice service: {error}"))?;
-        let status = response.status().as_u16();
-        if status == 200 {
-            return read_all(&mut response, "the voice service");
-        }
-        let answer = response
-            .body_mut()
-            .with_config()
-            .limit(1024)
-            .read_to_string()
-            .unwrap_or_default();
-        let reason = serde_json::from_str::<serde_json::Value>(&answer)
-            .ok()
-            .and_then(|value| value.get("reason")?.as_str().map(str::to_owned));
-        Err(match (status, reason.as_deref()) {
-            (401, _) => {
-                self.account.forget();
-                Stop::because("signed_out", "signed out")
-            }
-            (403, _) => Stop::because(
-                "plan",
-                "making a Character with our voices needs the Paid plan",
-            ),
-            (429, Some("global_cap")) => Stop::because("global_cap", "voice is paused for today"),
-            (429, _) => Stop::because("monthly", "this month's Characters are used up"),
-            _ => format!("the voice service answered {status}: {}", answer.trim()).into(),
-        })
+        read_all(&mut response, name).map_err(|stop| (None, stop.message))
     }
 }
 
@@ -1249,7 +1095,6 @@ mod tests {
     use std::io::{Read, Write};
     use std::net::TcpListener;
 
-    use base64::Engine;
     use vibebuddy_firmware_core::adpcm::Decoder;
     use vibebuddy_firmware_core::character_pack;
 
@@ -1331,18 +1176,8 @@ mod tests {
         (base, requests)
     }
 
-    fn maker(
-        tag: &str,
-        service: Option<String>,
-        keys: &[(Provider, &str)],
-        elevenlabs: &str,
-        volc: &str,
-    ) -> (Maker, PathBuf) {
+    fn maker(tag: &str, keys: &[(Provider, &str)], elevenlabs: &str) -> (Maker, PathBuf) {
         let scratch = crate::voice_keys::tests::scratch(tag);
-        let account = Arc::new(crate::account::signed_in_for_tests(
-            &scratch.join("account"),
-            "tok_session",
-        ));
         let own = Arc::new(VoiceKeys::new(Some(&scratch)));
         own.set(
             &keys
@@ -1353,12 +1188,10 @@ mod tests {
         .unwrap();
         let mut maker = Maker::new(
             Some(scratch.join("characters")),
-            service,
-            account,
             own,
             Arc::new(OwnVoices::new(Some(&scratch))),
         );
-        (maker.elevenlabs_url, maker.volc_url) = (elevenlabs.to_owned(), volc.to_owned());
+        maker.elevenlabs_url = elevenlabs.to_owned();
         (maker, scratch)
     }
 
@@ -1372,11 +1205,7 @@ mod tests {
     fn text_of(request: &str) -> String {
         let body: serde_json::Value =
             serde_json::from_str(request.split_once("\r\n\r\n").unwrap().1).unwrap();
-        body["text"]
-            .as_str()
-            .or(body["req_params"]["text"].as_str())
-            .unwrap()
-            .to_owned()
+        body["text"].as_str().unwrap().to_owned()
     }
 
     #[test]
@@ -1500,7 +1329,7 @@ mod tests {
     #[test]
     fn only_voices_in_voices_tsv_are_accepted() {
         let all = voices();
-        // Every preset's voice, and the built-in default's, as the voice service names them.
+        // Every preset's voice, and the built-in default's, as `voice_for` names them.
         for character in [
             None,
             Some("ada"),
@@ -1586,10 +1415,10 @@ mod tests {
 
     #[test]
     fn a_refusal_halfway_stops_the_job_and_starting_again_makes_each_line_once() {
-        // The month runs out on the third request, and is back for the next run.
+        // The provider turns away the third request, and is back for the next run.
         let refuse = Arc::new(std::sync::atomic::AtomicBool::new(true));
         let refusing = refuse.clone();
-        let (service, requests) = serve(move |n, _| match n {
+        let (eleven, requests) = serve(move |n, _| match n {
             2 if refusing.load(std::sync::atomic::Ordering::SeqCst) => answer(
                 "429 Too Many Requests",
                 "application/json",
@@ -1599,10 +1428,8 @@ mod tests {
         });
         let (maker, scratch) = maker(
             "making-resume",
-            Some(service),
-            &[],
-            "http://127.0.0.1:9",
-            "http://127.0.0.1:9",
+            &[(Provider::ElevenLabs, "sk_own")],
+            &eleven,
         );
         let lines = vec![
             line("done", "All done."),
@@ -1614,7 +1441,7 @@ mod tests {
         let stopped = run(&maker, &request);
         assert_eq!(
             (stopped.state, stopped.reason, stopped.done, stopped.total),
-            ("failed", Some("monthly"), 2, 6)
+            ("failed", None, 2, 6)
         );
         let dir = scratch.join("characters").join(&stopped.id);
         assert!(
@@ -1635,15 +1462,12 @@ mod tests {
         );
         let first = requests.lock().unwrap().clone();
         assert!(
-            first[0]
-                .to_ascii_lowercase()
-                .contains("authorization: bearer tok_session"),
+            first[0].to_ascii_lowercase().contains("xi-api-key: sk_own"),
             "{}",
             first[0]
         );
         assert!(
-            first[0].contains(r#""for":"character""#)
-                && first[0].contains(r#""voice":"elevenlabs:tcSsCJFYrsHpK5rCQZMf""#),
+            first[0].contains("/v1/text-to-speech/tcSsCJFYrsHpK5rCQZMf/"),
             "{}",
             first[0]
         );
@@ -1720,87 +1544,19 @@ mod tests {
     }
 
     #[test]
-    fn the_plan_and_a_lost_session_stop_the_job_with_their_reason() {
-        let (service, _) = serve(|n, _| match n {
-            0 => answer("403 Forbidden", "application/json", br#"{"reason":"plan"}"#),
-            1 => answer(
-                "429 Too Many Requests",
-                "application/json",
-                br#"{"reason":"global_cap"}"#,
-            ),
-            _ => answer("401 Unauthorized", "application/json", b"{}"),
-        });
-        let (maker, scratch) = maker(
-            "making-refused",
-            Some(service),
-            &[],
-            "http://127.0.0.1:9",
-            "http://127.0.0.1:9",
-        );
-        let request = request("kai", vec![line("done", "Done.")]);
-        for reason in ["plan", "global_cap", "signed_out"] {
-            assert_eq!(run(&maker, &request).reason, Some(reason));
-        }
-        assert!(maker.account.token().is_none(), "a 401 forgets the session");
-        let again = run(&maker, &request);
-        assert_eq!(
-            (again.reason, again.error.as_deref()),
-            (Some("signed_out"), Some("not signed in"))
-        );
-        let _ = std::fs::remove_dir_all(scratch);
-    }
-
-    #[test]
     fn an_own_key_goes_to_its_provider_for_16_khz_pcm() {
         let (eleven, eleven_requests) = serve(|_, _| answer("200 OK", "audio/pcm", &spoken()));
-        let objects = format!(
-            r#"{{"code":0,"data":"{}"}}{{"code":0,"data":"{}"}}{{"code":20000000,"message":"ok"}}"#,
-            base64::engine::general_purpose::STANDARD.encode(&spoken()[..2000]),
-            base64::engine::general_purpose::STANDARD.encode(&spoken()[2000..])
-        );
-        let (volc, volc_requests) =
-            serve(move |_, _| answer("200 OK", "application/json", objects.as_bytes()));
-        // The service is on port 9, where nothing answers: a line sent there would fail.
-        let keys = [
-            (Provider::ElevenLabs, "sk_own_eleven"),
-            (Provider::Volc, "volc_own"),
-        ];
-        let (maker, scratch) = maker(
-            "making-own",
-            Some("http://127.0.0.1:9".to_owned()),
-            &keys,
-            &eleven,
-            &volc,
-        );
+        let keys = [(Provider::ElevenLabs, "sk_own_eleven")];
+        let (maker, scratch) = maker("making-own", &keys, &eleven);
 
-        assert_eq!(
-            run(&maker, &request("hank", vec![line("done", "Done.")])).state,
-            "done"
-        );
+        let made = run(&maker, &request("hank", vec![line("done", "Done.")]));
+        assert_eq!(made.state, "done", "{made:?}");
         let sent = eleven_requests.lock().unwrap()[0].clone();
         assert!(sent.starts_with("POST /v1/text-to-speech/U6jH23hcPh0zH17nf3DT/stream?output_format=pcm_16000 HTTP/1.1\r\n"), "{sent}");
         assert!(
             sent.to_ascii_lowercase()
                 .contains("xi-api-key: sk_own_eleven")
                 && sent.contains(r#""model_id":"eleven_flash_v2_5""#),
-            "{sent}"
-        );
-        assert!(!sent.contains("tok_session"));
-
-        let made = run(
-            &maker,
-            &request("wanwanxiaohe", vec![line("done", "好了。")]),
-        );
-        assert_eq!(made.state, "done", "{made:?}");
-        let sent = volc_requests.lock().unwrap()[0].clone();
-        assert!(
-            sent.to_ascii_lowercase().contains("x-api-key: volc_own"),
-            "{sent}"
-        );
-        assert!(
-            sent.contains(r#""format":"pcm""#)
-                && sent.contains(r#""sample_rate":16000"#)
-                && sent.contains(r#""speaker":"zh_female_wanwanxiaohe_moon_bigtts""#),
             "{sent}"
         );
         let pack =
@@ -1810,8 +1566,20 @@ mod tests {
             .pool(Occasion::Done)[0];
         assert!(
             line.samples > 1590 && line.samples < 1600,
-            "both pieces of the stream, trimmed: {}",
+            "the line, trimmed: {}",
             line.samples
+        );
+        let _ = std::fs::remove_dir_all(scratch);
+    }
+
+    #[test]
+    fn without_an_own_key_a_character_cannot_be_made() {
+        let (maker, scratch) = maker("making-no-key", &[], "http://127.0.0.1:9");
+        let stopped = run(&maker, &request("kai", vec![line("done", "Done.")]));
+        assert_eq!(
+            (stopped.state, stopped.reason),
+            ("failed", Some("own_key")),
+            "{stopped:?}"
         );
         let _ = std::fs::remove_dir_all(scratch);
     }
@@ -1820,9 +1588,7 @@ mod tests {
     fn a_job_that_panics_ends_as_failed_not_making_forever() {
         let (maker, scratch) = maker(
             "making-panic",
-            None,
             &[],
-            "http://127.0.0.1:9",
             "http://127.0.0.1:9",
         );
         let request = request("ada", vec![line("done", "Done.")]);
@@ -1841,9 +1607,7 @@ mod tests {
     fn a_made_character_is_deleted_but_not_while_it_is_being_made_nor_outside_its_directory() {
         let (maker, scratch) = maker(
             "making-delete",
-            None,
             &[],
-            "http://127.0.0.1:9",
             "http://127.0.0.1:9",
         );
         let request = request("ada", vec![line("done", "Done.")]);
@@ -1871,9 +1635,7 @@ mod tests {
     fn one_character_at_a_time_and_only_one_made_here_is_made_again() {
         let (maker, scratch) = maker(
             "making-busy",
-            None,
             &[],
-            "http://127.0.0.1:9",
             "http://127.0.0.1:9",
         );
         let mut request = request("ada", vec![line("done", "Done.")]);
@@ -1892,84 +1654,36 @@ mod tests {
         let _ = std::fs::remove_dir_all(scratch);
     }
 
-    /// Volcano Engine's answer: the line in two objects, then done.
-    fn volc_objects() -> String {
-        format!(
-            r#"{{"code":0,"data":"{}"}}{{"code":0,"data":"{}"}}{{"code":20000000,"message":"ok"}}"#,
-            base64::engine::general_purpose::STANDARD.encode(&spoken()[..2000]),
-            base64::engine::general_purpose::STANDARD.encode(&spoken()[2000..])
-        )
-    }
-
     #[test]
-    fn a_volc_voice_of_the_users_own_is_tried_on_each_resource_until_one_speaks_it_and_kept_with_it()
-     {
-        let objects = volc_objects();
-        let (volc, requests) = serve(move |_, request| {
-            if request
-                .to_ascii_lowercase()
-                .contains("x-api-resource-id: seed-icl-2.0")
-            {
-                answer(
-                    "403 Forbidden",
-                    "application/json",
-                    br#"{"code":45000030,"message":"resource not granted"}"#,
-                )
-            } else {
-                answer("200 OK", "application/json", objects.as_bytes())
-            }
-        });
+    fn a_voice_of_the_users_own_is_tried_and_kept_and_makes_lines_in_the_presets_language() {
+        let (eleven, requests) = serve(|_, _| answer("200 OK", "audio/pcm", &spoken()));
         let (maker, scratch) = maker(
-            "own-volc",
-            Some("http://127.0.0.1:9".to_owned()),
-            &[(Provider::Volc, "volc_own")],
-            "http://127.0.0.1:9",
-            &volc,
+            "own-eleven",
+            &[(Provider::ElevenLabs, "sk_own")],
+            &eleven,
         );
 
         let (voice, samples) = maker
-            .add_own("volc", " S_me ", "My voice", "All done, {address}.")
+            .add_own("elevenlabs", " me1 ", "My voice", "All done, {address}.")
             .unwrap();
         assert!(voice.own && voice.id.starts_with("own-") && voice.language.is_empty());
-        assert_eq!(
-            (voice.voice.as_str(), voice.resource.as_deref()),
-            ("S_me", Some("seed-icl-1.0"))
-        );
+        assert_eq!(voice.voice, "me1");
         assert!(
             samples.len() > 1590 && samples.len() < 1600,
             "{}",
             samples.len()
         );
-        let sent = requests.lock().unwrap().clone();
-        assert_eq!(sent.len(), 2, "2.0 refused, 1.0 spoke it");
-        assert!(
-            sent[1]
-                .to_ascii_lowercase()
-                .contains("x-api-resource-id: seed-icl-1.0")
-                && sent[1].contains(r#""speaker":"S_me""#)
-        );
-        assert_eq!(text_of(&sent[1]), "All done.");
-        assert!(
-            !maker.keys.status().volc.refused,
-            "a resource not opened is not a refused key"
-        );
+        assert_eq!(text_of(&requests.lock().unwrap()[0]), "All done.");
         assert!(
             maker.voices().iter().any(|listed| listed.id == voice.id),
             "listed after ours"
         );
 
-        // Made with it: the user's own key on the resource it answered on, in the base preset's language.
         let made = run(
             &maker,
             &request(&voice.id, vec![line("done", "Done, {address}.")]),
         );
         assert_eq!(made.state, "done", "{made:?}");
-        let sent = requests.lock().unwrap().clone();
-        assert!(sent[2..].iter().all(|request| {
-            request
-                .to_ascii_lowercase()
-                .contains("x-api-resource-id: seed-icl-1.0")
-        }));
         let dir = scratch.join("characters").join(&made.id);
         assert!(
             dir.join("address").join("boss.bin").is_file(),
@@ -1980,7 +1694,7 @@ mod tests {
     }
 
     #[test]
-    fn a_voice_of_the_users_own_needs_their_key_and_is_never_sent_to_the_service() {
+    fn a_voice_of_the_users_own_needs_their_key() {
         let (eleven, requests) = serve(|_, _| {
             answer(
                 "401 Unauthorized",
@@ -1990,10 +1704,8 @@ mod tests {
         });
         let (maker, scratch) = maker(
             "own-no-key",
-            Some("http://127.0.0.1:9".to_owned()),
             &[],
             &eleven,
-            "http://127.0.0.1:9",
         );
         assert!(
             matches!(maker.add_own("elevenlabs", "abc", "Me", "Hi."), Err(OwnVoiceError::Invalid(why)) if why.contains("no own key"))
@@ -2001,7 +1713,6 @@ mod tests {
         for bad in [
             ("eleven", "abc", "Me"),
             ("elevenlabs", "a b", "Me"),
-            ("elevenlabs", "a#b", "Me"),
             ("elevenlabs", "abc", " "),
         ] {
             assert!(
@@ -2027,8 +1738,8 @@ mod tests {
         );
         assert_eq!(requests.lock().unwrap().len(), 1);
 
-        // A Character in a voice of the user's own, after the key is gone: it stops, and the service is never asked.
-        let own = maker.own.add("elevenlabs", "abc", "Me", None).unwrap();
+        // A Character in a voice of the user's own, after the key is gone: it stops.
+        let own = maker.own.add("elevenlabs", "abc", "Me").unwrap();
         maker.keys.set(&[(Provider::ElevenLabs, None)]).unwrap();
         let stopped = run(&maker, &request(&own.id, vec![line("done", "Done.")]));
         assert_eq!(
@@ -2044,15 +1755,10 @@ mod tests {
      {
         let (maker, scratch) = maker(
             "own-reply",
-            None,
-            &[(Provider::Volc, "volc_own")],
-            "http://127.0.0.1:9",
+            &[(Provider::ElevenLabs, "sk_own")],
             "http://127.0.0.1:9",
         );
-        let own = maker
-            .own
-            .add("volc", "S_me", "Me", Some("seed-icl-2.0".to_owned()))
-            .unwrap();
+        let own = maker.own.add("elevenlabs", "me1", "Me").unwrap();
         let dir = scratch.join("characters");
         std::fs::create_dir_all(dir.join("mine-00000001")).unwrap();
         let manifest = Request {
@@ -2070,13 +1776,13 @@ mod tests {
         let reply =
             |maker: &Maker| voice_with(&dir, "mine-00000001", Some((&maker.own, &maker.keys)));
 
-        assert_eq!(reply(&maker).as_deref(), Some("volc:S_me#seed-icl-2.0"));
-        maker.keys.refused(Provider::Volc, true);
+        assert_eq!(reply(&maker).as_deref(), Some("elevenlabs:me1"));
+        maker.keys.refused(Provider::ElevenLabs, true);
         assert_eq!(
             reply(&maker),
             Some(crate::synthesis::voice_for(Some("ada")))
         );
-        maker.keys.set(&[(Provider::Volc, None)]).unwrap();
+        maker.keys.set(&[(Provider::ElevenLabs, None)]).unwrap();
         assert_eq!(
             reply(&maker),
             Some(crate::synthesis::voice_for(Some("ada")))
@@ -2117,10 +1823,8 @@ mod tests {
         });
         let (maker, scratch) = maker(
             "own-eleven-list",
-            None,
             &[(Provider::ElevenLabs, "sk_own")],
             &eleven,
-            "http://127.0.0.1:9",
         );
         let voices = maker.elevenlabs_voices().unwrap();
         assert_eq!(

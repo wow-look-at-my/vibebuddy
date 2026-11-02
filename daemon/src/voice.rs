@@ -1,4 +1,4 @@
-//! Voice commands from a box linked over USB, the local network or the Relay (ADR-0017, ADR-0018; docs/protocol.md, "Voice commands
+//! Voice commands from a box linked over USB or the local network (ADR-0017; docs/protocol.md, "Voice commands
 //! (experimental)").
 //!
 //! The box records while K0 is held and sends the audio as `VOICE` diagnostic lines: 24 kHz mono IMA ADPCM, each
@@ -214,7 +214,7 @@ pub fn wav(samples: &[i16]) -> Vec<u8> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Availability {
     On,
-    /// Off for `reason`: `signed_out`, `allowance`, `global_cap` or `not_ready` (docs/protocol.md).
+    /// Off for `reason`: `not_ready` (docs/protocol.md).
     Off(&'static str),
     /// Voice commands aren't set up on this computer (no recognizer, or the resident session is switched off), so
     /// there is nothing for the user to be told.
@@ -253,30 +253,9 @@ pub fn slow_link_event(firmware_switches: bool) -> Event {
 }
 
 /// What the box shows when voice is off for `reason`, in `voice.available` and `voice.error` alike: English, like
-/// the rest of its screens, with when voice comes back in this computer's local time.
+/// the rest of its screens.
 pub fn refusal_message(reason: &str) -> Option<String> {
-    let back = || comes_back_at(chrono::Utc::now(), &chrono::Local);
-    Some(match reason {
-        "signed_out" => "Sign in on the computer to talk to me.".to_owned(),
-        "allowance" => format!("Today's voice is used up. It comes back at {}.", back()),
-        "global_cap" => format!(
-            "Voice is paused for everyone today. It comes back at {}.",
-            back()
-        ),
-        "not_ready" => "My session on the computer isn't ready.".to_owned(),
-        _ => return None,
-    })
-}
-
-/// The next 00:00 UTC after `now`, when the service's day starts over, as `HH:MM` (24 hours) in `zone`.
-fn comes_back_at<Zone: chrono::TimeZone>(now: chrono::DateTime<chrono::Utc>, zone: &Zone) -> String
-where
-    Zone::Offset: std::fmt::Display,
-{
-    crate::account::next_utc_day(now)
-        .with_timezone(zone)
-        .format("%H:%M")
-        .to_string()
+    (reason == "not_ready").then(|| "My session on the computer isn't ready.".to_owned())
 }
 
 fn turn_event(name: &str, turn: u32) -> Event {
@@ -430,25 +409,19 @@ impl Voice {
         }
     }
 
-    /// Voice is offered when speech recognition can be asked (the voice service needs the person signed in to their
-    /// account and hasn't refused today, ADR-0018) and the resident session is on and ready: the user's Codex is
-    /// installed and logged in. Signing in comes first, since nothing else works without it; then the session, since
-    /// voice doesn't come back with the day while it isn't ready.
+    /// Voice is offered when a recognizer is set up and the resident session is on and ready: the user's Codex is
+    /// installed and logged in.
     pub fn availability(&self) -> Availability {
-        let (Some(recognizer), Some(resident)) = (
+        let (Some(_), Some(resident)) = (
             &self.recognizer,
             self.resident.as_ref().filter(|resident| resident.enabled()),
         ) else {
             return Availability::Unset;
         };
-        let refusal = recognizer.refusal();
-        if refusal == Some("signed_out") {
-            return Availability::Off("signed_out");
-        }
         if !resident.ready() {
             return Availability::Off("not_ready");
         }
-        refusal.map_or(Availability::On, Availability::Off)
+        Availability::On
     }
 
     /// Takes one `VOICE` line from the box. A turn that ends starts a task, returned so tests can wait for it;
@@ -1727,7 +1700,7 @@ pub mod tests {
         let path = std::env::var("VIBEBUDDY_E2E_WAV").expect("VIBEBUDDY_E2E_WAV names a recording");
         let (left, rate) = left_channel(&std::fs::read(path).unwrap());
         assert_eq!(rate, SAMPLE_RATE, "the box records at 24 kHz");
-        let recognizer = crate::speech::from_env(None).expect("a speech recognizer is configured");
+        let recognizer = crate::speech::from_env().expect("a speech recognizer is configured");
         let dir = temp_dir("voice-e2e");
         let resident = Arc::new(Resident::new(
             true,
@@ -1776,70 +1749,6 @@ pub mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
-    /// Two replies through the real voice service, as the box would get them: the `voice.audio` pieces put back
-    /// together into `<dir>/reply-zh.mp3` and `reply-en.mp3`. Run by hand:
-    ///
-    /// ```sh
-    /// VIBEBUDDY_E2E_OUT=/some/dir cargo test -p vibebuddyd e2e_spoken -- --ignored --nocapture
-    /// ```
-    ///
-    /// `VIBEBUDDY_TTS_BASE_URL` picks the service as it does for the daemon; unset, staging.
-    #[test]
-    #[ignore = "uses the network and the voice service"]
-    fn e2e_spoken_replies_through_the_real_voice_service() {
-        let out = std::path::PathBuf::from(
-            std::env::var("VIBEBUDDY_E2E_OUT").expect("VIBEBUDDY_E2E_OUT names a directory"),
-        );
-        let synthesizer =
-            synthesis::from_env(None, Arc::new(crate::voice_keys::VoiceKeys::new(None)));
-        for (name, character, text) in [
-            (
-                "zh",
-                Some("wanwanxiaohe"),
-                "两个智能体正在工作，有一个在等你回复。",
-            ),
-            (
-                "en",
-                Some("ada"),
-                "Two agents are working, and one of them is waiting for you.",
-            ),
-        ] {
-            let timed = TimedTransport {
-                end: std::sync::Mutex::new(Some(Instant::now())),
-                events: Default::default(),
-            };
-            speak(
-                1,
-                0,
-                text,
-                character,
-                &*synthesizer,
-                &timed,
-                &AtomicBool::new(false),
-            );
-            let events = timed.events.lock().unwrap();
-            let (first_ms, _) = events.first().expect("some audio");
-            let (total_ms, last) = events.last().unwrap();
-            assert_eq!(last.extra.get("end"), Some(&json!(true)));
-            assert!(!last.extra.contains_key("error"), "synthesis failed");
-            let pieces: Vec<Event> = events.iter().map(|(_, event)| event.clone()).collect();
-            let bytes: Vec<u8> = audio(&pieces)
-                .into_iter()
-                .filter_map(|(_, _, data, _)| data)
-                .flatten()
-                .collect();
-            let path = out.join(format!("reply-{name}.mp3"));
-            std::fs::write(&path, &bytes).unwrap();
-            println!(
-                "{name} {}: first audio after {first_ms} ms, end after {total_ms} ms, {} bytes in {} lines -> {}",
-                synthesis::voice_for(character),
-                bytes.len(),
-                events.len(),
-                path.display()
-            );
-        }
-    }
-
     #[test]
     fn each_reason_goes_with_voice_off_and_the_text_the_box_shows() {
         let on = serde_json::to_value(available_event(Availability::On)).unwrap();
@@ -1851,7 +1760,7 @@ pub mod tests {
             serde_json::to_value(available_event(Availability::Unset)).unwrap(),
             json!({"version": 1, "event": "voice.available", "on": false})
         );
-        for reason in ["signed_out", "allowance", "global_cap", "not_ready"] {
+        for reason in ["not_ready"] {
             let event = available_event(Availability::Off(reason));
             assert_eq!(
                 (event.extra["on"].clone(), event.extra["reason"].clone()),
@@ -1860,44 +1769,7 @@ pub mod tests {
             assert_eq!(event.message, refusal_message(reason));
             assert!(event.message.is_some(), "{reason} has a text");
         }
-        let back = comes_back_at(chrono::Utc::now(), &chrono::Local);
-        assert_eq!(
-            refusal_message("allowance").unwrap(),
-            format!("Today's voice is used up. It comes back at {back}.")
-        );
-        assert_eq!(
-            refusal_message("global_cap").unwrap(),
-            format!("Voice is paused for everyone today. It comes back at {back}.")
-        );
         assert_eq!(refusal_message("busy"), None);
-    }
-
-    #[test]
-    fn voice_comes_back_at_the_next_midnight_utc_in_local_time() {
-        let at = |text: &str| {
-            chrono::DateTime::parse_from_rfc3339(text)
-                .unwrap()
-                .with_timezone(&chrono::Utc)
-        };
-        let zone = |hours: i32| chrono::FixedOffset::east_opt(hours * 3600).unwrap();
-        assert_eq!(comes_back_at(at("2026-10-27T03:00:00Z"), &zone(8)), "08:00");
-        // Late in the local evening, the UTC day still ends the next morning.
-        assert_eq!(comes_back_at(at("2026-10-27T15:59:00Z"), &zone(8)), "08:00");
-        assert_eq!(
-            comes_back_at(at("2026-10-27T20:00:00Z"), &zone(-5)),
-            "19:00"
-        );
-        assert_eq!(
-            comes_back_at(
-                at("2026-10-27T20:00:00Z"),
-                &chrono::FixedOffset::east_opt(5 * 3600 + 1800).unwrap()
-            ),
-            "05:30"
-        );
-        assert_eq!(
-            comes_back_at(at("2026-10-27T20:00:00Z"), &chrono::Utc),
-            "00:00"
-        );
     }
 
     #[tokio::test]
@@ -1950,36 +1822,6 @@ pub mod tests {
                 with(Some(crate::resident::Problem::CodexLoggedOut))
             )
             .availability(),
-            Off("not_ready")
-        );
-
-        // The recognizer's refusals: signing in comes before the session, the day's refusals after it.
-        struct Refusing(&'static str);
-        impl Recognizer for Refusing {
-            fn recognize(
-                &self,
-                _wav: &[u8],
-            ) -> Result<crate::speech::Transcript, crate::speech::RecognitionError> {
-                unreachable!("voice is off")
-            }
-            fn refusal(&self) -> Option<&'static str> {
-                Some(self.0)
-            }
-        }
-        let refusing = |reason| Some(Arc::new(Refusing(reason)) as Arc<dyn Recognizer>);
-        for reason in ["signed_out", "allowance", "global_cap"] {
-            assert_eq!(
-                Voice::new(refusing(reason), on()).availability(),
-                Off(reason)
-            );
-        }
-        let not_ready = || with(Some(crate::resident::Problem::CodexLoggedOut));
-        assert_eq!(
-            Voice::new(refusing("signed_out"), not_ready()).availability(),
-            Off("signed_out")
-        );
-        assert_eq!(
-            Voice::new(refusing("allowance"), not_ready()).availability(),
             Off("not_ready")
         );
 

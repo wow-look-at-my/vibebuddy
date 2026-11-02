@@ -286,9 +286,8 @@ pub struct Display {
     identify_until: Option<u32>,
     identify_next_toggle: u32,
     muted: bool,
-    /// How the box is linked, as an icon in the top left at all times, and `STG` after it while that link goes
-    /// through the staging Relay (docs/device-menu.md). No icon with no link: NO LINK already says so.
-    link: (Option<LinkPath>, bool),
+    /// How the box is linked, as an icon in the top left at all times (docs/device-menu.md).
+    link: Option<LinkPath>,
     /// The alarm is ringing: the phase ended and the user hasn't acted yet. Records the phase at the end;
     /// stops as soon as the view changes (start, abandon, skip) or the screen is switched away.
     ring_alarm: bool,
@@ -1212,7 +1211,7 @@ impl Display {
             identify_until: None,
             identify_next_toggle: 0,
             muted: false,
-            link: (None, false),
+            link: None,
             ring_alarm: false,
             ring_alarm_phase: Phase::Focus,
             ring_alarm_shake_frames: 0,
@@ -1785,13 +1784,9 @@ impl Display {
         canvas.fill_rect(0, 0, WIDTH, 4, status_color);
         canvas.draw_text_centered(12, b"VibeBuddy", 2, COLOR_TEXT);
         let mut x = 8;
-        if let Some(path) = self.link.0 {
+        if let Some(path) = self.link {
             draw_icon(&mut canvas, x, 12, path.icon(), COLOR_MUTED);
             x += ICON_WIDTH * ICON_SCALE + 6;
-        }
-        if self.link.1 {
-            canvas.draw_text(x, 15, b"STG", 1, COLOR_WORKING, 3);
-            x += text_width(b"STG", 1) + 6;
         }
         if self.muted {
             canvas.draw_text(x, 15, b"MUTE", 1, COLOR_INPUT, 4);
@@ -2056,18 +2051,12 @@ impl Display {
         }
     }
 
-    /// The link icon and staging mark in the top left; redraws only on a change.
-    pub fn set_link(
-        &mut self,
-        screen: &mut dyn Screen,
-        scene: &Scene,
-        path: Option<LinkPath>,
-        staging: bool,
-    ) {
-        if self.link == (path, staging) {
+    /// The link icon in the top left; redraws only on a change.
+    pub fn set_link(&mut self, screen: &mut dyn Screen, scene: &Scene, path: Option<LinkPath>) {
+        if self.link == path {
             return;
         }
-        self.link = (path, staging);
+        self.link = path;
         if self.ready {
             let _ = self.render(screen, scene);
         }
@@ -2576,12 +2565,11 @@ fn draw_progress(canvas: &mut Canvas, percent: u8) {
     );
 }
 
-/// How the box is linked to its computer (USB wins, then the local network, then the Relay).
+/// How the box is linked to its computer (USB wins, then the local network).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LinkPath {
     Usb,
     Lan,
-    Relay,
 }
 
 impl LinkPath {
@@ -2589,16 +2577,14 @@ impl LinkPath {
         match self {
             Self::Usb => b"USB",
             Self::Lan => b"LAN",
-            Self::Relay => b"RELAY",
         }
     }
 
-    /// A plug for the cable, Wi-Fi waves for the local network, a cloud for the Relay.
+    /// A plug for the cable, Wi-Fi waves for the local network.
     fn icon(self) -> &'static [u16; ICON_HEIGHT] {
         match self {
             Self::Usb => &ICON_USB,
             Self::Lan => &ICON_LAN,
-            Self::Relay => &ICON_RELAY,
         }
     }
 }
@@ -2625,15 +2611,6 @@ const ICON_LAN: [u16; ICON_HEIGHT] = [
     0b000001100000,
     0b000001100000,
 ];
-const ICON_RELAY: [u16; ICON_HEIGHT] = [
-    0b000001110000,
-    0b001110001000,
-    0b010000000110,
-    0b100000000001,
-    0b100000000001,
-    0b100000000001,
-    0b011111111110,
-];
 
 fn draw_icon(canvas: &mut Canvas, x: i32, y: i32, rows: &[u16; ICON_HEIGHT], color: u16) {
     for (row, bits) in rows.iter().enumerate() {
@@ -2659,7 +2636,7 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
 }
 
 /// Runs per `SHOT` line in a [`Snapshot`]: at most 11 bytes each, so a line stays under 2 KB, which fits the
-/// box's 4 KB network pipe and the Relay's 8 KiB messages with room to spare.
+/// box's 4 KB network pipe with room to spare.
 const SNAPSHOT_RUNS: usize = 180;
 /// The longest line a [`Snapshot`] gives, newline included.
 pub const SNAPSHOT_LINE_BYTES: usize = 4 + SNAPSHOT_RUNS * 11 + 1;

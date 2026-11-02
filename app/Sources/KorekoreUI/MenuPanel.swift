@@ -5,16 +5,14 @@ import VibeBuddyCore
 /// What the menu bar panel's rows do; the app fills these in.
 public struct KorekoreMenuActions {
     public var settings: () -> Void
-    public var checkForUpdates: () -> Void
     public var reportProblem: () -> Void
     public var quit: () -> Void
     /// The daemon isn't answering: start it again.
     public var restartDaemon: () -> Void
 
-    public init(settings: @escaping () -> Void, checkForUpdates: @escaping () -> Void, reportProblem: @escaping () -> Void,
+    public init(settings: @escaping () -> Void, reportProblem: @escaping () -> Void,
                 quit: @escaping () -> Void, restartDaemon: @escaping () -> Void) {
         self.settings = settings
-        self.checkForUpdates = checkForUpdates
         self.reportProblem = reportProblem
         self.quit = quit
         self.restartDaemon = restartDaemon
@@ -138,11 +136,8 @@ public struct KorekoreMenuPanel: View {
     private var items: some View {
         VStack(spacing: 0) {
             item(0, String(localized: "Settings…"), key: "⌘,", action: actions.settings)
-            if UpdateSwitch.compiledIn {
-                item(1, String(localized: "Check for updates…"), action: actions.checkForUpdates)
-            }
-            item(2, String(localized: "Report a problem…"), action: actions.reportProblem)
-            item(3, String(localized: "Quit korekore (the box goes offline)"), key: "⌘Q", action: actions.quit)
+            item(1, String(localized: "Report a problem…"), action: actions.reportProblem)
+            item(2, String(localized: "Quit korekore (the box goes offline)"), key: "⌘Q", action: actions.quit)
         }
         .padding(.top, 6)
         .overlay(alignment: .top) { Rectangle().fill(Theme.Colors.line).frame(height: Theme.Stroke.base) }

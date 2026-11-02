@@ -4,7 +4,7 @@
 // The generated theme and sprites hold all the design's tokens, and the views do not use each one.
 #![allow(dead_code)]
 
-mod account;
+mod own_keys;
 mod controls;
 mod guide;
 pub(crate) mod pages;

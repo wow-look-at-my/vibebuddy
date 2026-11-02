@@ -287,7 +287,7 @@ impl crate::App {
             let state: Element<'_, Message> = match operation.state {
                 OperationState::Failed => column![
                     note(tr("Hold K0 on the box and replug the cable to put it in download mode, then retry.", &[])),
-                    big(tr("Try again", &[]), Fill::Sun, true, 15.0, Some(Message::FlashFirmware)),
+                    big(tr("Try again", &[]), Fill::Sun, true, 15.0, Some(Message::FlashFromFile)),
                 ]
                 .spacing(10)
                 .into(),

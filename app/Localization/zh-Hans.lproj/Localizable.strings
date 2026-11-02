@@ -19,7 +19,6 @@
 "%lld h %lld min" = "%1$lld 小时 %2$lld 分";
 "%lld min" = "%lld 分";
 "Settings…" = "设置…";
-"Check for Updates…" = "检查更新…";
 "Report a Problem…" = "报告问题…";
 "Hide VibeBuddy" = "隐藏 VibeBuddy";
 "Edit" = "编辑";
@@ -112,8 +111,6 @@
 "Firmware package: %@\nBox now: %@\nThe box restarts once; its voice pack and today's stats are kept. Over the UART bridge this takes a few minutes." = "固件包：%1$@\n盒子现在：%2$@\n盒子会重启一次，语音包和当日战绩都保留。UART 桥上大约要几分钟。";
 "Flash" = "刷入";
 "The box restarts once; its voice pack and today's stats are kept. Over the UART bridge this takes a few minutes." = "盒子会重启一次，语音包和当日战绩都保留。UART 桥上大约要几分钟。";
-"Update" = "更新";
-"The box's current firmware and data will be erased and can't be recovered. It restarts on its own when done; over the UART port this takes a few minutes." = "盒子里现有的固件和数据会被清掉，无法恢复。刷完盒子自动重启，UART 口上大约要几分钟。";
 
 /* Settings: Advanced */
 "Open logs folder" = "打开日志文件夹";
@@ -161,26 +158,7 @@
 "Nothing" = "不称呼";
 "English" = "英文";
 
-/* Updates (ADR-0010) */
-"Updates" = "更新";
-"Check for updates" = "检查更新";
-"Check now" = "立即检查";
-"Last check failed: %@" = "上次检查失败：%@";
-"Not checked yet" = "还没检查过";
-"Up to date · checked %@" = "已是最新 · %@检查";
-"Download %@" = "下载 %@";
-"Update check was rejected (%@)" = "检查更新被拒绝（%@）";
-"Update to %@" = "更新到 %@";
-"Update the box firmware to %@?" = "把盒子固件更新到 %@？";
-"Box firmware %@ is available" = "盒子固件 %@ 已发布";
-"The firmware hasn't been downloaded yet" = "固件还没下载好";
-"Couldn't get the firmware: %@" = "没能获取固件：%@";
-"Downloading the firmware…" = "正在下载固件…";
-"Looking for firmware…" = "正在查找固件…";
-"Check again" = "再检查一次";
-"Releases" = "发布页";
-"To upgrade, download the new release and run its install.sh again." = "升级方法：下载新版本，再运行一次它的 install.sh。";
-"Install %@…" = "安装 %@…";
+/* Permissions */
 "Allow…" = "允许…";
 "Allowed" = "已允许";
 "Not allowed yet" = "尚未允许";
@@ -196,7 +174,6 @@
 "Network" = "网络";
 "Not set" = "未设置";
 "Plug in the cable to change the box's network." = "要更换盒子的网络，请插上数据线。";
-"Plug in the cable to update the box's firmware." = "要更新盒子的固件，请插上数据线。";
 "Plug in the cable to see the paired computers." = "插上数据线才能看到已配对的电脑。";
 "Network name" = "网络名称";
 "Password" = "密码";
@@ -209,7 +186,6 @@
 "The box is plugged into %@." = "盒子正插在 %@ 上。";
 "The box is with %@." = "盒子正连着 %@。";
 "Take over" = "接管";
-"Relay" = "中转";
 "Taking the box over was rejected (%lld)" = "接管盒子被拒绝（%lld）";
 "Nearby networks" = "附近的网络";
 "Choose…" = "选择…";
@@ -271,7 +247,6 @@
 "How korekore behaves on this Mac" = "korekore 在这台 Mac 上怎么工作";
 "How korekore behaves on this computer" = "korekore 在这台电脑上怎么工作";
 "For when something's off" = "出问题时来这里";
-"Check for updates…" = "检查更新…";
 "Report a problem…" = "报告问题…";
 "Quit korekore (the box goes offline)" = "退出 korekore（盒子将离线）";
 
@@ -282,8 +257,6 @@
 "Logs, config and both sides' build IDs in one file, for a bug report." = "日志、配置和两边的构建号打包成一个文件，用来报告问题。";
 "Only korekore's own entries; your other hooks stay." = "只改 korekore 自己的条目，你的其他钩子保持不变。";
 "Plug in the cable to change the box's network, update its firmware or see its paired computers." = "插上数据线才能更换盒子的网络、更新固件或查看已配对的电脑。";
-"Reach the box through the Relay when it's away from this computer" = "盒子不在这台电脑旁边时，通过 Relay 连接它";
-"Reach the box through the Relay when it's away from this Mac" = "盒子不在这台 Mac 旁边时，通过 Relay 连接它";
 "Released firmware doesn't run on it, so no update is offered." = "已发布的固件不能在它上面运行，所以不提供更新。";
 "The box isn't running korekore firmware" = "盒子运行的不是 korekore 固件";
 "The character didn't finish writing, so the box keeps its built-in voice for now. Write it again when you're ready." = "角色没写完，盒子暂时保留内置声音。准备好了再写一次。";
@@ -295,7 +268,6 @@
 "The update didn't finish" = "更新没有完成";
 "The update didn't take" = "更新没有生效";
 "This build doesn't download firmware. Use Flash from file… on the Device page." = "此版本不下载固件。请在“设备”页使用“从文件刷入…”。";
-"Update checks are off, so korekore doesn't download firmware. Turn them on in General, or get it from Releases." ="检查更新已关闭，所以 korekore 不会下载固件。在“通用”里打开，或者从发布页下载。";
 "Allow it in System Settings › Privacy › Automation." = "在“系统设置 › 隐私与安全性 › 自动化”里允许它。";
 "Coming soon" = "即将推出";
 "Config file" = "配置文件";
@@ -303,9 +275,6 @@
 "Diagnostics" = "诊断";
 "Firmware flashed · the box has restarted" = "固件已刷入 · 盒子已重启";
 "Firmware" = "固件";
-"Flash korekore to use it; its current firmware will be replaced." = "刷入 korekore 才能使用，盒子现在的固件会被替换。";
-"Flash korekore" = "刷入 korekore";
-"Flash the box with korekore?" = "给盒子刷入 korekore？";
 "Forget" = "忘记";
 "Get a key in the Claude Console" = "在 Claude Console 获取密钥";
 "Hold K0 on the box and talk to the buddy. Your words and its replies show up here." = "按住盒子上的 K0 和伙伴说话。你说的话和它的回答会显示在这里。";
@@ -334,11 +303,9 @@
 "The box" = "盒子";
 "This Mac" = "这台 Mac";
 "This is a %@ board." = "这是一块 %@ 板子。";
-"This version of korekore is no longer supported. It keeps working; update to keep getting firmware for the box." = "这个版本的 korekore 已不再受支持。它还能用；更新后才能继续为盒子获取固件。";
 "Trust again" = "需要重新信任";
 "Try again" = "再试一次";
 "Up to 15 seconds" = "最多 15 秒";
-"Update checks off" = "检查更新已关闭";
 "Updating the firmware…" = "正在更新固件…";
 "Use this look" = "使用这个形象";
 "Waiting" = "等待中";
@@ -351,13 +318,10 @@
 "found on this Mac" = "已在这台 Mac 上找到";
 "found on this computer" = "已在这台电脑上找到";
 "install it, then connect" = "先安装，再接入";
-"korekore %@ is available" = "korekore %@ 可以更新了";
 "last 20 exchanges · newest at the bottom · stays on this Mac" = "最近 20 轮 · 最新的在最下面 · 只保存在这台 Mac 上";
 "last 20 exchanges · newest at the bottom · stays on this computer" = "最近 20 轮 · 最新的在最下面 · 只保存在这台电脑上";
 "last event %@" = "上次事件 %@";
 "macOS only answers while %@ is running." = "只有 %@ 在运行时，macOS 才会回答。";
-"· %@ available" = "· %@ 可更新";
-"· up to date" = "· 已是最新";
 
 /* korekore onboarding and alerts (2c) */
 "I found these on this Mac. I'll show you each change before writing it." = "我在这台 Mac 上找到了这些。每次改动写入前都会先给你看。";
@@ -372,7 +336,6 @@
 "a file of korekore's own" = "korekore 自己的一个文件";
 "korekore can remove it and take over, so the two don't fight over the box." = "korekore 可以移除它并接管，免得两个抢同一个盒子。";
 "korekore lives in the tray now, or in Omarchy's bar. Kore kore when someone needs you." = "korekore 现在在托盘里，或者在 Omarchy 的状态栏里。有人需要你时，Kore kore！";
-" for this box (%@)." = "，适用于这个盒子（%@）。";
 "%@ · %lld events" = "%@ · %lld 个事件";
 "All set. Yatta!" = "都好了。Yatta！";
 "Already have a VibeBuddy? Same box, new name. Everything you set up carries over." = "已经有 VibeBuddy 了？同一个盒子，换了新名字。你设置过的一切都保留。";
@@ -389,7 +352,6 @@
 "Keep it plugged in" = "别拔线";
 "Let the box go wireless?" = "让盒子用上无线？";
 "Looking for networks…" = "正在找网络…";
-"Newer firmware is available" = "有更新的固件";
 "Not this one" = "不是这个";
 "On Wi-Fi, this Mac reaches the box without the cable. Keep the cable in for this step." = "连上 Wi-Fi 后，这台 Mac 不插线也能连到盒子。这一步先别拔线。";
 "On Wi-Fi, this computer reaches the box without the cable. Keep the cable in for this step." = "连上 Wi-Fi 后，这台电脑不插线也能连到盒子。这一步先别拔线。";
@@ -407,8 +369,6 @@
 "The original robot" = "最初的机器人";
 "This box runs other firmware. Put korekore on it? Its current firmware will be replaced." = "这个盒子运行的是其他固件。要装上 korekore 吗？它现在的固件会被替换。";
 "Unplug it, then plug in your box. If several devices are plugged in, korekore asks which one is yours." = "拔掉它，再插上你的盒子。如果插着好几个设备，korekore 会问你哪个是你的。";
-"Update it from Settings › Device." = "到“设置 › 设备”里更新。";
-"Update now" = "现在更新";
 "What does it send?" = "它会发送什么？";
 "Who lives in your box?" = "谁住在你的盒子里？";
 "Who should I watch?" = "我该看着谁？";
@@ -420,44 +380,20 @@
 "the box blinks yellow" = "盒子闪黄光";
 "the character" = "角色";
 "waiting for the box" = "等待盒子";
-/* Account (ADR-0018) */
-"Account" = "账户";
-"Sign in" = "登录";
-"Signing in opens your browser. Voice commands need an account." = "登录会打开浏览器。语音指令需要登录账户。";
-"Waiting for the browser…" = "正在等浏览器完成登录…";
-"Signing in isn't available in this version of VibeBuddy." = "这个版本的 VibeBuddy 还不能登录。";
-"Signed in with GitHub as %@" = "已用 GitHub 账号 %@ 登录";
-"Signed in with GitHub (user %lld)" = "已用 GitHub 登录（用户 %lld）";
-"Signed in as %@" = "已用 %@ 登录";
-"Sign out" = "退出登录";
-"Delete account…" = "删除账户…";
-"Delete your VibeBuddy account?" = "删除你的 VibeBuddy 账户？";
-"This deletes the account and everything kept about it, and signs out on every computer. It can't be undone." = "这会删除账户和与它相关的所有数据，并在所有电脑上退出登录。删除后无法恢复。";
-"Delete account" = "删除账户";
-"Couldn't sign in: %@" = "登录失败：%@";
-"Couldn't sign out: %@" = "退出登录失败：%@";
-"Couldn't delete the account: %@" = "删除账户失败：%@";
-"Voice today: %lld of %lld" = "今天的语音：已用 %lld / %lld 条";
-"Today's voice is used up. It comes back at %@." = "今天的语音已用完，%@ 恢复。";
-"Voice is paused for everyone today. It comes back at %@." = "今天的语音已全局暂停，%@ 恢复。";
-"Plan" = "方案";
-"Free" = "免费版";
-"Paid plan" = "付费版";
-"Sign in to use the Relay." = "登录后才能使用中转。";
-"The Relay needs the Paid plan." = "中转需要付费版。";
-"The Relay can't check the account right now. VibeBuddy tries again later." = "中转暂时无法确认账户，VibeBuddy 稍后会再试。";
-"This month: %@ of %@ characters · renews %@" = "本月：已用 %@ / %@ 字符 · %@续期";
 
 /* Own keys for spoken replies (ADR-0020) */
+"Spoken replies and making a Character need your own ElevenLabs key, billed to your account there." = "语音回复和创建角色都需要你自己的 ElevenLabs 密钥，费用记在你在那里的账户上。";
+"ElevenLabs refused your own key. Set another one on the General tab, then resume." = "ElevenLabs 拒绝了你自己的密钥。在「通用」页换一个，然后继续创建。";
+"Made with your own ElevenLabs key, billed to your account there." = "用你自己的 ElevenLabs 密钥创建，费用记在你在那里的账户上。";
+"Set your own ElevenLabs key on the General tab first." = "请先在「通用」页填上自己的 ElevenLabs 密钥。";
+"Bring your own drawings, pick a voice and say what it says. A character's own voice with its lines as they are is free: they are already made. Any other voice, or lines you change, VibeBuddy makes in that voice, which needs your own ElevenLabs key." = "换上你自己画的形象，挑一个声音，再定它说什么。用某个角色自己的声音、台词不改，就是免费的：这些已经做好了。换别的声音或改了台词，VibeBuddy 会用那个声音重新做每句台词，这需要你自己的 ElevenLabs 密钥。";
+"A voice you cloned or designed in your own ElevenLabs account. Paste its ID: VibeBuddy tries it with your own key by saying the first line, and keeps it for next time." = "你在自己的 ElevenLabs 账号里克隆或设计的声音。粘贴它的 ID：VibeBuddy 会用你自己的 key 说第一句台词来试听，并记住它供下次使用。";
 "Your own keys" = "自己的密钥";
-"With your own key, spoken replies in that provider's voices go straight to it, billed to your account there, and never through VibeBuddy." = "填了自己的密钥后，用这家服务商声音的语音回复会直接由它合成，费用记在你在那里的账户上，不经过 VibeBuddy。";
-"Volcano Engine" = "火山引擎";
 "Your own key" = "自己的密钥";
 "Set" = "已设置";
 "Clear" = "清除";
 "Get a key" = "获取密钥";
 "ElevenLabs refused your own key. Replies in its voices stay silent until you set another one." = "ElevenLabs 拒绝了你自己的密钥。换一个密钥之前，用它的声音的回复不会出声。";
-"Volcano Engine refused your own key. Replies in its voices stay silent until you set another one." = "火山引擎拒绝了你自己的密钥。换一个密钥之前，用它的声音的回复不会出声。";
 "Couldn't save your own key: %@" = "保存自己的密钥失败：%@";
 
 /* Making a Character (ADR-0020) */
@@ -479,16 +415,6 @@
 "Made from %@ · voice: %@" = "基于%@ · 声音：%@";
 "Not finished · made from %@ · voice: %@" = "未完成 · 基于%@ · 声音：%@";
 "“%@” isn't finished yet." = "「%@」还没创建完。";
-"the voice's provider" = "这个声音的服务商";
-"Made with your own key for %@, billed to your account there." = "用你自己的 %@ 密钥创建，费用记在你在那里的账户上。";
-"Without your own key for %@, making a Character with VibeBuddy's voices needs the Paid plan." = "没有自己的 %@ 密钥时，用 VibeBuddy 的声音创建角色需要付费版。";
-"Sign in on the Account tab for the Paid plan, or set your own key for %@ there." = "请在「账户」页登录以使用付费版，或在那里填上自己的 %@ 密钥。";
-"Set your own key for %@ on the Account tab first." = "请先在「账户」页填上自己的 %@ 密钥。";
-"Making a Character with VibeBuddy's voices needs the Paid plan, or your own key for %@." = "用 VibeBuddy 的声音创建角色需要付费版，或者自己的 %@ 密钥。";
-"This month's Characters on the Paid plan are used up. The lines made so far are kept: resume next month, or with your own key for %@." = "付费版本月的创建角色额度已用完。已做好的台词会保留：下个月再继续创建，或填上自己的 %@ 密钥后继续。";
-"VibeBuddy's voices are paused for today. The lines made so far are kept: resume tomorrow." = "VibeBuddy 的声音今天暂停使用。已做好的台词会保留：明天再继续创建。";
-"Sign in on the Account tab, or set your own key for %@ there, then resume." = "请在「账户」页登录，或在那里填上自己的 %@ 密钥，然后继续创建。";
-"%@ refused your own key. Set another one on the Account tab, then resume." = "%@ 拒绝了你自己的密钥。在「账户」页换一个，然后继续创建。";
 "Making the Character stopped unexpectedly. Resume to try again." = "创建角色意外中断了。点「继续创建」再试一次。";
 "Making the Character failed: %@" = "创建角色失败：%@";
 "Give the Character a name of up to 64 characters." = "给角色起个名字，最多 64 个字。";
@@ -523,7 +449,6 @@
 "Changing the box screens was rejected (%lld)" = "更换盒子界面未被接受（%lld）";
 "Make your own" = "做一个自己的";
 "Your drawings, your lines, a voice you pick" = "你的画、你的台词、你挑的声音";
-"Bring your own drawings, pick a voice and say what it says. A character's own voice with its lines as they are is free: they are already made. Any other voice, or lines you change, VibeBuddy makes in that voice, which needs the Paid plan or your own key." = "换上你自己画的形象，挑一个声音，再定它说什么。用某个角色自己的声音、台词不改，就是免费的：这些已经做好了。换别的声音或改了台词，VibeBuddy 会用那个声音重新做每句台词，这需要付费版或你自己的 key。";
 "Lines" = "台词";
 "Lines from" = "台词取自";
 "Free · already made" = "免费 · 已做好";
@@ -534,9 +459,7 @@
 
 /* A voice of the user's own, in making a Character */
 "Your own voice…" = "你自己的声音…";
-"A voice you cloned or designed in your own ElevenLabs or Volcano Engine account. Paste its ID: VibeBuddy tries it with your own key by saying the first line, and keeps it for next time." = "你在自己的 ElevenLabs 或火山引擎账号里克隆或设计的声音。粘贴它的 ID：VibeBuddy 会用你自己的 key 说第一句台词来试听，并记住它供下次使用。";
 "Voice ID" = "Voice ID";
-"Speaker ID" = "音色 ID";
 "Try" = "试听";
 "Trying…" = "试听中…";
 "Yours" = "你的";
@@ -549,4 +472,3 @@
 "%@ · stock" = "%@ · 自带";
 "The box is on its UART bridge, and its firmware can't carry voice there. Update the firmware, or plug the cable into the box's native USB port." = "盒子接在 UART 桥上，它现在的固件没法在这条线上传语音。更新固件，或把线改插到盒子的原生 USB 口。";
 "The box is on its UART bridge, which didn't hold the speed voice needs. Plug the cable into the box's native USB port, or plug it in again to try once more." = "盒子接在 UART 桥上，这条线没跑到语音需要的速度。把线改插到盒子的原生 USB 口，或重新插一次再试。";
-"Voice needs this computer signed in to VibeBuddy." = "语音要先在这台电脑上登录 VibeBuddy。";

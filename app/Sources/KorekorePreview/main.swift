@@ -37,7 +37,7 @@ let asking = picture([
 let quiet = picture([])
 let unlinked = picture([], connected: false)
 let versions = KorekoreVersions(app: "0.5.0", firmware: "0.5.0")
-let noActions = KorekoreMenuActions(settings: {}, checkForUpdates: {}, reportProblem: {}, quit: {}, restartDaemon: {})
+let noActions = KorekoreMenuActions(settings: {}, reportProblem: {}, quit: {}, restartDaemon: {})
 
 @MainActor func save<V: View>(_ name: String, _ view: V) {
     let renderer = ImageRenderer(content: view.environment(\.colorScheme, .light))

@@ -15,7 +15,7 @@ The working and idle states play no voice, to avoid constantly interrupting the 
 
 The current voice is Jessica, one of ElevenLabs' own premade voices (`cgSgspJ2msm6clMCkdW9`, the `eleven_multilingual_v2` model, American female, switched on 2026-09-29), synthesized by `tools/elevenlabs-tts.py`. The project is going open source in English, so what you hear out of the box should be English; Chinese users can pick a Chinese voice in the app and write it into the `voices` partition. Checked-in audio must come from an ElevenLabs paid plan; the free plan doesn't include a commercial license.
 
-The previous built-in voice was Wanwan Xiaohe (湾湾小何) from Volcano Engine's Doubao Speech (2026-09-16 to 2026-09-29); before that, the macOS system voice `Tingting` and Microsoft edge-tts's `zh-TW-HsiaoYuNeural` were used. Wanwan Xiaohe is still archived as an optional voice in `voices/wanwanxiaohe/`. API keys all live in the user's own environment and stay out of the repo. Synthesis happens only when generating the assets; the firmware doesn't depend on any online service at runtime. The finished output for every candidate voice is archived in `voices/` at the repo root; see the README there.
+API keys all live in the user's own environment and stay out of the repo. Synthesis happens only when generating the assets. The firmware does not depend on any online service at runtime. The finished output is archived in `voices/` at the repo root. See the README there.
 
 ## Generating
 

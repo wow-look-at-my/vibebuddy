@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the Linux release package, VibeBuddy-<label>-linux-x86_64.tar.gz: the three binaries, the voice packs,
 # the systemd unit, launcher entry and icon, the licenses, and install.sh, which installs from these files without
-# building or downloading anything. Firmware isn't in it: it is released on its own and the daemon downloads it.
+# building or downloading anything. Firmware isn't in it: it is released on its own and flashed from a file.
 #
 # Usage: packaging/linux/make-tarball.sh <label>   (e.g. v0.3.0)
 set -euo pipefail

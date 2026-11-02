@@ -30,16 +30,14 @@ pub struct DeviceState {
     pub bridge_baud: Option<u32>,
     /// The firmware answered the request to move the bridge to a faster rate; false for firmware before it.
     pub bridge_switches: bool,
-    /// Linked over the local network or the Relay rather than the cable; `port` is then the box's address.
+    /// Linked over the local network rather than the cable; `port` is then the box's address.
     pub network: bool,
-    /// Linked through the Relay; `port` is then the Relay's address.
-    pub relay: bool,
     /// The box is linked to another computer, so this one can only take it over (ADR-0011).
     pub busy: Option<Busy>,
     /// duty / pomodoro / leisure
     pub mode: Option<String>,
     pub firmware_build: Option<String>,
-    /// The firmware version, such as `0.2.2`, which orders releases; firmware older than ADR-0010 reports none.
+    /// The firmware version, such as `0.2.2`, which orders releases; older firmware reports none.
     pub firmware_version: Option<String>,
     /// The firmware takes firmware images over any link (`TRANSFER 1`, ADR-0016), so updating needs no cable.
     pub transfer: bool,
@@ -54,7 +52,7 @@ pub struct DeviceState {
     pub screens: Option<String>,
     /// The connected port's USB serial number, which tells this device from another ESP32-S3.
     pub usb_serial: Option<String>,
-    /// The box's public key, its id on the Relay (ADR-0012); None for firmware that can't pair.
+    /// The box's public key; None for firmware that can't pair.
     pub box_key: Option<String>,
     /// The box has confirmed it is paired with this computer.
     pub paired: bool,
@@ -69,13 +67,6 @@ pub struct DeviceState {
     /// Why the box couldn't join it, from its last `WIFI FAILED <why>` (see [`wifi_failure`]); None once it joins,
     /// the network changes or the user joins again.
     pub wifi_error: Option<String>,
-    /// The Relay this computer uses, `wss://host`; None without a key. Set by the daemon, not the box.
-    pub relay_server: Option<String>,
-    /// Why the Relay won't carry this computer's link (ADR-0020): `signed_out`, `plan`, or `unavailable` (it
-    /// couldn't check the plan; tried again later). Set by the daemon from [`crate::relay::RelayConfig::refused`].
-    pub relay_refused: Option<String>,
-    /// The Relay the box uses, as it last said (`RELAY URL`); it follows the computer on the cable.
-    pub box_relay: Option<String>,
     /// The networks the box heard on its last scan, strongest first, one entry per name.
     pub wifi_seen: Vec<SeenNetwork>,
     /// Connected, but running other firmware (a factory unit, or Muse on a box that runs it): it's there, not
@@ -134,7 +125,6 @@ impl DeviceState {
                 // 2026-10-06 a leftover voice made another product look like the box, and it nearly got flashed.
                 self.usb_serial = usb_serial.clone();
                 self.network = false;
-                self.relay = false;
                 self.busy = None;
                 self.unsupported_board = None;
                 self.candidates.clear();
@@ -154,7 +144,6 @@ impl DeviceState {
                 self.wifi_address = None;
                 self.wifi_error = None;
                 self.wifi_seen.clear();
-                self.box_relay = None;
             }
             DeviceMessage::ConnectedNetwork { address } => {
                 self.apply(&DeviceMessage::Connected {
@@ -167,15 +156,6 @@ impl DeviceState {
                 if let Ok(socket) = address.parse::<std::net::SocketAddr>() {
                     self.wifi_address = Some(socket.ip().to_string());
                 }
-            }
-            DeviceMessage::ConnectedRelay { url } => {
-                self.apply(&DeviceMessage::Connected {
-                    port: url.clone(),
-                    bridge: false,
-                    usb_serial: None,
-                });
-                self.network = true;
-                self.relay = true;
             }
             DeviceMessage::BridgeRate { baud, switches } => {
                 self.bridge_baud = Some(*baud);
@@ -206,14 +186,12 @@ impl DeviceState {
                 self.wifi_address = None;
                 self.wifi_error = None;
                 self.wifi_seen.clear();
-                self.box_relay = None;
             }
             DeviceMessage::Disconnected => {
                 self.connected = false;
                 self.port = None;
                 self.bridge_baud = None;
                 self.network = false;
-                self.relay = false;
                 self.foreign_firmware = false;
             }
             DeviceMessage::Line(line) => {
@@ -249,8 +227,6 @@ impl DeviceState {
                     self.box_key = Some(key.to_owned());
                 } else if line.starts_with("PAIRED ") {
                     self.paired = true;
-                } else if let Some(url) = line.strip_prefix("RELAY URL ") {
-                    self.box_relay = Some(url.trim().to_owned());
                 } else if let Some(network) = line.strip_prefix("WIFI NETWORK ") {
                     // Another network: the address and any failure were the old one's. The same name comes again
                     // with every hello and changes nothing.
@@ -407,12 +383,9 @@ pub struct Status {
     pub hooks: HooksSeen,
     pub operation: Option<Operation>,
     pub config: Config,
-    pub updates: crate::updates::UpdateStatus,
-    /// The person's VibeBuddy account (ADR-0018).
-    pub account: crate::account::AccountStatus,
-    /// Which of the user's own keys for spoken replies are set, and refused (ADR-0020); never a key.
+    /// Which of the user's own keys for spoken replies are set, and refused; never a key.
     pub voice_keys: crate::voice_keys::VoiceKeysStatus,
-    /// The Character being made, or the last one made, since the daemon started (ADR-0020).
+    /// The Character being made, or the last one made, since the daemon started.
     pub making: Option<crate::making::MakingStatus>,
 }
 
@@ -563,7 +536,6 @@ mod tests {
                 bridge_baud: None,
                 bridge_switches: false,
                 network: false,
-                relay: false,
                 busy: None,
                 mode: Some("pomodoro".to_owned()),
                 firmware_build: Some("21a8360-dirty 2026-09-16 10:23".to_owned()),
@@ -581,9 +553,6 @@ mod tests {
                 wifi_network: None,
                 wifi_address: None,
                 wifi_error: None,
-                relay_server: None,
-                relay_refused: None,
-                box_relay: None,
                 wifi_seen: Vec::new(),
                 foreign_firmware: false,
                 unsupported_board: None,
@@ -736,22 +705,6 @@ mod tests {
     }
 
     #[test]
-    fn the_box_says_which_relay_it_uses() {
-        let mut state = DeviceState::default();
-        state.apply(&line("RELAY URL wss://relay-staging.korekore.ai"));
-        assert_eq!(
-            state.box_relay.as_deref(),
-            Some("wss://relay-staging.korekore.ai")
-        );
-        state.apply(&DeviceMessage::Connected {
-            port: "/dev/cu.x".to_owned(),
-            bridge: false,
-            usb_serial: None,
-        });
-        assert_eq!(state.box_relay, None, "a box that comes back says it again");
-    }
-
-    #[test]
     fn the_wifi_network_follows_the_box() {
         let mut state = DeviceState::default();
         state.apply(&line("WIFI NETWORK Home 5G"));
@@ -775,13 +728,13 @@ mod tests {
             state.busy.as_ref().map(|busy| busy.owner.as_str()),
             Some("omarchy")
         );
-        state.apply(&DeviceMessage::ConnectedRelay {
-            url: "wss://relay.korekore.ai".to_owned(),
+        state.apply(&DeviceMessage::ConnectedNetwork {
+            address: "192.168.1.23:7340".to_owned(),
         });
-        assert!(state.busy.is_none() && state.relay && state.network);
+        assert!(state.busy.is_none() && state.network);
         state.apply(&DeviceMessage::Disconnected);
         assert!(
-            !state.relay && !state.network,
+            !state.network,
             "a dropped link isn't through anything"
         );
     }

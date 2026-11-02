@@ -1,6 +1,4 @@
-# Firmware releases on their own (ADR-0010). A firmware-vX.Y.Z tag builds the three images, publishes
-# VibeBuddy-firmware-vX.Y.Z.zip as its own GitHub Release and rebuilds the update manifest, which is how installed Apps
-# find it. Commits to master that touch the firmware only build it, keeping the zip as a 7-day artifact for self-testing.
+# A firmware-vX.Y.Z tag builds the images and publishes VibeBuddy-firmware-vX.Y.Z.zip as its own GitHub Release. Commits to master keep the zip as a 7-day artifact.
 name: release-firmware
 
 on:
@@ -64,8 +62,7 @@ jobs:
         run: tools/build-firmware.sh
       - name: Package
         run: |
-          # The zip is what the daemon downloads and what "Flash from file…" takes: the three images, the build ID
-          # matching the box's DISPLAY READY BUILD line, the version, and the firmware's own license notices.
+          # The zip is what "Flash from file" takes: the three images, the build ID, the version and the firmware's license notices.
           stage="${RUNNER_TEMP}/firmware"
           mkdir -p "${stage}"
           for file in bootloader.bin partition-table.bin vibebuddy-fw.bin build.txt version.txt; do
@@ -85,7 +82,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
-      # Only for docs/releases/<tag>.md, the hand-written notes with the oldest App this firmware runs with.
+      # Only for docs/releases/<tag>.md, the hand-written notes.
       - uses: actions/checkout@v4
         with:
           sparse-checkout: docs/releases
@@ -98,16 +95,13 @@ jobs:
         run: |
           tag="${GITHUB_REF_NAME}"
           summary="docs/releases/${tag}.md"
-          [[ -f "${summary}" ]] || { echo "missing ${summary}: say what this firmware does and its min_app" >&2; exit 1; }
-          # The front matter is for the update manifest, not for people reading the release page.
-          head -n 1 "${summary}" | grep -qx -- '---' && sed -n '2,/^---$/p' "${summary}" | grep -q '^min_app:' \
-            || { echo "${summary} must start with front matter naming min_app" >&2; exit 1; }
-          awk 'NR == 1 && $0 == "---" { skip = 1; next } skip && $0 == "---" { skip = 0; next } !skip' "${summary}" > notes.md
+          [[ -f "${summary}" ]] || { echo "missing ${summary}: say what this firmware does" >&2; exit 1; }
+          cp "${summary}" notes.md
           cat >> notes.md <<NOTES
 
           ## Download
 
-          VibeBuddy downloads this firmware by itself and offers it on the Device tab. To flash it by hand, pick \`VibeBuddy-firmware-${{ needs.build.outputs.label }}.zip\` with Settings → Device → Flash from file….
+          To flash it, pick \`VibeBuddy-firmware-${{ needs.build.outputs.label }}.zip\` with Settings -> Device -> Flash from file.
           NOTES
           # Never "latest": the README's download links point at the latest release, which must stay the App's.
           gh release create "${tag}" --repo "${GITHUB_REPOSITORY}" \
@@ -115,10 +109,3 @@ jobs:
             --title "VibeBuddy firmware ${{ needs.build.outputs.label }}" \
             --notes-file notes.md \
             --latest=false
-
-  manifest:
-    if: false
-    # The new firmware goes into the update manifest, next to the latest App.
-    needs: publish
-    uses: ./.github/workflows/update-manifest.yml
-    secrets: inherit

@@ -79,7 +79,7 @@ final class KorekoreStatusItem {
     private func open() {
         guard let button = statusItem.button, let buttonWindow = button.window else { return }
         let close = { [weak self] (action: @escaping () -> Void) in { self?.close(); action() } }
-        let actions = KorekoreMenuActions(settings: close(actions.settings), checkForUpdates: close(actions.checkForUpdates),
+        let actions = KorekoreMenuActions(settings: close(actions.settings),
                                           reportProblem: close(actions.reportProblem), quit: actions.quit,
                                           restartDaemon: close(actions.restartDaemon))
         let hosting = NSHostingView(rootView: KorekorePanelRoot(model: model, actions: actions))

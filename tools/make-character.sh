@@ -2,10 +2,8 @@
 # Synthesize a Character's lines and build its Character pack (docs/characters.md).
 #
 # Reads characters/<id>/voice.env and characters/<id>/lines.tsv:
-# - voice.env sets ENGINE (volc or elevenlabs) and VOICE (the engine's voice id), and for a Doubao
-#   2.0 voice VOLC_RESOURCE_ID=seed-tts-2.0, and GENDER (female or male), which picks a stock voice for spoken
-#   replies when the voice service can't speak the Character's own. The API keys stay in your environment, never in the repo:
-#   VOLC_API_KEY or ELEVENLABS_API_KEY (a paid plan; the free one has no commercial license).
+# - voice.env sets ENGINE=elevenlabs, VOICE (the ElevenLabs voice id) and GENDER (female or male). The API key
+#   stays in your environment, never in the repo: ELEVENLABS_API_KEY (a paid plan; the free one has no commercial license).
 # - lines.tsv has one line per row: occasion<TAB>text. Blank rows and rows starting with # are skipped.
 #   A line with {address} is said with each form of address of the Character's LANGUAGE (voice.env)
 #   from characters/addresses.tsv: pack.bin has it said with none, and address/<form>.bin holds
@@ -19,8 +17,7 @@
 # -1 dBFS peak one by one. A line longer than 3 seconds is reported: every line has to be short
 # enough to catch from across the desk.
 #
-# Usage: VOLC_API_KEY=... tools/make-character.sh wanwanxiaohe
-#        ELEVENLABS_API_KEY=... tools/make-character.sh ada
+# Usage: ELEVENLABS_API_KEY=... tools/make-character.sh ada
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -29,14 +26,8 @@ dir="${repo_root}/characters/${id}"
 [[ -f "${dir}/voice.env" && -f "${dir}/lines.tsv" ]] || { echo "${dir} needs voice.env and lines.tsv" >&2; exit 2; }
 # shellcheck source=/dev/null
 source "${dir}/voice.env"
-case "${ENGINE:-}" in
-    volc | elevenlabs) ;;
-    *) echo "voice.env: ENGINE must be volc or elevenlabs" >&2; exit 2 ;;
-esac
+[[ "${ENGINE:-}" == elevenlabs ]] || { echo "voice.env: ENGINE must be elevenlabs" >&2; exit 2; }
 [[ -n "${VOICE:-}" ]] || { echo "voice.env: VOICE is not set" >&2; exit 2; }
-if [[ -n "${VOLC_RESOURCE_ID:-}" ]]; then
-    export VOLC_RESOURCE_ID
-fi
 
 audio="${dir}/audio"
 work="$(mktemp -d -t character)"
@@ -54,10 +45,7 @@ synth() {
     if [[ ! -f "${target}" ]]; then
         mkdir -p "${into}/${occasion}"
         source="${work}/${name}.wav"
-        case "${ENGINE}" in
-            volc) "${repo_root}/tools/volc-tts.py" "${VOICE}" "${text}" "${source}" ;;
-            elevenlabs) "${repo_root}/tools/elevenlabs-tts.py" "${VOICE}" "${text}" "${source}" ;;
-        esac
+        "${repo_root}/tools/elevenlabs-tts.py" "${VOICE}" "${text}" "${source}"
         # TTS pads both ends with silence; trimmed, the box speaks as soon as it is asked to.
         ffmpeg -loglevel error -y -i "${source}" -ar 16000 -ac 1 \
             -af "silenceremove=start_periods=1:start_threshold=-50dB,areverse,silenceremove=start_periods=1:start_threshold=-50dB,areverse" \

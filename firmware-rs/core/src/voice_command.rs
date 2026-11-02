@@ -62,12 +62,6 @@ pub enum Reason {
     NotHeard,
     Unavailable,
     Busy,
-    /// The computer isn't signed in to the VibeBuddy account.
-    SignedOut,
-    /// The account's daily allowance is used up.
-    Allowance,
-    /// Voice is paused for everyone today.
-    GlobalCap,
     /// The resident session on the computer isn't ready.
     NotReady,
     /// The box is on its UART bridge, which runs too slowly for the audio.
@@ -86,9 +80,6 @@ impl Reason {
             "not_heard" => Self::NotHeard,
             "unavailable" => Self::Unavailable,
             "busy" => Self::Busy,
-            "signed_out" => Self::SignedOut,
-            "allowance" => Self::Allowance,
-            "global_cap" => Self::GlobalCap,
             "not_ready" => Self::NotReady,
             "slow_link" => Self::SlowLink,
             _ => Self::Other,
@@ -100,9 +91,6 @@ impl Reason {
             Self::NotHeard => b"NOT HEARD",
             Self::Unavailable => b"UNAVAILABLE",
             Self::Busy => b"BUSY",
-            Self::SignedOut => b"SIGN IN",
-            Self::Allowance => b"VOICE USED UP",
-            Self::GlobalCap => b"VOICE PAUSED",
             Self::NotReady => b"NOT READY",
             Self::SlowLink => b"SLOW CABLE",
             Self::Other => b"VOICE ERROR",
@@ -116,10 +104,6 @@ impl Reason {
             Self::NotHeard => "Didn't catch that. Try again, a bit closer.",
             Self::Unavailable => "Voice isn't working on the computer right now.",
             Self::Busy => "Still on the last one.",
-            // The computer's message says when voice comes back; without one, the box can't.
-            Self::SignedOut => "Sign in on the computer to talk to me.",
-            Self::Allowance => "Today's voice is used up.",
-            Self::GlobalCap => "Voice is paused for everyone today.",
             Self::NotReady => "My session on the computer isn't ready.",
             Self::SlowLink => "This port is too slow for voice. Use my other USB port.",
             Self::Other => "Something went wrong.",
@@ -928,18 +912,7 @@ mod tests {
         assert!(!voice.is_open());
     }
 
-    const REASONS: [(&str, &[u8], &str); 5] = [
-        (
-            "signed_out",
-            b"SIGN IN",
-            "Sign in on the computer to talk to me.",
-        ),
-        ("allowance", b"VOICE USED UP", "Today's voice is used up."),
-        (
-            "global_cap",
-            b"VOICE PAUSED",
-            "Voice is paused for everyone today.",
-        ),
+    const REASONS: [(&str, &[u8], &str); 2] = [
         (
             "not_ready",
             b"NOT READY",
@@ -979,13 +952,13 @@ mod tests {
 
             // Before speaking, from `voice.available`, with the computer's message.
             let mut voice = VoiceCommand::new();
-            voice.offer(false, Some(name), Some("It comes back at 08:00."), 0);
+            voice.offer(false, Some(name), Some("Open the App."), 0);
             assert!(!voice.is_open(), "nothing shows until K0");
             assert!(voice.show_why_off(5000));
             let panel = voice.panel(5000).unwrap();
             assert_eq!(
                 (panel.title.as_slice(), panel_text(&panel).as_str()),
-                (title, "It comes back at 08:00."),
+                (title, "Open the App."),
                 "{name}"
             );
             assert!(
@@ -1001,12 +974,12 @@ mod tests {
     fn without_a_reason_there_is_nothing_to_show() {
         let mut voice = VoiceCommand::new();
         assert!(!voice.show_why_off(0), "never told");
-        voice.offer(false, Some("signed_out"), None, 0);
+        voice.offer(false, Some("not_ready"), None, 0);
         voice.set_available(false);
         assert!(!voice.show_why_off(0), "a new link forgets the reason");
         voice.offer(false, None, None, 0);
         assert!(!voice.show_why_off(0));
-        voice.offer(false, Some("allowance"), None, 0);
+        voice.offer(false, Some("slow_link"), None, 0);
         voice.offer(true, None, None, 0);
         assert!(!voice.show_why_off(0), "voice is on");
         assert!(!voice.is_open());
@@ -1018,29 +991,29 @@ mod tests {
         voice.set_available(true);
         voice.start(0);
         assert_eq!(
-            voice.offer(false, Some("signed_out"), None, 300),
+            voice.offer(false, Some("not_ready"), None, 300),
             Some(Out::Line("VOICE CANCEL 1\n".into()))
         );
-        assert_eq!(voice.panel(300).unwrap().title, b"SIGN IN");
+        assert_eq!(voice.panel(300).unwrap().title, b"NOT READY");
 
         // Waiting for the computer: the refusal may come just before the turn's own `voice.error`.
         voice.offer(true, None, None, 0);
         voice.start(1000);
         voice.release(3000);
         assert_eq!(
-            voice.offer(false, Some("allowance"), Some("Used up."), 4000),
+            voice.offer(false, Some("not_ready"), Some("Not ready."), 4000),
             None
         );
-        assert_eq!(voice.panel(4000).unwrap().title, b"VOICE USED UP");
-        assert!(!voice.event("voice.error", 2, Some("Used up."), Some("allowance"), 4100));
+        assert_eq!(voice.panel(4000).unwrap().title, b"NOT READY");
+        assert!(!voice.event("voice.error", 2, Some("Not ready."), Some("not_ready"), 4100));
 
         // And just after it: the error stays.
         voice.offer(true, None, None, 0);
         voice.start(10_000);
         voice.release(12_000);
-        voice.event("voice.error", 3, None, Some("global_cap"), 13_000);
-        voice.offer(false, Some("global_cap"), None, 13_100);
-        assert_eq!(voice.panel(13_100).unwrap().title, b"VOICE PAUSED");
+        voice.event("voice.error", 3, None, Some("slow_link"), 13_000);
+        voice.offer(false, Some("slow_link"), None, 13_100);
+        assert_eq!(voice.panel(13_100).unwrap().title, b"SLOW CABLE");
         assert!(
             !voice.expire(13_000 + ERROR_MS - 1),
             "its time runs from the error"

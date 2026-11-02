@@ -2,8 +2,7 @@ import KorekoreUI
 import SwiftUI
 import VibeBuddyCore
 
-/// The General page (canvas: "Mac · General"; the update lines and the unsupported-app banner on "App · alerts,
-/// notifications, banners").
+/// The General page (canvas: "Mac · General").
 struct KorekoreGeneralPage: View {
     @ObservedObject var model: AppModel
     @State private var language = AppLanguage.current
@@ -11,14 +10,7 @@ struct KorekoreGeneralPage: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                // Nothing stops working; the App just says, every time, that it's too old (ADR-0010).
-                if UpdateSwitch.compiledIn, model.updates?.unsupportedApp == true {
-                    KCard(fill: Theme.Colors.cream, outline: Theme.Colors.korePinkText) {
-                        KNote(String(localized: "This version of korekore is no longer supported. It keeps working; update to keep getting firmware for the box."),
-                              color: Theme.Colors.ink)
-                    }
-                }
-                KorekoreAccountCard(model: model)
+                KorekoreOwnKeysCard(model: model)
                 Text("This Mac").font(.rounded(15)).padding(.leading, 4)
                 KRows {
                     KRow(String(localized: "Language")) {
@@ -36,40 +28,6 @@ struct KorekoreGeneralPage: View {
                         KToggle(String(localized: "Tell me when the box disconnects or the daemon fails"),
                                 isOn: Binding(get: { model.status?.config.notifyLink ?? true }, set: { model.setNotifyLink($0) }))
                             .disabled(model.status == nil)
-                    }
-                    // ADR-0012: the Relay carries the box's messages through VibeBuddy's server, so it can be turned off.
-                    if AccountPlan.shown {
-                        KDivider()
-                        KRow(String(localized: "Reach the box through the Relay when it's away from this Mac")) {
-                            KToggle(String(localized: "Reach the box through the Relay when it's away from this Mac"),
-                                    isOn: Binding(get: { model.status?.config.relay ?? true }, set: { model.setRelay($0) }))
-                                .disabled(model.status == nil)
-                        }
-                    }
-                }
-                if UpdateSwitch.compiledIn {
-                    Text("Updates").font(.rounded(15)).padding(.leading, 4)
-                    KRows {
-                        KRow(String(localized: "Check for updates")) {
-                            KToggle(String(localized: "Check for updates"),
-                                    isOn: Binding(get: { model.status?.config.checkUpdates ?? model.updates?.enabled ?? false }, set: { model.setCheckUpdates($0) }))
-                                .disabled(model.status == nil)
-                        }
-                        KDivider()
-                        HStack(spacing: 12) {
-                            updateLine.frame(maxWidth: .infinity, alignment: .leading)
-                            if let app = model.updates?.app {
-                                if model.updater.available {
-                                    Button(String(localized: "Install \(app.version)…")) { model.installApp(app) }.kButton(.sun)
-                                } else {
-                                    Button(String(localized: "Download \(app.version)")) { model.installApp(app) }.kButton(.sun)
-                                }
-                            }
-                            Button(String(localized: "Check now")) { model.checkForUpdates() }.kButton()
-                                .disabled(!(model.updates?.enabled ?? false))
-                        }
-                        .padding(.vertical, 12)
-                        .padding(.horizontal, 16)
                     }
                 }
                 KCard(padding: EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16)) {
@@ -91,15 +49,6 @@ struct KorekoreGeneralPage: View {
             .padding(.bottom, Theme.Sticker.sm + 4)
         }
         .scrollIndicators(.never)
-    }
-
-    /// Where updates stand, in pixel type (canvas: "BANNERS AND UPDATE STATUS").
-    private var updateLine: KTag {
-        guard let updates = model.updates, updates.enabled else { return KTag(String(localized: "Update checks off")) }
-        if let error = updates.error { return KTag(String(localized: "Last check failed: \(error)"), color: Theme.Colors.korePinkText) }
-        if let app = updates.app { return KTag(String(localized: "korekore \(app.version) is available"), color: Theme.Colors.doneText) }
-        guard let checked = updates.lastCheck else { return KTag(String(localized: "Not checked yet")) }
-        return KTag(String(localized: "Up to date · checked \(checked.formatted(.relative(presentation: .named)))"), color: Theme.Colors.doneText)
     }
 
     /// Saves the choice, then offers to restart and, when the box speaks the other language, to switch its voice too.

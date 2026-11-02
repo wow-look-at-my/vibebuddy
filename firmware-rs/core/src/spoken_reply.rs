@@ -23,7 +23,6 @@ use alloc::vec::Vec;
 
 use nanomp3_core::{Decoder, MAX_SAMPLES_PER_FRAME};
 
-/// The speaker's rate; the voice service's MP3 is 24 kHz mono, 48 kbps.
 pub const SAMPLE_RATE: u32 = 24_000;
 /// 48 kbps is 6 bytes a millisecond.
 const BYTES_PER_MS: usize = 6;

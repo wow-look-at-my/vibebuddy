@@ -167,7 +167,6 @@ fn main() {
         &mut preview.screen,
         &scene!(preview),
         Some(LinkPath::Usb),
-        false,
     );
     if let Some(path) = arguments.get(2) {
         let look = Look::parse(&fs::read(path).expect("read look")).expect("a look");
@@ -214,7 +213,6 @@ fn main() {
         &mut preview.screen,
         &scene!(preview),
         Some(LinkPath::Lan),
-        false,
     );
     preview.frame(1);
     preview.shot("duty-ready-muted-lan");
@@ -224,19 +222,7 @@ fn main() {
     preview.display.set_link(
         &mut preview.screen,
         &scene!(preview),
-        Some(LinkPath::Relay),
-        true,
-    );
-    preview.show(State::Working, &working[..2], 2);
-    preview.pomodoro.toggle(preview.now);
-    preview.now += 6 * 60 * 1000;
-    preview.shot("duty-relay-staging-badge");
-    preview.pomodoro.stop();
-    preview.display.set_link(
-        &mut preview.screen,
-        &scene!(preview),
         Some(LinkPath::Usb),
-        false,
     );
 
     let many = [
@@ -336,7 +322,7 @@ fn main() {
     preview.show(State::Idle, &[], 0);
     preview
         .display
-        .set_link(&mut preview.screen, &scene!(preview), None, false);
+        .set_link(&mut preview.screen, &scene!(preview), None);
     preview
         .display
         .set_link_lost(&mut preview.screen, &scene!(preview), true);
@@ -350,7 +336,6 @@ fn main() {
         &mut preview.screen,
         &scene!(preview),
         Some(LinkPath::Usb),
-        false,
     );
 
     // Pomodoro: ready, focus three minutes in, paused, a break, and the end of focus.

@@ -1,5 +1,5 @@
-//! This computer's side of pairing (ADR-0012): an Ed25519 key that tells the box, the local network
-//! and the Relay which computer is talking, plus the name the box shows for it.
+//! This computer's side of pairing: an Ed25519 key that tells the box, the local network
+//! which computer is talking. Plus the name the box shows for it.
 
 use std::path::{Path, PathBuf};
 
@@ -48,7 +48,7 @@ impl Identity {
         self.key.to_scalar_bytes()
     }
 
-    /// The public key as the box and the Relay see it: 43 characters of base64url.
+    /// The public key as the box sees it: many characters of base64url.
     pub fn public_key(&self) -> String {
         URL_SAFE_NO_PAD.encode(self.key.verifying_key().to_bytes())
     }
