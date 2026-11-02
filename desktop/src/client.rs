@@ -111,7 +111,7 @@ pub async fn write_voice_pack(
 }
 
 /// Like the voice pack, flashing runs in the background; the daemon reads the three images from these paths.
-/// Flashes the three images in `directory`: the firmware the daemon downloaded from the update manifest.
+/// Flashes the images in `directory`: a firmware package the user picked.
 pub async fn flash_firmware(directory: std::path::PathBuf) -> Result<(), String> {
     let body = serde_json::json!({
         "bootloader": directory.join("bootloader.bin"),
@@ -119,13 +119,6 @@ pub async fn flash_firmware(directory: std::path::PathBuf) -> Result<(), String>
         "app": directory.join("vibebuddy-fw.bin"),
     });
     post("/v1/device/firmware", Some(body)).await
-}
-
-pub async fn check_for_updates() -> Result<(), String> {
-    if !crate::status::UPDATES_COMPILED_IN {
-        return Err("update checks are not built into this app".to_owned());
-    }
-    post("/v1/updates/check", None).await
 }
 
 /// The daemon remembers the choice and connects to that device on its next look around.
@@ -142,7 +135,7 @@ pub async fn unpair(key: String) -> Result<(), String> {
     post("/v1/device/unpair", Some(serde_json::json!({ "key": key }))).await
 }
 
-/// Takes the box from the computer that has it; the daemon's next try over the network or the Relay asks outright.
+/// Takes the box from the computer that has it; the daemon's next try over the network asks outright.
 pub async fn take_over() -> Result<(), String> {
     post("/v1/device/takeover", None).await
 }
@@ -219,8 +212,7 @@ pub struct ResidentInfo {
     /// Whether the daemon holds an Anthropic API key; the key itself never comes back.
     #[serde(default)]
     pub anthropic_key_set: Option<bool>,
-    /// Why the box can't take voice commands right now besides `problem`: `bridge_firmware`, `bridge_slow`,
-    /// `signed_out`, `allowance` or `global_cap`. None when nothing else holds voice back, and from an older daemon.
+    /// Why the box can't take voice commands right now besides `problem`: `bridge_firmware` or `bridge_slow`.
     #[serde(default)]
     pub voice_off: Option<String>,
 }
@@ -229,7 +221,6 @@ impl ResidentInfo {
     /// Why holding K0 does nothing right now, said for the user, as on the Mac; None when nothing but `problem` holds
     /// voice back, or for a reason this app doesn't know.
     pub fn voice_off_note(&self) -> Option<String> {
-        let back = || crate::status::voice_comes_back(chrono::Utc::now(), &chrono::Local);
         Some(match self.voice_off.as_deref()? {
             "bridge_firmware" => tr(
                 "The box is on its UART bridge, and its firmware can't carry voice there. Update the firmware, or plug the cable into the box's native USB port.",
@@ -238,12 +229,6 @@ impl ResidentInfo {
             "bridge_slow" => tr(
                 "The box is on its UART bridge, which didn't hold the speed voice needs. Plug the cable into the box's native USB port, or plug it in again to try once more.",
                 &[],
-            ),
-            "signed_out" => tr("Voice needs this computer signed in to VibeBuddy.", &[]),
-            "allowance" => tr("Today's voice is used up. It comes back at %@.", &[&back()]),
-            "global_cap" => tr(
-                "Voice is paused for everyone today. It comes back at %@.",
-                &[&back()],
             ),
             _ => return None,
         })
@@ -306,31 +291,12 @@ pub async fn set_anthropic_key(key: Option<String>) -> Result<ResidentInfo, Stri
     resident_setting(request).await
 }
 
-/// A provider of spoken replies the user can give their own key for (ADR-0020).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum KeyProvider {
-    ElevenLabs,
-    Volc,
-}
-
-impl KeyProvider {
-    pub const ALL: [Self; 2] = [Self::ElevenLabs, Self::Volc];
-
-    /// Its name in the daemon's API.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::ElevenLabs => "elevenlabs",
-            Self::Volc => "volc",
-        }
-    }
-}
-
-/// Sets the user's own key for a provider of spoken replies (None clears it). The daemon never sends it back; the
-/// status says it is set.
-pub async fn set_voice_key(provider: KeyProvider, key: Option<String>) -> Result<(), String> {
+/// Sets the user's own ElevenLabs key for spoken replies (None clears it). The daemon never sends it back; the status
+/// says it is set.
+pub async fn set_voice_key(key: Option<String>) -> Result<(), String> {
     let request = reqwest::Client::new()
         .put(format!("{BASE}/v1/voice-keys"))
-        .json(&serde_json::json!({provider.as_str(): key}));
+        .json(&serde_json::json!({"elevenlabs": key}));
     let response = request
         .timeout(Duration::from_secs(10))
         .send()
@@ -352,10 +318,9 @@ pub async fn character_voices() -> Result<Vec<crate::making::Voice>, String> {
     get_json("/v1/voices").await
 }
 
-/// Tries a voice in the user's own account with their own key, saying `text`; the daemon keeps it when the provider
-/// speaks it. Answers the voice and what it said, as a 16 kHz WAV.
+/// Tries a voice in the user's own ElevenLabs account with their own key, saying `text`; the daemon keeps it when
+/// ElevenLabs speaks it.
 pub async fn add_own_voice(
-    provider: String,
     voice: String,
     name: String,
     text: String,
@@ -366,8 +331,7 @@ pub async fn add_own_voice(
         audio: String,
     }
     let body =
-        serde_json::json!({"provider": provider, "voice": voice, "name": name, "text": text});
-    // Volcano Engine may be tried on four resources, each a whole line.
+        serde_json::json!({"provider": "elevenlabs", "voice": voice, "name": name, "text": text});
     let response = reqwest::Client::new()
         .post(format!("{BASE}/v1/voices"))
         .json(&body)
@@ -555,46 +519,6 @@ pub async fn resident_history(limit: usize) -> Result<Vec<Exchange>, HistoryErro
     Ok(history.exchanges)
 }
 
-/// Starts signing in to the VibeBuddy account: the daemon answers with the page to open in the browser, which comes
-/// back to the daemon, and the status stream then shows the account signed in.
-pub async fn sign_in() -> Result<String, String> {
-    #[derive(Deserialize)]
-    struct SignIn {
-        url: String,
-    }
-    let response = reqwest::Client::new()
-        .post(format!("{BASE}/v1/account/sign-in"))
-        .send()
-        .await
-        .map_err(|error| error.to_string())?;
-    let status = response.status();
-    let body: serde_json::Value = response.json().await.map_err(|error| error.to_string())?;
-    if !status.is_success() {
-        return Err(body["message"]
-            .as_str()
-            .map(str::to_owned)
-            .unwrap_or_else(|| format!("the daemon answered {status}")));
-    }
-    serde_json::from_value::<SignIn>(body)
-        .map(|sign_in| sign_in.url)
-        .map_err(|error| error.to_string())
-}
-
-/// Ends this computer's session only.
-/// Has the daemon read today's voice use from the service; it comes back in the status.
-pub async fn refresh_account() -> Result<(), String> {
-    post("/v1/account/refresh", None).await
-}
-
-pub async fn sign_out() -> Result<(), String> {
-    post("/v1/account/sign-out", None).await
-}
-
-/// Deletes the account and signs out everywhere; on failure the user stays signed in.
-pub async fn delete_account() -> Result<(), String> {
-    accepted(reqwest::Client::new().delete(format!("{BASE}/v1/account"))).await
-}
-
 async fn post(path: &str, body: Option<serde_json::Value>) -> Result<(), String> {
     let mut request = reqwest::Client::new().post(format!("{BASE}{path}"));
     if let Some(body) = body {
@@ -689,11 +613,6 @@ mod tests {
                 .voice_off_note()
                 .is_some_and(|note| note.contains("UART bridge")),
             "{bridge:?}"
-        );
-        assert!(
-            parse(r#"{"enabled":true,"voice_off":"allowance"}"#)
-                .voice_off_note()
-                .is_some_and(|note| note.contains("comes back at"))
         );
         assert_eq!(
             parse(r#"{"enabled":true,"voice_off":"something_new"}"#).voice_off_note(),

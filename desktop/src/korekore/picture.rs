@@ -18,7 +18,6 @@ pub enum Mood {
 pub enum Link {
     Usb,
     Lan,
-    Relay,
 }
 
 impl Link {
@@ -26,7 +25,6 @@ impl Link {
         match self {
             Link::Usb => "USB",
             Link::Lan => "LAN",
-            Link::Relay => "RELAY",
         }
     }
 }
@@ -62,9 +60,7 @@ impl BoxPicture {
             .unwrap_or_default();
         let device = status.map(|status| &status.device);
         let link = device.filter(|device| device.connected).map(|device| {
-            if device.relay {
-                Link::Relay
-            } else if device.network {
+            if device.network {
                 Link::Lan
             } else {
                 Link::Usb

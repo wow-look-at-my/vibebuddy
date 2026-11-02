@@ -1,5 +1,5 @@
-//! The account (ADR-0018), the user's own keys and making a Character (ADR-0020) in the korekore look. The design has
-//! no boards for them, so they use its cards, rows and pills; the state and messages are the current tabs' in main.rs.
+//! The user's own key (ADR-0020) and making a Character in the korekore look. The design has no boards for them, so
+//! they use its cards, rows and pills; the state and messages are the current tabs' in main.rs.
 
 use iced::widget::{Space, button, column, container, image, row, text};
 use iced::{Alignment, Border, Element, Length, Padding};
@@ -11,256 +11,109 @@ use super::controls::{
 use super::theme;
 use crate::i18n::tr;
 use crate::status;
-use crate::{Lender, MakeForm, Message, ROBOT, assets, client, making};
+use crate::{Lender, MakeForm, Message, ROBOT, assets, making};
 
 impl crate::App {
-    // MARK: Account
+    // MARK: Own keys
 
-    /// At the top of the General page: who is signed in, the plan and today's use, then the own keys.
-    pub(super) fn kk_account(&self) -> Element<'_, Message> {
-        let title = |label: String| {
-            container(text(label).font(bold()).size(15).color(theme::INK))
-                .padding(Padding::ZERO.left(4))
-        };
+    /// At the top of the General page: the user's own ElevenLabs key, once the daemon has said whether it has one.
+    pub(super) fn kk_own_keys_section(&self) -> Element<'_, Message> {
+        let title = container(
+            text(tr("Your own keys", &[]))
+                .font(bold())
+                .size(15)
+                .color(theme::INK),
+        )
+        .padding(Padding::ZERO.left(4));
         let keys = self
             .status
             .as_ref()
-            .and_then(|status| status.voice_keys.as_ref())
-            .map(|keys| {
-                column![title(tr("Your own keys", &[])), self.kk_own_keys(keys)].spacing(14)
-            });
-        column![title(tr("Account", &[])), rows(self.kk_account_rows())]
-            .push(keys)
-            .spacing(14)
-            .into()
-    }
-
-    fn kk_account_rows(&self) -> Vec<Element<'_, Message>> {
-        fn line(content: Element<'_, Message>) -> Element<'_, Message> {
-            container(content)
-                .padding(Padding::from([12, 16]))
-                .width(Length::Fill)
-                .into()
-        }
-        let Some(status) = &self.status else {
-            return vec![line(note(tr(
+            .and_then(|status| status.voice_keys.as_ref());
+        let body: Element<'_, Message> = match keys {
+            Some(keys) => self.kk_own_keys(keys),
+            None => rows([container(note(tr(
                 "The daemon isn't running. Restart it on the Advanced tab.",
                 &[],
-            )))];
-        };
-        let account = &status.account;
-        if !account.available {
-            return vec![line(note(tr(
-                "Signing in isn't available in this version of VibeBuddy.",
-                &[],
-            )))];
-        }
-        if !account.signed_in {
-            return vec![line(
-                row![
-                    container(note(tr(
-                        "Signing in opens your browser. Voice commands need an account.",
-                        &[]
-                    )))
-                    .width(Length::Fill)
-                ]
-                .push(
-                    self.signing_in
-                        .then(|| tag(tr("Waiting for the browser…", &[]), theme::WAIT_TEXT)),
-                )
-                .push(pill(tr("Sign in", &[]), Fill::Sun, Some(Message::SignIn)))
-                .spacing(12)
-                .align_y(Alignment::Center)
-                .into(),
-            )];
-        }
-        let who = match (&account.github_login, account.github_id) {
-            (Some(login), _) => tr("Signed in with GitHub as %@", &[login]),
-            (None, Some(id)) => tr("Signed in with GitHub (user %lld)", &[&id]),
-            (None, None) => tr(
-                "Signed in as %@",
-                &[&account.email.as_deref().unwrap_or("—")],
-            ),
-        };
-        let mut items = vec![line(
-            row![
-                text(who)
-                    .font(bold())
-                    .size(14)
-                    .color(theme::INK)
-                    .width(Length::Fill),
-                pill(tr("Sign out", &[]), Fill::Paper, Some(Message::SignOut)),
-                pill(
-                    tr("Delete account…", &[]),
-                    Fill::Paper,
-                    Some(Message::AskDeleteAccount(true))
-                ),
-            ]
-            .spacing(8)
-            .align_y(Alignment::Center)
+            )))
+            .padding(Padding::from([12, 16]))
+            .width(Length::Fill)
+            .into()])
             .into(),
-        )];
-        if self.confirm_delete_account {
-            items.push(divider());
-            items.push(line(
-                column![
-                    text(tr("Delete your VibeBuddy account?", &[])).font(bold()).size(16).color(theme::KORE_PINK_TEXT),
-                    note(tr("This deletes the account and everything kept about it, and signs out on every computer. It can't be undone.", &[])),
-                    row![
-                        Space::new().width(Length::Fill),
-                        pill(tr("Cancel", &[]), Fill::Paper, Some(Message::AskDeleteAccount(false))),
-                        pill(tr("Delete account", &[]), Fill::Pink, Some(Message::DeleteAccount)),
-                    ]
-                    .spacing(8),
-                ]
-                .spacing(10)
-                .into(),
-            ));
-        }
-        if status::Plan::SHOWN
-            && let Some(plan) = &account.plan
-        {
-            let (name, color) = if plan.paid() {
-                (tr("Paid plan", &[]), theme::DONE_TEXT)
-            } else {
-                (tr("Free", &[]), theme::INK)
-            };
-            items.push(divider());
-            items.push(line(
-                row![
-                    text(tr("Plan", &[]))
-                        .font(bold())
-                        .size(14)
-                        .color(theme::INK)
-                        .width(Length::Fill),
-                    tag(name, color)
-                ]
-                .align_y(Alignment::Center)
-                .into(),
-            ));
-            if let Some(month) = plan.month_line() {
-                items.push(divider());
-                items.push(line(tag(month, theme::MUTED_2)));
-            }
-        }
-        let today = match (account.refused.as_deref(), &account.today) {
-            (Some(refused), _) => {
-                let back = status::voice_comes_back(chrono::Utc::now(), &chrono::Local);
-                let line = if refused == "global_cap" {
-                    tr(
-                        "Voice is paused for everyone today. It comes back at %@.",
-                        &[&back],
-                    )
-                } else {
-                    tr("Today's voice is used up. It comes back at %@.", &[&back])
-                };
-                Some(tag(line, theme::KORE_PINK_TEXT))
-            }
-            (None, Some(usage)) => Some(tag(
-                tr(
-                    "Voice today: %lld of %lld",
-                    &[&usage.commands, &usage.commands_limit],
-                ),
-                theme::MUTED_2,
-            )),
-            (None, None) => None,
         };
-        if let Some(today) = today {
-            items.push(divider());
-            items.push(line(today));
-        }
-        items
+        column![title, body].spacing(14).into()
     }
 
-    /// Each key is typed once and never shown again: the daemon only says whether it has one.
+    /// The key is typed once and never shown again: the daemon only says whether it has one.
     fn kk_own_keys(&self, keys: &status::VoiceKeys) -> Element<'_, Message> {
-        let mut items: Vec<Element<'_, Message>> = vec![
-            container(note(tr("With your own key, spoken replies in that provider's voices go straight to it, billed to your account there, and never through VibeBuddy.", &[])))
-                .padding(Padding::from([12, 16]))
-                .into(),
-        ];
-        for provider in client::KeyProvider::ALL {
-            let (name, key, refused) = match provider {
-                client::KeyProvider::ElevenLabs => (
-                    "ElevenLabs".to_owned(),
-                    &keys.elevenlabs,
-                    tr(
-                        "ElevenLabs refused your own key. Replies in its voices stay silent until you set another one.",
-                        &[],
-                    ),
+        let key = &keys.elevenlabs;
+        let entry: Element<'_, Message> = if key.set {
+            row![
+                tag(tr("Set", &[]), theme::DONE_TEXT),
+                pill(tr("Clear", &[]), Fill::Paper, Some(Message::ClearOwnKey))
+            ]
+            .spacing(10)
+            .align_y(Alignment::Center)
+            .into()
+        } else {
+            let draft = &self.own_key_draft;
+            row![
+                field(&tr("Your own key", &[]), draft)
+                    .secure(true)
+                    .on_input(Message::OwnKeyDraft)
+                    .on_submit(Message::SaveOwnKey)
+                    .width(240),
+                pill(
+                    tr("Save", &[]),
+                    Fill::Sun,
+                    (!draft.trim().is_empty()).then_some(Message::SaveOwnKey)
                 ),
-                client::KeyProvider::Volc => (
-                    tr("Volcano Engine", &[]),
-                    &keys.volc,
-                    tr(
-                        "Volcano Engine refused your own key. Replies in its voices stay silent until you set another one.",
-                        &[],
-                    ),
-                ),
-            };
-            let entry: Element<'_, Message> = if key.set {
-                row![
-                    tag(tr("Set", &[]), theme::DONE_TEXT),
-                    pill(
-                        tr("Clear", &[]),
-                        Fill::Paper,
-                        Some(Message::ClearOwnKey(provider))
-                    )
-                ]
-                .spacing(10)
-                .align_y(Alignment::Center)
-                .into()
-            } else {
-                let draft = &self.own_key_drafts[provider as usize];
-                row![
-                    field(&tr("Your own key", &[]), draft)
-                        .secure(true)
-                        .on_input(move |draft| Message::OwnKeyDraft(provider, draft))
-                        .on_submit(Message::SaveOwnKey(provider))
-                        .width(240),
-                    pill(
-                        tr("Save", &[]),
-                        Fill::Sun,
-                        (!draft.trim().is_empty()).then_some(Message::SaveOwnKey(provider))
-                    ),
-                ]
-                .spacing(10)
-                .align_y(Alignment::Center)
-                .into()
-            };
-            let link = button(
-                text(tr("Get a key", &[]))
-                    .font(semibold())
-                    .size(12)
-                    .color(theme::KORE_PINK_TEXT),
-            )
-            .padding(0)
-            .style(|_, _| button::Style::default())
-            .on_press(Message::OpenOwnKeyPage(provider));
-            items.push(divider());
-            items.push(
-                container(
-                    column![
-                        row![
-                            text(name)
-                                .font(bold())
-                                .size(14)
-                                .color(theme::INK)
-                                .width(Length::Fill),
-                            entry,
-                            link
-                        ]
-                        .spacing(10)
-                        .align_y(Alignment::Center)
+            ]
+            .spacing(10)
+            .align_y(Alignment::Center)
+            .into()
+        };
+        let link = button(
+            text(tr("Get a key", &[]))
+                .font(semibold())
+                .size(12)
+                .color(theme::KORE_PINK_TEXT),
+        )
+        .padding(0)
+        .style(|_, _| button::Style::default())
+        .on_press(Message::OpenOwnKeyPage);
+        let refused = tr(
+            "ElevenLabs refused your own key. Replies in its voices stay silent until you set another one.",
+            &[],
+        );
+        rows([
+            container(note(tr(
+                "Spoken replies and making a Character need your own ElevenLabs key, billed to your account there.",
+                &[],
+            )))
+            .padding(Padding::from([12, 16]))
+            .into(),
+            divider(),
+            container(
+                column![
+                    row![
+                        text("ElevenLabs")
+                            .font(bold())
+                            .size(14)
+                            .color(theme::INK)
+                            .width(Length::Fill),
+                        entry,
+                        link
                     ]
-                    .push(key.refused.then(|| tag(refused, theme::KORE_PINK_TEXT)))
-                    .spacing(6),
-                )
-                .padding(Padding::from([11, 16]))
-                .into(),
-            );
-        }
-        rows(items).into()
+                    .spacing(10)
+                    .align_y(Alignment::Center)
+                ]
+                .push(key.refused.then(|| tag(refused, theme::KORE_PINK_TEXT)))
+                .spacing(6),
+            )
+            .padding(Padding::from([11, 16]))
+            .into(),
+        ])
+        .into()
     }
 
     // MARK: Making a Character
@@ -394,17 +247,7 @@ impl crate::App {
                 .into(),
             );
         }
-        let provider = made
-            .and_then(|made| {
-                self.character_voices
-                    .iter()
-                    .find(|voice| voice.id == made.voice)
-            })
-            .map_or_else(
-                || tr("the voice's provider", &[]),
-                making::Voice::provider_name,
-            );
-        if let Some(why) = job.explanation(&provider) {
+        if let Some(why) = job.explanation() {
             let resume = made.map(|made| {
                 pill(
                     tr("Resume", &[]),
@@ -474,17 +317,7 @@ impl crate::App {
             .status
             .as_ref()
             .and_then(|status| status.voice_keys.as_ref());
-        let account = self
-            .status
-            .as_ref()
-            .map(|status| status.account.clone())
-            .unwrap_or_default();
-        let readiness = form.voice.as_ref().map(|voice| {
-            (
-                making::Readiness::of(voice, keys, &account),
-                voice.provider_name(),
-            )
-        });
+        let readiness = form.voice.as_ref().map(|_| making::Readiness::of(keys));
         let job_running = self
             .status
             .as_ref()
@@ -506,9 +339,7 @@ impl crate::App {
         let can_make = !form.starting
             && !form.lines.is_empty()
             && problem.is_none()
-            && readiness
-                .as_ref()
-                .is_some_and(|(ready, _)| ready.can_start())
+            && readiness.is_some_and(making::Readiness::can_start)
             && !job_running;
         let base_face = self
             .voices
@@ -520,8 +351,8 @@ impl crate::App {
             .as_ref()
             .map(|(_, face)| face.clone())
             .or(base_face);
-        let readiness = readiness.filter(|_| !look_only).map(|(ready, provider)| {
-            text(ready.explanation(&provider))
+        let readiness = readiness.filter(|_| !look_only).map(|ready| {
+            text(ready.explanation())
                 .font(super::controls::regular())
                 .size(13)
                 .color(if ready.can_start() {
@@ -622,7 +453,6 @@ impl crate::App {
                     },
                     ..container::Style::default()
                 });
-            let provider = voice.provider_name();
             let made = (voice.id == form.base.id && form.lines == form.original)
                 .then(|| tag(tr("Free · already made", &[]), theme::DONE_TEXT));
             let yours = voice
@@ -642,7 +472,6 @@ impl crate::App {
                         .font(bold())
                         .size(14)
                         .color(theme::INK),
-                    tag(provider, theme::MUTED_2)
                 ]
                 .push(yours)
                 .push(made)
@@ -678,7 +507,7 @@ impl crate::App {
         voice_rows.push(line(self.kk_own_voice_form(form.own.as_ref())));
         let mut page = column![
             text(tr("Make your own", &[])).font(bold()).size(18).color(theme::INK),
-            note(tr("Bring your own drawings, pick a voice and say what it says. A character's own voice with its lines as they are is free: they are already made. Any other voice, or lines you change, VibeBuddy makes in that voice, which needs the Paid plan or your own key.", &[])),
+            note(tr("Bring your own drawings, pick a voice and say what it says. A character's own voice with its lines as they are is free: they are already made. Any other voice, or lines you change, VibeBuddy makes in that voice, which needs your own ElevenLabs key.", &[])),
             basics,
             heading(tr("Look", &[])),
             rows([line(look.into())]),
@@ -752,48 +581,35 @@ impl crate::App {
             )
             .into();
         };
-        let keys = self
+        let has_key = self
             .status
             .as_ref()
-            .and_then(|status| status.voice_keys.as_ref());
-        let has_key = keys.is_some_and(|keys| {
-            if own.provider == crate::OwnProvider::Volc {
-                keys.volc.set
-            } else {
-                keys.elevenlabs.set
-            }
-        });
-        let id_label = if own.provider == crate::OwnProvider::Volc {
-            tr("Speaker ID", &[])
-        } else {
-            tr("Voice ID", &[])
-        };
+            .and_then(|status| status.voice_keys.as_ref())
+            .is_some_and(|keys| keys.elevenlabs.set);
         let ready =
             has_key && !own.trying && !own.voice.trim().is_empty() && !own.name.trim().is_empty();
         column![
-            note(tr("A voice you cloned or designed in your own ElevenLabs or Volcano Engine account. Paste its ID: VibeBuddy tries it with your own key by saying the first line, and keeps it for next time.", &[])),
+            note(tr("A voice you cloned or designed in your own ElevenLabs account. Paste its ID: VibeBuddy tries it with your own key by saying the first line, and keeps it for next time.", &[])),
             row![
-                picker(vec![crate::OwnProvider::ElevenLabs, crate::OwnProvider::Volc], Some(own.provider), Message::MakeOwnProvider),
-                match (own.provider, &own.listed) {
-                    (crate::OwnProvider::ElevenLabs, Some(Ok(voices))) if !voices.is_empty() => {
+                match &own.listed {
+                    Some(Ok(voices)) if !voices.is_empty() => {
                         let picked = voices.iter().find(|voice| voice.voice == own.voice).cloned();
                         picker(voices.clone(), picked, Message::MakeOwnPick)
                     }
-                    _ => field(&id_label, &own.voice).on_input(Message::MakeOwnVoice).into(),
+                    _ => field(&tr("Voice ID", &[]), &own.voice).on_input(Message::MakeOwnVoice).into(),
                 },
                 field(&tr("Name", &[]), &own.name).on_input(Message::MakeOwnName).width(160),
             ]
             .spacing(8)
             .align_y(Alignment::Center),
         ]
-        .push(match (own.provider, &own.listed) {
-            (crate::OwnProvider::ElevenLabs, Some(Err(why))) if has_key => Some(
+        .push(match &own.listed {
+            Some(Err(why)) if has_key => Some(
                 text(tr("Couldn't list the voices of your ElevenLabs key, so paste a voice id: %@", &[why])).font(super::controls::regular()).size(13).color(theme::WAIT_TEXT),
             ),
             _ => None,
         })
-        .push((!has_key).then(|| text(making::Readiness::OwnKeyOnly.explanation(&own.provider.to_string())).font(super::controls::regular()).size(13).color(theme::KORE_PINK_TEXT)))
-        .push(own.problem.clone().map(|problem| tag(problem, theme::KORE_PINK_TEXT)))
+        .push((!has_key).then(|| text(making::Readiness::NeedsKey.explanation()).font(super::controls::regular()).size(13).color(theme::KORE_PINK_TEXT)))
         .push(
             row![
                 Space::new().width(Length::Fill),

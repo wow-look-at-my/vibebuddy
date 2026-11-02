@@ -695,7 +695,7 @@ impl crate::App {
         let key = choice
             .filter(|choice| *choice != client::BrainChoice::Codex)
             .map(|_| self.key_card());
-        // Anything else that keeps K0 from working: the UART bridge too slow, the account.
+        // Anything else that keeps K0 from working: the UART bridge too slow.
         let voice_off = self
             .resident_info
             .as_ref()
@@ -911,12 +911,6 @@ impl crate::App {
         let can_flash = online
             && (!device.is_some_and(|device| device.network)
                 || device.is_some_and(|device| device.transfer));
-        let updates = self.updates();
-        let offer = updates.and_then(|updates| updates.firmware.as_ref());
-        let downloaded = updates
-            .and_then(status::Updates::firmware_directory)
-            .is_some();
-        let outdated = updates.is_some_and(status::Updates::firmware_update_available);
         let finding = self.kk_finding();
 
         // The box's screen as last captured, at one point per pixel in the design's 352 × 264 frame: any other scale
@@ -981,7 +975,6 @@ impl crate::App {
                 tr("Several devices found", &[])
             }
             Some(device) if !device.connected => tr("Box not found", &[]),
-            Some(device) if device.relay => tr("Relay", &[]),
             Some(device) => {
                 let port = device
                     .port
@@ -999,34 +992,10 @@ impl crate::App {
             .and_then(|device| device.firmware_version.clone())
             .or_else(|| device.and_then(|device| device.firmware_label()))
             .unwrap_or_else(|| "—".to_owned());
-        let firmware: Element<'_, Message> = match offer {
-            Some(offer) if outdated => row![
-                text(format!("{version} "))
-                    .font(pixel(13.0).0)
-                    .size(pixel(13.0).1)
-                    .color(theme::INK),
-                tag(tr("· %@ available", &[&offer.version]), theme::WAIT_TEXT)
-            ]
-            .into(),
-            _ if online
-                && (offer.is_some()
-                    || updates.is_some_and(|updates| updates.last_check.is_some())) =>
-            {
-                row![
-                    text(format!("{version} "))
-                        .font(pixel(13.0).0)
-                        .size(pixel(13.0).1)
-                        .color(theme::INK),
-                    tag(tr("· up to date", &[]), theme::DONE_TEXT)
-                ]
-                .into()
-            }
-            _ => text(version)
-                .font(pixel(13.0).0)
-                .size(pixel(13.0).1)
-                .color(theme::INK)
-                .into(),
-        };
+        let firmware = text(version)
+            .font(pixel(13.0).0)
+            .size(pixel(13.0).1)
+            .color(theme::INK);
         // Which set of screens the box draws (ADR-0021), as the box last said; firmware that predates the choice says nothing.
         // Without a way to grey out the picker, the value shows as text while it can't be changed.
         let screens: Element<'_, Message> =
@@ -1069,34 +1038,7 @@ impl crate::App {
                 column![small(tr("Firmware", &[])), firmware].spacing(2),
                 screens,
             ]
-            .push(
-                device
-                    .filter(|device| !device.connected)
-                    .and_then(status::Device::relay_refusal)
-                    .map(|why| {
-                        text(why)
-                            .font(regular())
-                            .size(12)
-                            .color(theme::KORE_PINK_TEXT)
-                    }),
-            )
             .push(Space::new().height(Length::Fill))
-            .push(
-                (outdated && online && !can_flash)
-                    .then(|| note(tr("Plug in the cable to update the box's firmware.", &[]))),
-            )
-            .push((outdated && can_flash).then(|| {
-                pill_sized(
-                    tr(
-                        "Update to %@",
-                        &[&offer.map(|offer| offer.version.clone()).unwrap_or_default()],
-                    ),
-                    Fill::Pink,
-                    13.0,
-                    (!busy).then_some(Message::AskFirmwareUpdate(true)),
-                )
-                .width(Length::Fill)
-            }))
             .push(
                 pill_sized(
                     tr("Make the box blink", &[]),
@@ -1119,7 +1061,7 @@ impl crate::App {
             .height(Length::Fixed(290.0)),
         );
         let top = row![column![screen, screen_actions].spacing(8), the_box].spacing(14);
-        let firmware_state = self.firmware_state(can_flash, downloaded);
+        let firmware_state = self.firmware_state(can_flash);
         let networked = device.filter(|device| online && device.box_key.is_some()).map(|device| {
             column![]
                 .push(device.network.then(|| {
@@ -1143,10 +1085,6 @@ impl crate::App {
         let device = self.status.as_ref().map(|status| &status.device);
         let online = self.online();
         let busy = self.busy();
-        let updates = self.updates();
-        let downloaded = updates
-            .and_then(status::Updates::firmware_directory)
-            .is_some();
         let other_firmware = online
             && device
                 .is_some_and(|device| device.foreign_firmware && device.firmware_build.is_none());
@@ -1259,25 +1197,16 @@ impl crate::App {
             ));
         }
         if other_firmware {
-            let action: Element<'_, Message> = if downloaded {
-                column![
-                    note(tr(
-                        "Flash korekore to use it; its current firmware will be replaced.",
-                        &[]
-                    )),
-                    pill(
-                        tr("Flash korekore", &[]),
-                        Fill::Pink,
-                        (!busy).then_some(Message::AskFirmwareUpdate(true))
-                    ),
-                ]
-                .spacing(8)
-                .into()
-            } else {
-                self.firmware_unavailable()
-            };
             finding = finding.push(card(
-                column![heading(tr("The box isn't running korekore firmware", &[])), action, small(tr("If flashing can't start: hold K0 while plugging in, to enter download mode.", &[]))].spacing(8),
+                column![
+                    heading(tr("The box isn't running korekore firmware", &[])),
+                    note(tr(
+                        "This build doesn't download firmware. Use Flash from file… on the Device page.",
+                        &[],
+                    )),
+                    small(tr("If flashing can't start: hold K0 while plugging in, to enter download mode.", &[])),
+                ]
+                .spacing(8),
             ));
         }
         if let Some(board) = device
@@ -1299,138 +1228,46 @@ impl crate::App {
         finding
     }
 
-    fn firmware_unavailable(&self) -> Element<'_, Message> {
-        let updates = self.updates();
-        let offer = updates.and_then(|updates| updates.firmware.as_ref());
-        let reason: Element<'_, Message> = match updates {
-            _ if !status::UPDATES_COMPILED_IN => note(tr(
-                "This build doesn't download firmware. Use Flash from file… on the Device page.",
-                &[],
-            )),
-            Some(updates) if updates.enabled => match (&updates.error, offer) {
-                (Some(error), _) => tag(
-                    tr("Couldn't get the firmware: %@", &[error]),
-                    theme::KORE_PINK_TEXT,
-                ),
-                (None, Some(_)) => tag(tr("Downloading the firmware…", &[]), theme::MUTED_2),
-                (None, None) => tag(tr("Looking for firmware…", &[]), theme::MUTED_2),
-            },
-            _ => note(tr(
-                "Update checks are off, so korekore doesn't download firmware. Turn them on in General, or get it from Releases.",
-                &[],
-            )),
-        };
-        column![reason]
-            .push(updates.is_some_and(|updates| updates.enabled).then(|| {
-                pill(
-                    tr("Check again", &[]),
-                    Fill::Paper,
-                    Some(Message::CheckForUpdatesNow),
-                )
-            }))
-            .push(
-                status::UPDATES_COMPILED_IN
-                    .then(|| link(tr("Releases", &[]), Message::OpenReleases)),
-            )
-            .spacing(6)
-            .into()
-    }
-
     /// Flashing asks once more, inline (canvas: the confirmations, "inline panels on Linux").
     pub(super) fn confirm_panel(&self) -> Option<Element<'_, Message>> {
-        let device = self.status.as_ref().map(|status| &status.device);
-        let busy = self.busy();
-        let online = self.online();
-        let panel = |title: String,
-                     detail: String,
-                     action: String,
-                     flash: Option<Message>,
-                     cancel: Message,
-                     warn: bool|
-         -> Element<'_, Message> {
+        let package = self.file_firmware.as_ref()?;
+        let current = self
+            .status
+            .as_ref()
+            .and_then(|status| status.device.firmware_label())
+            .unwrap_or_else(|| tr("unknown", &[]));
+        Some(
             card_with(
                 column![
-                    text(title).font(bold()).size(16).color(if warn {
-                        theme::KORE_PINK_TEXT
-                    } else {
-                        theme::INK
-                    }),
-                    note(detail),
+                    text(tr("Flash this firmware?", &[]))
+                        .font(bold())
+                        .size(16)
+                        .color(theme::INK),
+                    note(tr(
+                        "Firmware package: %@\nBox now: %@\nThe box restarts once; its voice pack and today's stats are kept. Over the UART bridge this takes a few minutes.",
+                        &[&package.label(), &current],
+                    )),
                     row![
                         Space::new().width(Length::Fill),
-                        pill(tr("Cancel", &[]), Fill::Paper, Some(cancel)),
-                        pill(action, if warn { Fill::Pink } else { Fill::Sun }, flash)
+                        pill(tr("Cancel", &[]), Fill::Paper, Some(Message::FlashFile(false))),
+                        pill(
+                            tr("Flash", &[]),
+                            Fill::Sun,
+                            (self.online() && !self.busy()).then_some(Message::FlashFile(true))
+                        )
                     ]
                     .spacing(8),
                 ]
                 .spacing(10),
                 theme::CREAM,
-                if warn {
-                    theme::KORE_PINK_TEXT
-                } else {
-                    theme::INK
-                },
+                theme::INK,
                 theme::STROKE_BOLD,
             )
-            .into()
-        };
-        if let Some(package) = &self.file_firmware {
-            let current = device
-                .and_then(|device| device.firmware_label())
-                .unwrap_or_else(|| tr("unknown", &[]));
-            return Some(panel(
-                tr("Flash this firmware?", &[]),
-                tr(
-                    "Firmware package: %@\nBox now: %@\nThe box restarts once; its voice pack and today's stats are kept. Over the UART bridge this takes a few minutes.",
-                    &[&package.label(), &current],
-                ),
-                tr("Flash", &[]),
-                (online && !busy).then_some(Message::FlashFile(true)),
-                Message::FlashFile(false),
-                false,
-            ));
-        }
-        if !self.confirm_firmware {
-            return None;
-        }
-        let other = online
-            && device
-                .is_some_and(|device| device.foreign_firmware && device.firmware_build.is_none());
-        if other {
-            return Some(panel(
-                tr("Flash the box with korekore?", &[]),
-                tr(
-                    "The box's current firmware and data will be erased and can't be recovered. It restarts on its own when done; over the UART port this takes a few minutes.",
-                    &[],
-                ),
-                tr("Flash", &[]),
-                (!busy).then_some(Message::FlashFirmware),
-                Message::AskFirmwareUpdate(false),
-                true,
-            ));
-        }
-        let offer = self
-            .updates()
-            .and_then(|updates| updates.firmware.as_ref())?;
-        let restart = tr(
-            "The box restarts once; its voice pack and today's stats are kept. Over the UART bridge this takes a few minutes.",
-            &[],
-        );
-        let detail = match offer.notes(crate::i18n::is_chinese()) {
-            Some(notes) => format!("{notes}\n\n{restart}"),
-            None => restart,
-        };
-        Some(panel(
-            tr("Update the box firmware to %@?", &[&offer.version]),
-            detail,
-            tr("Update", &[]),
-            (!busy).then_some(Message::FlashFirmware),
-            Message::AskFirmwareUpdate(false),
-            false,
-        ))
+            .into(),
+        )
     }
 
-    fn firmware_state(&self, can_flash: bool, downloaded: bool) -> Option<Element<'_, Message>> {
+    fn firmware_state(&self, can_flash: bool) -> Option<Element<'_, Message>> {
         let device = self.status.as_ref().map(|status| &status.device);
         let operation = self
             .status
@@ -1441,7 +1278,7 @@ impl crate::App {
             pill(
                 label,
                 Fill::Paper,
-                (can_flash && downloaded).then_some(Message::FlashFirmware),
+                can_flash.then_some(Message::FlashFromFile),
             )
         };
         match operation.map(|operation| (operation, operation.state)) {
@@ -1496,11 +1333,7 @@ impl crate::App {
                 )
                 .into(),
             ),
-            None => {
-                let offer = self.updates().and_then(|updates| updates.firmware.as_ref());
-                let other = self.online() && device.is_some_and(|device| device.foreign_firmware && device.firmware_build.is_none());
-                (!other && offer.is_some_and(|offer| offer.newer_than_box) && !downloaded).then(|| card(self.firmware_unavailable()).into())
-            }
+            None => None,
         }
     }
 
@@ -1696,53 +1529,8 @@ impl crate::App {
             .status
             .as_ref()
             .is_none_or(|status| status.config.notify_link);
-        let relay = self
-            .status
-            .as_ref()
-            .is_none_or(|status| status.config.relay);
-        let updates = self.updates();
-        let enabled = updates.is_some_and(|updates| updates.enabled);
-        let check = self
-            .status
-            .as_ref()
-            .and_then(|status| status.config.check_updates)
-            .unwrap_or(enabled);
         let have_status = self.status.is_some();
-        let line = match updates {
-            Some(updates) if updates.enabled => {
-                match (&updates.error, &updates.app, &updates.last_check) {
-                    (Some(error), _, _) => {
-                        tag(tr("Last check failed: %@", &[error]), theme::KORE_PINK_TEXT)
-                    }
-                    (None, Some(app), _) => tag(
-                        tr("korekore %@ is available", &[&app.version]),
-                        theme::DONE_TEXT,
-                    ),
-                    (None, None, Some(checked)) => tag(
-                        tr("Up to date · checked %@", &[&short_time(checked)]),
-                        theme::DONE_TEXT,
-                    ),
-                    (None, None, None) => tag(tr("Not checked yet", &[]), theme::MUTED_2),
-                }
-            }
-            _ => tag(tr("Update checks off", &[]), theme::MUTED_2),
-        };
-        let unsupported = updates.filter(|updates| updates.unsupported_app).map(|_| {
-            card_with(
-                text(tr("This version of korekore is no longer supported. It keeps working; update to keep getting firmware for the box.", &[])).font(regular()).size(13).color(theme::INK),
-                theme::CREAM,
-                theme::KORE_PINK_TEXT,
-                theme::STROKE_BASE,
-            )
-        });
-        // No self-update here: a new release is installed by rerunning its install.sh, as the README says.
-        let upgrade = updates.and_then(|updates| updates.app.as_ref()).map(|_| {
-            note(tr(
-                "To upgrade, download the new release and run its install.sh again.",
-                &[],
-            ))
-        });
-        let mut settings = vec![
+        let settings = rows([
             setting(
                 tr("Language", &[]),
                 picker(
@@ -1762,39 +1550,6 @@ impl crate::App {
                 tr("Tell me when the box disconnects or the daemon fails", &[]),
                 switch(notify, have_status.then_some(Message::NotifyLink(!notify))),
             ),
-        ];
-        if status::Plan::SHOWN {
-            settings.push(setting(
-                tr(
-                    "Reach the box through the Relay when it's away from this computer",
-                    &[],
-                ),
-                switch(relay, have_status.then_some(Message::Relay(!relay))),
-            ));
-        }
-        let settings = rows(settings);
-        let updates_card = rows([
-            setting(
-                tr("Check for updates", &[]),
-                switch(check, have_status.then_some(Message::CheckUpdates(!check))),
-            ),
-            row![
-                container(line).width(Length::Fill),
-                pill(
-                    tr("Releases", &[]),
-                    Fill::Paper,
-                    Some(Message::OpenReleases)
-                ),
-                pill(
-                    tr("Check now", &[]),
-                    Fill::Paper,
-                    enabled.then_some(Message::CheckForUpdatesNow)
-                )
-            ]
-            .spacing(8)
-            .align_y(Alignment::Center)
-            .padding(Padding::from([12, 16]))
-            .into(),
         ]);
         let about = card(
             row![
@@ -1832,8 +1587,7 @@ impl crate::App {
         .padding(Padding::from([14, 16]));
         page(
             column![]
-                .push(unsupported)
-                .push(self.kk_account())
+                .push(self.kk_own_keys_section())
                 .push(
                     container(
                         text(tr("This computer", &[]))
@@ -1849,20 +1603,6 @@ impl crate::App {
                         .as_ref()
                         .map(|offer| self.restart_panel(offer)),
                 )
-                .push(
-                    status::UPDATES_COMPILED_IN.then(|| -> Element<'_, Message> {
-                        container(
-                            text(tr("Updates", &[]))
-                                .font(bold())
-                                .size(15)
-                                .color(theme::INK),
-                        )
-                        .padding(Padding::ZERO.left(4))
-                        .into()
-                    }),
-                )
-                .push(status::UPDATES_COMPILED_IN.then_some(updates_card))
-                .push(upgrade)
                 .push(about)
                 .spacing(14),
         )
