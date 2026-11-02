@@ -30,7 +30,6 @@ use crate::mic;
 use crate::noise::Sealer;
 use crate::ota;
 use crate::pomodoro::{Phase, Pomodoro, Run, Transition};
-use crate::relay_box;
 use crate::spoken_reply::ReplyAudio;
 use crate::storage::{Flash, Settings, SettingsStore, find_partition};
 use crate::text;
@@ -55,8 +54,7 @@ const TRANSFER_ABANDONED_MS: u32 = 5 * 60_000;
 /// Task ends this close together speak once: a burst of three dones read out back to back is noise, and the
 /// screen already shows every card. Longer than the longest line, so the window also covers its playback.
 const MERGE_WINDOW_MS: u32 = 15000;
-/// One screenshot line to a computer linked over the network this often: about 33 a second, under the
-/// Relay's 50 messages a second (docs/relay-protocol.md) with room for the box's other output.
+/// One screenshot line to a computer linked over the network this often.
 const SNAPSHOT_LINE_MS: u32 = 30;
 
 /// Result of audio init: the codec model (ES8311 or NS4168) on success, or the step it got
@@ -119,11 +117,8 @@ pub trait Board: Screen {
     fn lan_peer(&mut self, _peer: Option<(Conn, Sealer)>) {}
     /// Seals one line for the computer linked over the network and writes it to its connection only.
     fn lan_peer_send(&mut self, _line: &[u8]) {}
-    /// From now on [`Board::write`] also goes to the computer linked through the Relay, each line sealed with
-    /// this sealer and sent as `data`; None stops it.
-    fn relay_peer(&mut self, _sealer: Option<Sealer>) {}
-    /// The computer linked over the network or the Relay can take `bytes` more right now without any being
-    /// dropped; true when none is linked. A screenshot waits on it rather than lose half a line.
+    /// The computer linked over the network can take `bytes` more right now
+    /// without any being dropped; true when none is linked.
     fn peer_can_take(&self, _bytes: usize) -> bool {
         true
     }
@@ -207,7 +202,7 @@ enum MicState {
     },
 }
 
-/// What the box is linked to without the Relay.
+/// What the box is linked to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LocalLink {
     None,
@@ -238,16 +233,13 @@ pub struct Firmware {
     snapshot: Option<(Snapshot, u32)>,
     /// The Wi-Fi network changed and the device layer hasn't picked it up yet.
     wifi_changed: bool,
-    relay_changed: bool,
     /// The box is on its Wi-Fi network, as the device layer reports.
     wifi_joined: bool,
     /// The address the box has on Wi-Fi while joined, repeated in answer to hello.
     wifi_address: Option<alloc::string::String>,
-    /// The Relay has welcomed the box on the socket that is open now.
-    relay_up: bool,
     /// The computer on the cable asked which networks the box can hear.
     scan_requested: bool,
-    /// The computer on the cable, once it has paired: what the box reports to the Relay as its USB link.
+    /// The computer on the cable, once it has paired.
     cable_key: Option<[u8; 32]>,
     volume: u32,
     audio_ready: bool,
@@ -417,10 +409,8 @@ impl Firmware {
             remote: false,
             snapshot: None,
             wifi_changed: false,
-            relay_changed: false,
             wifi_joined: false,
             wifi_address: None,
-            relay_up: false,
             scan_requested: false,
             cable_key: None,
             volume: VOLUME_DEFAULT,
@@ -613,7 +603,7 @@ impl Firmware {
         self.apply_lan(board, outputs);
     }
 
-    /// What the box is linked to on its own, without the Relay: the Relay client reports it (docs/relay-protocol.md).
+    /// What the box is linked to.
     pub fn local_link(&self, now: u32) -> LocalLink {
         if self.lan.cable_in_use(now) {
             LocalLink::Usb(self.cable_key)
@@ -624,42 +614,14 @@ impl Firmware {
         }
     }
 
-    /// The box's key and pairings, for the Relay client.
+    /// The box's key and pairings.
     pub fn link(&self) -> Option<&Link> {
         self.link.as_ref().map(|(_, link)| link)
-    }
-
-    /// The Relay linked a computer to the box, or ended that link.
-    pub fn relay_linked(&mut self, now: u32, key: Option<[u8; 32]>) {
-        self.lan.relay_linked(key, now);
-    }
-
-    /// A line from the computer linked through the Relay; like a line over the network, never cable-only commands.
-    /// The computer on the cable has the box (ADR-0011): the Relay ends the other link once the box reports the
-    /// cable, and until then its lines are dropped, so they don't put that computer's cards back on the screen.
-    pub fn relay_line<B: Board>(&mut self, board: &mut B, line: &[u8]) {
-        if self.lan.cable_in_use(board.now_ms()) {
-            return;
-        }
-        self.apply_lan(board, alloc::vec![LanOutput::Line(line.to_vec())]);
     }
 
     /// The network to join, for the device layer.
     pub fn wifi(&self) -> Option<&Wifi> {
         self.link.as_ref().and_then(|(_, link)| link.wifi.as_ref())
-    }
-
-    /// The Relay to connect to: what the computer on the cable last set, or the firmware's default.
-    pub fn relay_url(&self) -> &str {
-        self.link()
-            .and_then(|link| link.relay.as_deref())
-            .unwrap_or(relay_box::DEFAULT_URL)
-    }
-
-    /// True once after the computer on the cable moved the box to another Relay: the device layer
-    /// should drop its socket and connect to [`Self::relay_url`].
-    pub fn take_relay_change(&mut self) -> bool {
-        core::mem::take(&mut self.relay_changed)
     }
 
     /// The device layer joined the Wi-Fi network or lost it; shown in the menu's NETWORK view.
@@ -676,11 +638,6 @@ impl Firmware {
         self.wifi_address = Some(alloc::string::String::from(address));
     }
 
-    /// The Relay welcomed the box, or its socket closed; shown in the menu's NETWORK view.
-    pub fn set_relay_up(&mut self, up: bool) {
-        self.relay_up = up;
-    }
-
     /// How the box is linked to its computer, for the screen; None without a link.
     pub fn link_path(&self, now: u32) -> Option<LinkPath> {
         if self.link_lost {
@@ -689,31 +646,7 @@ impl Firmware {
         match self.local_link(now) {
             LocalLink::Usb(_) => Some(LinkPath::Usb),
             LocalLink::Lan(_) => Some(LinkPath::Lan),
-            LocalLink::None if self.lan.relay_link_active() => Some(LinkPath::Relay),
             LocalLink::None => None,
-        }
-    }
-
-    /// The box uses the staging Relay.
-    pub fn on_staging(&self) -> bool {
-        self.relay_name() == b"STAGING"
-    }
-
-    /// What the top left of every screen shows: the link's icon, and whether `STG` follows it. `STG` only
-    /// marks a link that goes through the staging Relay; over USB or the local network the Relay isn't in
-    /// the way, and the NETWORK view still says which one the box uses.
-    pub fn link_mark(&self, now: u32) -> (Option<LinkPath>, bool) {
-        let path = self.link_path(now);
-        (path, path == Some(LinkPath::Relay) && self.on_staging())
-    }
-
-    /// The Relay by name: `PROD` and `STAGING` for ours, the host for any other.
-    fn relay_name(&self) -> &[u8] {
-        match relay_box::url_host(self.relay_url()) {
-            Some("relay.korekore.ai") => b"PROD",
-            Some("relay-staging.korekore.ai") => b"STAGING",
-            Some(host) => host.as_bytes(),
-            None => b"?",
         }
     }
 
@@ -1803,7 +1736,7 @@ impl Firmware {
                     hints: alloc::vec![(b"K0", b"FORGET"), (b"K1", b"BACK"), (b"K2", b"CLOSE")],
                 }
             }
-            // Dimmed is what isn't working: no link, a network not joined, a Relay not connected.
+            // Dimmed is what isn't working: no link, or a network not joined.
             View::Network => {
                 let wifi = match self.wifi() {
                     None => line(b"WIFI", b"OFF", Tone::Dim),
@@ -1817,19 +1750,10 @@ impl Firmware {
                         },
                     ),
                 };
-                let relay = if self.wifi().is_none() {
-                    line(b"RELAY", b"OFF", Tone::Dim)
-                } else if self.relay_up {
-                    line(b"RELAY", self.relay_name(), Tone::Plain)
-                } else {
-                    let mut down = self.relay_name().to_vec();
-                    down.extend_from_slice(b" DOWN");
-                    line(b"RELAY", &down, Tone::Dim)
-                };
                 Panel {
                     kind: PanelKind::Facts,
                     title: b"NETWORK".to_vec(),
-                    lines: alloc::vec![self.link_line(now), wifi, relay],
+                    lines: alloc::vec![self.link_line(now), wifi],
                     selected: None,
                     hints: alloc::vec![(b"K0", b"BACK"), (b"K2", b"CLOSE")],
                 }
@@ -2263,7 +2187,7 @@ impl Firmware {
             // Pairing is the computer at the other end of the cable telling the box who it is (ADR-0012).
             // Only over the cable: whoever is at the box decides who may link and which network it joins.
             "device.pair" | "device.unpair" | "device.pairs" | "device.wifi.set"
-            | "device.wifi.forget" | "device.wifi.scan" | "device.relay.set" | "device.baud"
+            | "device.wifi.forget" | "device.wifi.scan" | "device.baud"
                 if self.remote =>
             {
                 Self::write_literal(board, "ERROR cable_only\n");
@@ -2272,9 +2196,6 @@ impl Firmware {
                 self.handle_pairing(board, fields, event)
             }
             "device.wifi.set" | "device.wifi.forget" => self.handle_wifi(board, fields, event),
-            // Which Relay follows the computer on the cable, so a development build and a release reach the
-            // same Relay as their box (docs/relay-protocol.md, "Which Relay").
-            "device.relay.set" => self.handle_relay(board, fields),
             // The radio belongs to the device layer, which reports what it hears as `WIFI SEEN` lines.
             "device.wifi.scan" => self.scan_requested = true,
             // The UART bridge's speed (docs/protocol.md, "Link speed on the UART bridge"). The check only has to
@@ -2358,7 +2279,6 @@ impl Firmware {
                     Self::write_value_line(board, "WIFI ADDRESS ", address.as_bytes());
                 }
             }
-            Self::write_value_line(board, "RELAY URL ", self.relay_url().as_bytes());
         }
     }
 
@@ -2448,31 +2368,6 @@ impl Firmware {
         }
     }
 
-    /// `device.relay.set {"url": "wss://host"}`. The computer sends it on every link over the cable, so
-    /// the record is saved only when the Relay really changes.
-    fn handle_relay<B: Board>(
-        &mut self,
-        board: &mut B,
-        fields: &BTreeMap<alloc::string::String, Value>,
-    ) {
-        let Some(url) = string(fields, "url").filter(|url| relay_box::url_host(url).is_some())
-        else {
-            return Self::write_literal(board, "RELAY INVALID\n");
-        };
-        let url = url.trim_end_matches('/');
-        if url != self.relay_url() {
-            let Some((store, link)) = self.link.as_mut() else {
-                return Self::write_literal(board, "RELAY UNAVAILABLE\n");
-            };
-            link.relay = (url != relay_box::DEFAULT_URL).then(|| url.into());
-            if store.save(board.flash(), link).is_err() {
-                return Self::write_literal(board, "LINK SAVE ERROR\n");
-            }
-            self.relay_changed = true;
-        }
-        Self::write_value_line(board, "RELAY URL ", self.relay_url().as_bytes());
-    }
-
     /// From the box's menu: forget every paired computer, for a box changing hands. Each pairs
     /// again the next time it is plugged in.
     fn forget_computers<B: Board>(&mut self, board: &mut B) {
@@ -2491,8 +2386,8 @@ impl Firmware {
     }
 
     /// From the box's menu (#122): a new key from hardware randomness, and nothing that trusted the old one.
-    /// Paired computers, the Wi-Fi network and the Relay go; the look, voice, volume and tally stay, being
-    /// kept elsewhere. Then the box restarts, so the network and the Relay start again under the new key.
+    /// tally stay, being kept elsewhere. Then the box restarts, so the
+    /// network starts again under the new key.
     fn new_identity<B: Board>(&mut self, board: &mut B) {
         let Some(seed) = board.random() else {
             return Self::write_literal(board, "IDENTITY UNAVAILABLE\n");

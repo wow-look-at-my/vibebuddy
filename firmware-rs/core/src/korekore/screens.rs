@@ -71,8 +71,6 @@ impl Expr {
 /// Kore is 20 × 18; this many pixels at scale 1.
 const KORE_WIDTH: i32 = 20;
 const KORE_HEIGHT: i32 = 18;
-/// The design's "no link" orange for STG is not a token; the nearest is Claude Code's tile colour.
-const STG: u16 = AGENT_CC;
 /// The menu's level meter: low, middle, near the top.
 const METER_LOW: u16 = MINT;
 
@@ -278,7 +276,7 @@ fn pointer(canvas: &mut Canvas, x: i32, y: i32, color: u16) {
     }
 }
 
-/// The 12 × 7 link glyphs at 2×: a plug for USB, waves for the network, a cloud for the Relay.
+/// The × link glyphs at ×: a plug for USB, waves for the network.
 fn link_glyph(canvas: &mut Canvas, path: LinkPath, right: i32, y: i32, color: u16) -> i32 {
     draw_icon(
         canvas,
@@ -663,7 +661,7 @@ impl Display {
         }
     }
 
-    /// The top line of the card column: MUTE and ON DUTY on the left; the Pomodoro badge, the link and STG on the right.
+    /// The top line of the card column: MUTE and ON DUTY on the left; the Pomodoro badge and the link on the right.
     fn kk_top_line(&self, canvas: &mut Canvas, scene: &Scene) {
         let mut x = 104;
         if self.muted {
@@ -671,12 +669,7 @@ impl Display {
         }
         kt::draw(canvas, &TYPE_9, x, 11, b"ON DUTY", BOX_TEXT_MUTED, 100);
         let mut right = 312;
-        if self.link.1 {
-            right -= kt::width(&TYPE_9, b"STG");
-            kt::draw(canvas, &TYPE_9, right, 11, b"STG", STG, i32::MAX);
-            right -= 6;
-        }
-        if let Some(path) = self.link.0 {
+        if let Some(path) = self.link {
             right -= link_glyph(canvas, path, right, 10, BOX_TEXT) + 6;
         }
         let view = scene.pomodoro.view(scene.now_ms);

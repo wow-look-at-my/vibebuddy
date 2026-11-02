@@ -98,39 +98,10 @@ impl Lan {
             .map(|owner| owner.key)
     }
 
-    /// A computer is linked through the Relay right now.
-    pub fn relay_link_active(&self) -> bool {
-        self.owner
-            .is_some_and(|owner| owner.conn.is_none() && owner.gone_since.is_none())
-    }
-
     /// A computer talked over the cable in the last [`USB_QUIET_MS`].
     pub fn cable_in_use(&self, now: u32) -> bool {
         self.usb_at
             .is_some_and(|at| now.wrapping_sub(at) < USB_QUIET_MS)
-    }
-
-    /// A computer linked through the Relay, or that link ended. The Relay decides that link (ADR-0012); this
-    /// only keeps the local network from taking the box from it without a takeover, and lets the same
-    /// computer move to the local network.
-    pub fn relay_linked(&mut self, key: Option<[u8; 32]>, now: u32) {
-        match key {
-            Some(key) => {
-                self.owner = Some(Owner {
-                    key,
-                    conn: None,
-                    gone_since: None,
-                })
-            }
-            None => {
-                if let Some(owner) = &mut self.owner
-                    && owner.conn.is_none()
-                    && owner.gone_since.is_none()
-                {
-                    owner.gone_since = Some(now);
-                }
-            }
-        }
     }
 
     /// A new connection. `ephemeral` must be fresh randomness: the box's ephemeral key for this session.
