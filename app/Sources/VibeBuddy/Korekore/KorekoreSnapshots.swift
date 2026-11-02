@@ -116,13 +116,6 @@ enum KorekoreSnapshots {
                 title: String(localized: "Flash this firmware?"), message: update,
                 buttons: [String(localized: "Flash"), String(localized: "Cancel")],
                 facts: [(String(localized: "Firmware package"), "0.5.1"), (String(localized: "Box now"), "0.5.0")]))),
-            ("alert-update", AnyView(KorekoreAlert.preview(
-                title: String(localized: "Update the box firmware to \("0.5.1")?"), message: update,
-                buttons: [String(localized: "Update"), String(localized: "Not now")]))),
-            ("alert-foreign", AnyView(KorekoreAlert.preview(
-                title: String(localized: "Flash the box with korekore?"),
-                message: String(localized: "The box's current firmware and data will be erased and can't be recovered. It restarts on its own when done; over the UART port this takes a few minutes."),
-                buttons: [String(localized: "Flash"), String(localized: "Cancel")], warning: true))),
         ]
         for (name, view) in alerts {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 300), styleMask: [.borderless], backing: .buffered, defer: false)

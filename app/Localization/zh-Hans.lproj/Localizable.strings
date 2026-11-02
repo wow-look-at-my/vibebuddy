@@ -111,8 +111,6 @@
 "Firmware package: %@\nBox now: %@\nThe box restarts once; its voice pack and today's stats are kept. Over the UART bridge this takes a few minutes." = "固件包：%1$@\n盒子现在：%2$@\n盒子会重启一次，语音包和当日战绩都保留。UART 桥上大约要几分钟。";
 "Flash" = "刷入";
 "The box restarts once; its voice pack and today's stats are kept. Over the UART bridge this takes a few minutes." = "盒子会重启一次，语音包和当日战绩都保留。UART 桥上大约要几分钟。";
-"Update" = "更新";
-"The box's current firmware and data will be erased and can't be recovered. It restarts on its own when done; over the UART port this takes a few minutes." = "盒子里现有的固件和数据会被清掉，无法恢复。刷完盒子自动重启，UART 口上大约要几分钟。";
 
 /* Settings: Advanced */
 "Open logs folder" = "打开日志文件夹";
@@ -160,8 +158,7 @@
 "Nothing" = "不称呼";
 "English" = "英文";
 
-/* Updates (ADR-0010) */
-"Update the box firmware to %@?" = "把盒子固件更新到 %@？";
+/* Permissions */
 "Allow…" = "允许…";
 "Allowed" = "已允许";
 "Not allowed yet" = "尚未允许";
@@ -278,7 +275,6 @@
 "Diagnostics" = "诊断";
 "Firmware flashed · the box has restarted" = "固件已刷入 · 盒子已重启";
 "Firmware" = "固件";
-"Flash the box with korekore?" = "给盒子刷入 korekore？";
 "Forget" = "忘记";
 "Get a key in the Claude Console" = "在 Claude Console 获取密钥";
 "Hold K0 on the box and talk to the buddy. Your words and its replies show up here." = "按住盒子上的 K0 和伙伴说话。你说的话和它的回答会显示在这里。";
