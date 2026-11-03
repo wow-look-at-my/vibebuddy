@@ -32,5 +32,5 @@ ksni = "0.3"
 rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "tokio"] }
 
 [dev-dependencies]
-# Draws the korekore views headless into PNGs, to set beside the design canvas (src/korekore/preview.rs).
+# Draws the UI views headless into PNGs, to set beside the design canvas (src/ui/snapshots.rs).
 iced_test = "0.14"

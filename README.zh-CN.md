@@ -61,7 +61,7 @@ VibeBuddy 是给 AI 编程 Agent 配的桌面宠物。它住在键盘旁一个�
    - 让盒子连上 Wi-Fi，这样不插线也能连到它；
    - 设置登录时启动。
 
-之后 VibeBuddy 以 Kore 的样子住在菜单栏，随时再打开一次 App 就能调出设置。点 Kore 会弹出一个面板，告诉你盒子在不在线、什么模式、今天干了多少。设置窗左侧边栏有六页：角色（小助手是谁，以及音量）、接入、对话（语音指令）、设备（固件更新、截图）、通用（含界面语言）、高级。固件单独发布：有 App 能运行的新固件时，VibeBuddy 会自动下载，设置 → 设备会提示更新盒子，由你确认。
+之后 VibeBuddy 以盒子的像素小图住在菜单栏，随时再打开一次 App 就能调出设置。点它会弹出一个面板，告诉你盒子在不在线、什么模式、今天干了多少。设置窗左侧边栏有六页：角色（小助手是谁，以及音量）、接入、对话（语音指令）、设备（固件更新、截图）、通用（含界面语言）、高级。固件单独发布：有 App 能运行的新固件时，VibeBuddy 会自动下载，设置 → 设备会提示更新盒子，由你确认。
 
 Release 若还没签名，macOS 会拦下第一次打开，到「系统设置 → 隐私与安全性」里放行即可。
 
@@ -84,7 +84,7 @@ systemctl --user enable --now vibebuddyd && vibebuddy-hook install
 
 等 AUR 重新开放注册后，它会以 `vibebuddy-bin` 上架。想从源码编译的话，在装好 Rust 工具链的仓库里运行 `packaging/linux/install.sh`，它会编译所有程序。两种方式都一样：脚本把程序装进 `~/.local/bin`，把 `vibebuddyd` 注册成 systemd 用户服务，把 VibeBuddy App 放进启动器并设为登录时启动，再给本机有的 Claude Code 和 Codex 加上 Hook（Codex 之后需要你在 `/hooks` 里信任它们）。升级时重新运行即可。daemon 要在 `/dev/ttyACM*` 所属的组里（Arch 是 `uucp`，Debian 和 Ubuntu 是 `dialout`），不在的话脚本会提示。配置放在 `~/.config/vibebuddy`，统计放在 `~/.local/state/vibebuddy`；盒子断开 30 秒后会通过 `notify-send` 弹一条桌面通知。
 
-在 Hyprland 上，K2 会切回会话所在的终端窗口，不管它在哪个工作区；跑在 tmux 里的会话，会先把你的 tmux 客户端切到它所在的 pane。通过 SSH 的会话没有窗口可回。App 是一个托盘图标（Kore，点一下打开设置）加一个设置窗口，页面和 Mac 版一样，也是同样的 korekore 风格。它只是个客户端：退出它，daemon 和盒子照常在线。设备页点「刷新」能看到盒子当前的屏幕，「保存图片」会存进你的图片文件夹。角色页列出脚本装好的角色，每个都能试听，选中的会写进盒子；Agents 页显示每个 Agent 的 hook 状态，连接、修复或移除前会先给你看要写的内容；daemon 下载好更新的固件后，设备页会提供更新（每个版本发一次通知），也能从文件刷入固件 zip，和 Mac 上一样。通用页有「登录时启动」开关。首次启动会在设置窗口里打开一个简短的引导：找到盒子（找不到时给出排查提示，出厂盒子可以刷入 VibeBuddy 固件）、挑一个角色、让盒子连上 Wi-Fi。接入 Agent 和登录时启动脚本已经做了，所以引导里没有这两步。App 运行时再次启动它，会打开设置窗口。Omarchy 把托盘图标收在状态栏箭头后面的抽屉里，所以 App 第一次运行时会把它的图标固定（Pin）到状态栏上；之后你在那里（右键那个箭头）取消固定或隐藏它，App 不会再改回来。在 Omarchy 4 上，脚本还会装上 VibeBuddy 的[顶栏插件](https://github.com/second-state/omarchy-vibebuddy-plugin)（用 pacman 包安装的话，自己运行 `omarchy plugin add https://github.com/second-state/omarchy-vibebuddy-plugin --enable`）：顶栏上显示氛围小助手的脸，点开是盒子状态、当日战绩和音量。插件在顶栏上时，App 不再显示自己的托盘图标；停用插件，托盘图标会回来。和 Mac 版一样，可以在「通用 → 语言」里改用和系统不同的语言。想让设置窗口在 Omarchy 上浮动显示，在 `~/.config/hypr/hyprland.lua` 里加一行 `o.window("^vibebuddy$", { float = true, center = true, tag = "-default-opacity", opacity = "1.0 1.0" })`：浮动、居中、不透明，大小按 App 自己要的来。用 Omarchy 自带的 `floating-window` 标签的话，窗口会被固定成 875 × 600；和所有 Hyprland 窗口一样，按住 Super 拖动就能移动它。卸载时先运行 `vibebuddy-hook uninstall`，再运行 `systemctl --user disable --now vibebuddyd`，然后删掉脚本装的文件。
+在 Hyprland 上，K2 会切回会话所在的终端窗口，不管它在哪个工作区；跑在 tmux 里的会话，会先把你的 tmux 客户端切到它所在的 pane。通过 SSH 的会话没有窗口可回。App 是一个托盘图标（点一下打开设置）加一个设置窗口，页面和样子都和 Mac 版一样。它只是个客户端：退出它，daemon 和盒子照常在线。设备页点「刷新」能看到盒子当前的屏幕，「保存图片」会存进你的图片文件夹。角色页列出脚本装好的角色，每个都能试听，选中的会写进盒子；Agents 页显示每个 Agent 的 hook 状态，连接、修复或移除前会先给你看要写的内容；daemon 下载好更新的固件后，设备页会提供更新（每个版本发一次通知），也能从文件刷入固件 zip，和 Mac 上一样。通用页有「登录时启动」开关。首次启动会在设置窗口里打开一个简短的引导：找到盒子（找不到时给出排查提示，出厂盒子可以刷入 VibeBuddy 固件）、挑一个角色、让盒子连上 Wi-Fi。接入 Agent 和登录时启动脚本已经做了，所以引导里没有这两步。App 运行时再次启动它，会打开设置窗口。Omarchy 把托盘图标收在状态栏箭头后面的抽屉里，所以 App 第一次运行时会把它的图标固定（Pin）到状态栏上；之后你在那里（右键那个箭头）取消固定或隐藏它，App 不会再改回来。在 Omarchy 4 上，脚本还会装上 VibeBuddy 的[顶栏插件](https://github.com/second-state/omarchy-vibebuddy-plugin)（用 pacman 包安装的话，自己运行 `omarchy plugin add https://github.com/second-state/omarchy-vibebuddy-plugin --enable`）：顶栏上显示氛围小助手的脸，点开是盒子状态、当日战绩和音量。插件在顶栏上时，App 不再显示自己的托盘图标；停用插件，托盘图标会回来。和 Mac 版一样，可以在「通用 → 语言」里改用和系统不同的语言。想让设置窗口在 Omarchy 上浮动显示，在 `~/.config/hypr/hyprland.lua` 里加一行 `o.window("^vibebuddy$", { float = true, center = true, tag = "-default-opacity", opacity = "1.0 1.0" })`：浮动、居中、不透明，大小按 App 自己要的来。用 Omarchy 自带的 `floating-window` 标签的话，窗口会被固定成 875 × 600；和所有 Hyprland 窗口一样，按住 Super 拖动就能移动它。卸载时先运行 `vibebuddy-hook uninstall`，再运行 `systemctl --user disable --now vibebuddyd`，然后删掉脚本装的文件。
 
 ## 工作原理
 
@@ -152,7 +152,7 @@ App 和盒子固件分开发布，VibeBuddy 会检查两者有没有新版本（
 
 - **什么时候**：启动时、每天一次，以及你在设置 → 通用里点「立即检查」时。
 - **发送什么**：你的平台（`macos-arm64` 或 `linux-x86_64`）、App 版本和盒子的固件版本。别的都不发：没有任何标识，没有 Hook 数据，不涉及你的 Agent 和项目。在 Mac 上，Sparkle 还会拉取 App 的更新源，带上常规的 User-Agent（App 名称和版本），它的系统信息收集保持关闭。
-- **从哪里**：`https://updates.korekore.ai/vibebuddy/manifest.json` 上的一份签名发布清单（Sparkle 的 `appcast.xml` 就在旁边），由 Cloudflare 提供。下载本身来自 GitHub Releases。
+- **从哪里**：`<更新地址>/vibebuddy/manifest.json` 上的一份签名发布清单（Sparkle 的 `appcast.xml` 就在旁边），由 Cloudflare 提供。发布工作流从仓库变量 `UPDATES_BUCKET` 和 `UPDATES_URL` 读取存储桶和地址。下载本身来自 GitHub Releases。
 - **之后会怎样**：不经你同意什么都不会安装。Mac 上有新 App 时会弹出 Sparkle 的窗口，你可以安装、稍后或跳过；Linux 上通用页会说明怎么升级。更新的固件会在后台下载并校验，然后设置 → 设备会用一个按钮提示你更新。
 - **怎么关掉**：设置 → 通用 →「检查更新」。从源码编译的默认关闭；Releases 页面上的构建默认开启。
 

@@ -8,7 +8,7 @@ import VibeBuddyCore
 @MainActor
 final class Updater: NSObject, SPUUpdaterDelegate {
     /// Where the appcast lives, next to the update manifest; `VIBEBUDDY_APPCAST_URL` overrides it for testing.
-    private nonisolated static let appcastURL: String? = "https://updates.korekore.ai/vibebuddy/appcast.xml"
+    private nonisolated static let appcastURL: String? = nil
 
     private nonisolated static var feed: String? {
         guard UpdateSwitch.compiledIn else { return nil }

@@ -17,10 +17,6 @@ use crate::pomodoro::{self, Phase, Run};
 use crate::text;
 use crate::text::{Text, truncated};
 
-#[path = "korekore/screens.rs"]
-mod korekore_screens;
-pub use korekore_screens::Screens;
-
 /// Cards the box keeps: two pages of [`CARDS_PER_PAGE`] (#155).
 pub const MAX_TASKS: usize = 6;
 const CARDS_PER_PAGE: usize = 3;
@@ -308,8 +304,6 @@ pub struct Display {
     page: usize,
     page_turn_at: u32,
     tasks_total: usize,
-    /// The robot's screens or korekore's (ADR-0021); kept by the firmware across restarts.
-    screens: Screens,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -1223,7 +1217,6 @@ impl Display {
             page: 0,
             page_turn_at: 0,
             tasks_total: 0,
-            screens: Screens::Robot,
         }
     }
 
@@ -1762,9 +1755,6 @@ impl Display {
     }
 
     fn render(&mut self, screen: &mut dyn Screen, scene: &Scene) -> Result<(), ()> {
-        if self.screens == Screens::Korekore {
-            return self.render_korekore(screen, scene);
-        }
         let label = self.state_label();
         let status_color = self.state_color(self.state);
         let mut dim = false;
@@ -2244,9 +2234,6 @@ impl Display {
 
     /// Where a target is drawn now, if it's on the screen at all.
     fn target_rect(&self, target: Target) -> Option<Rect> {
-        if self.screens == Screens::Korekore {
-            return self.kk_target_rect(target);
-        }
         match (target, &self.panel) {
             (Target::Row(index), Some(panel))
                 if panel.kind == PanelKind::List && index < panel.lines.len() =>
@@ -2274,9 +2261,6 @@ impl Display {
     /// cards and the buddy on duty. The rectangles are the ones the screen is drawn with, so the targets move
     /// with the layout. The Pomodoro and Leisure screens have nothing to tap.
     pub fn target_at(&self, x: i32, y: i32) -> Option<Target> {
-        if self.screens == Screens::Korekore {
-            return self.kk_target_at(x, y);
-        }
         if let Some(panel) = &self.panel {
             // On the box, fingers went for the dimmed edge to close the menu.
             if !PANEL_FRAME.contains(x, y) {
