@@ -27,7 +27,7 @@ pub enum TrayEvent {
 pub struct Tray {
     pub menu: MenuState,
     /// The icon is Kore (ADR-0021), drawn from this.
-    pub kore: crate::korekore::picture::BoxPicture,
+    pub kore: crate::ui::picture::BoxPicture,
     pub events: UnboundedSender<TrayEvent>,
 }
 
@@ -44,7 +44,7 @@ impl ksni::Tray for Tray {
         [1, 2]
             .into_iter()
             .map(|scale| {
-                let (width, height, data) = crate::korekore::tray_icon(&self.kore, scale);
+                let (width, height, data) = crate::ui::tray_icon(&self.kore, scale);
                 Icon {
                     width: width as i32,
                     height: height as i32,

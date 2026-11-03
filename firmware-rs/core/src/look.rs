@@ -94,7 +94,7 @@ impl Look {
         self.draw_scaled(canvas, frame, left, top, SCALE, mirror, gray_out);
     }
 
-    /// `draw` at another whole-number scale; the korekore screens draw a look at 1× or 2×.
+    /// `draw` at any whole-number scale.
     #[allow(clippy::too_many_arguments, reason = "draw's arguments and the scale")]
     pub fn draw_scaled(
         &self,

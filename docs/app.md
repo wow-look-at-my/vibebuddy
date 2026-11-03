@@ -1,6 +1,6 @@
 # VibeBuddy App
 
-The app is VibeBuddy's graphical interface on the Mac: a menu bar item with its panel, plus a settings window, both in the korekore look ([ADR-0021](adr/0021-the-apps-become-korekore-and-the-user-picks-the-box-screens.md), [`design/korekore/`](design/korekore/README.md)). It handles onboarding, settings, the announcement voice and firmware, and it supervises the daemon. It is not a second channel for alerts: agent events are all told by the buddy on the box, and the app speaks up only when the box can't (when the link breaks). This document records the design as settled on 2026-09-16; the three hard-to-reverse trade-offs are covered separately in ADR-0003, 0004 and 0005.
+The app is VibeBuddy's graphical interface on the Mac: a menu bar item with its panel, plus a settings window, both drawn with the app's own theme and pixel art ([`design/tokens.json`](design/tokens.json)). It handles onboarding, settings, the announcement voice and firmware, and it supervises the daemon. It is not a second channel for alerts: agent events are all told by the buddy on the box, and the app speaks up only when the box can't (when the link breaks). This document records the design as settled on 2026-09-16; the three hard-to-reverse trade-offs are covered separately in ADR-0003, 0004 and 0005.
 
 ## Role and lifecycle
 
@@ -14,7 +14,7 @@ The app is VibeBuddy's graphical interface on the Mac: a menu bar item with its 
 
 ## Tech stack and repo layout
 
-- SwiftUI interface (the korekore views in `app/Sources/KorekoreUI` and `app/Sources/VibeBuddy/Korekore`), with AppKit's `NSStatusItem` and a panel for the menu bar; the daemon and hook stay in Rust.
+- SwiftUI interface (the views in `app/Sources/BuddyUI` and `app/Sources/VibeBuddy/Ui`), with AppKit's `NSStatusItem` and a panel for the menu bar; the daemon and hook stay in Rust.
 - The `app/` directory holds the Xcode project, with the `.xcodeproj` checked in directly rather than generated. A Build Phase runs `cargo build --release -p vibebuddyd -p vibebuddy-hook` and copies both binaries into the app bundle.
 - Minimum macOS 14. The interface is bilingual (English and Chinese) and by default follows the system language: if the system's preferred language is Simplified or Traditional Chinese it shows Chinese (Traditional Chinese systems temporarily get the Simplified translation; packaging copies `zh-Hans.lproj` to `zh-Hant.lproj`), and everything else gets English.
 - The General tab's Language picker (System / English / 简体中文) overrides this by writing the app's own `AppleLanguages` default, which macOS reads at launch, so it asks to restart the app. If the box is online and its voice speaks the other language, the same dialog offers (checked by default) to switch the voice to the first bundled voice in the new language. UI language and voice stay separate settings: the dialog asks rather than switching, because an English UI with a Chinese voice is a reasonable choice and a voice write takes minutes over the UART bridge. With Restart now, the voice is written by the restarted app once the box reports its build; with Later, it is written right away.
@@ -28,7 +28,7 @@ The app is VibeBuddy's graphical interface on the Mac: a menu bar item with its 
 
 It keeps using local HTTP on `127.0.0.1:7331`. New additions:
 
-- `GET /v1/status`: link, current mode, firmware and daemon build identifiers, today's stats, the live Activities (`activities`: agent, task-card title, project, `working`/`needs_input`, newest first, as the resident session's `list_activities` gives them; the korekore sidebar draws the box from them), and the time of the most recent hook event.
+- `GET /v1/status`: link, current mode, firmware and daemon build identifiers, today's stats, the live Activities (`activities`: agent, task-card title, project, `working`/`needs_input`, newest first, as the resident session's `list_activities` gives them; the sidebar draws the box from them), and the time of the most recent hook event.
 - `GET /v1/status/stream`: SSE, pushed whenever the status changes.
 - `GET /v1/resident` and `GET /v1/resident/history`: whether the resident session is on and ready (Codex installed and signed in, or Claude Code installed with the user's Anthropic API key), which Agent answers, why voice commands can't be taken right now besides that (`voice_off`: `bridge_firmware` or `bridge_slow` when the box is on its UART bridge at 115200, else the account's `signed_out`, `allowance` or `global_cap`; the Conversation tab says so above the exchanges), a change marker for its history, and its last exchanges, for the Conversation tab; `PUT /v1/resident/brain` and `PUT`/`DELETE /v1/resident/anthropic-key` for its settings, which are kept out of `/v1/config` (the key is never sent back).
 - `POST /v1/account/sign-in`, `POST /v1/account/sign-out`, `POST /v1/account/refresh` (today's use and the plan) and `DELETE /v1/account` for the VibeBuddy account (ADR-0018). Signing in answers a URL for the App to open in the browser, which comes back to the daemon's own `/v1/account/callback`; the session is the daemon's (`config_dir()/account`) and never reaches the App, which learns of the result from `account` in the status stream.
@@ -45,7 +45,7 @@ Config is owned by the daemon and stored in `~/Library/Application Support/VibeB
 
 ## Menu bar
 
-The icon is Kore, korekore's pixel character, with the face that matches the box: gray when the link is down or the daemon isn't up. Clicking it opens a panel (canvas: "Mac · Menu bar"):
+The icon is a pixel picture of the box, with the face that matches the box: gray when the link is down or the daemon isn't up. Clicking it opens a panel (canvas: "Mac · Menu bar"):
 
 1. The box at a glance, on a dark strip like the box's screen: what the agents do and how many there are, then the link (`box online · usb · fw abc1234` / `no box linked` / `daemon not responding · click to restart`; a click then starts the daemon again)
 2. The current mode: On duty / Pomodoro / Leisure
@@ -53,7 +53,7 @@ The icon is Kore, korekore's pixel character, with the face that matches the box
 4. Settings…
 5. Check for updates…: the same as "Check now" in Settings; Sparkle shows its own window for the App
 6. Report a problem…: opens a new GitHub issue in the browser, its body already holding the versions from `summary.txt` (App, daemon, firmware, voice, OS) and nothing else, no logs
-7. Quit korekore (the box goes offline)
+7. Quit VibeBuddy (the box goes offline)
 
 Task cards don't go in the menu; the box is where you look at tasks.
 
@@ -63,7 +63,7 @@ macOS notifications appear only when the link breaks: the device has been discon
 
 ## Settings window
 
-A sidebar on the left lists the pages: Character, Agents, Conversation, Device, General and Advanced. Below them, a small picture of the box shows what it shows now. The pages use the korekore theme, pixel art and fonts (M PLUS Rounded 1c, DotGothic16), which the App carries. The sections below still say "tab" for a page.
+A sidebar on the left lists the pages: Character, Agents, Conversation, Device, General and Advanced. Below them, a small picture of the box shows what it shows now. The pages use the app's own theme, pixel art and fonts (M PLUS Rounded 1c, DotGothic16), which the App carries. The sections below still say "tab" for a page.
 
 **General**: Launch at login, the toggle for link-failure notifications, and Updates: a "Check for updates" switch (on by default in builds CI makes, off when built from source), "Check now", the outcome of the last check and a download link when a newer App is out. Next to the versions, "Report a Problem…" does what the menu item does. Below the manifest's `min_supported_app`, a banner at the top says the App is no longer supported; it can't be dismissed and nothing stops working.
 

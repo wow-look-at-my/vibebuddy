@@ -14,7 +14,7 @@ mod firmware_file;
 mod i18n;
 #[cfg(target_os = "linux")]
 mod instance;
-mod korekore;
+mod ui;
 mod making;
 mod preview;
 mod status;
@@ -62,10 +62,10 @@ fn main() -> iced::Result {
         .theme(App::theme)
         .subscription(App::subscription);
     // The korekore UI's fonts, there before any window opens (ADR-0021); its own face is the default.
-    for font in korekore::FONTS {
+    for font in ui::FONTS {
         app = app.font(font);
     }
-    app.default_font(korekore::DEFAULT_FONT).run()
+    app.default_font(ui::DEFAULT_FONT).run()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -111,8 +111,6 @@ enum Message {
     VolumeDragged(u8),
     VolumeReleased,
     PlayLine,
-    /// Which set of screens the box draws (ADR-0021).
-    SetScreens(BoxScreens),
     /// The user says which of several devices is the box, by its USB serial number.
     ChooseBox(String),
     /// Forget another computer on the box, by its key.
@@ -246,7 +244,7 @@ enum Message {
     Done(Result<(), String>),
     Quit,
     /// A section picked in the korekore UI's sidebar (ADR-0021).
-    Korekore(korekore::Section),
+    Section(ui::Section),
 }
 
 #[cfg(target_os = "linux")]
@@ -523,10 +521,10 @@ impl App {
             });
         app.custom_look_written = app.custom_look.is_some();
         // Debug builds only: open the window on a given section or first-run step, for checking it on a desktop
-        // without a pointer (VIBEBUDDY_KOREKORE_SECTION=device, VIBEBUDDY_KOREKORE_GUIDE=1).
+        // without a pointer (VIBEBUDDY_UI_SECTION=device, VIBEBUDDY_UI_GUIDE=1).
         #[cfg(debug_assertions)]
-        if let Ok(name) = std::env::var("VIBEBUDDY_KOREKORE_SECTION")
-            && let Some(section) = korekore::Section::ALL
+        if let Ok(name) = std::env::var("VIBEBUDDY_UI_SECTION")
+            && let Some(section) = ui::Section::ALL
                 .into_iter()
                 .find(|section| format!("{section:?}").eq_ignore_ascii_case(&name))
         {
@@ -538,7 +536,7 @@ impl App {
         app.guide = (first && cfg!(target_os = "linux")).then_some(0);
         #[cfg(debug_assertions)]
         {
-            app.guide = std::env::var("VIBEBUDDY_KOREKORE_GUIDE")
+            app.guide = std::env::var("VIBEBUDDY_UI_GUIDE")
                 .ok()
                 .and_then(|page| page.parse().ok())
                 .or(app.guide);
@@ -967,9 +965,6 @@ impl App {
                     .or_else(|| self.status.as_ref()?.device.volume)
                     .unwrap_or(60);
                 return Task::perform(client::set_volume(level, true), Message::Done);
-            }
-            Message::SetScreens(screens) => {
-                return Task::perform(client::set_screens(screens.0), Message::Done);
             }
             Message::ChooseBox(usb_serial) => {
                 return Task::perform(client::choose_box(usb_serial), Message::Done);
@@ -1695,7 +1690,7 @@ impl App {
             }
             Message::Quit => return iced::exit(),
             // The korekore sections are the tabs, so what a tab does on opening happens here too.
-            Message::Korekore(section) => return Task::done(Message::Tab(section.tab())),
+            Message::Section(section) => return Task::done(Message::Tab(section.tab())),
         }
         Task::none()
     }
@@ -1704,7 +1699,7 @@ impl App {
     /// Asks for the Characters made here, and the voices once.
     /// The korekore Character page opens the look's card below the grid; go down to it.
     fn show_custom_look(&self) -> Task<Message> {
-        iced::widget::operation::snap_to_end(korekore::pages::CHARACTER_PAGE)
+        iced::widget::operation::snap_to_end(ui::pages::CHARACTER_PAGE)
     }
 
     fn refresh_made(&self) -> Task<Message> {
@@ -1767,7 +1762,7 @@ impl App {
         #[cfg(target_os = "linux")]
         if let Some(TrayHandle(handle)) = self.tray.clone() {
             let menu = MenuState::derive(self.status.as_ref());
-            let kore = korekore::picture::BoxPicture::derive(self.status.as_ref());
+            let kore = ui::picture::BoxPicture::derive(self.status.as_ref());
             return Task::future(async move {
                 handle
                     .update(move |tray| {
@@ -1783,26 +1778,26 @@ impl App {
 
     fn view(&self, _window: window::Id) -> Element<'_, Message> {
         if let Some(page) = self.guide {
-            return self.kk_guide(page);
+            return self.guide_view(page);
         }
-        self.korekore(korekore::Section::of(self.tab))
+        self.settings_window(ui::Section::of(self.tab))
     }
 
     /// The korekore settings window (ADR-0021).
-    fn korekore(&self, section: korekore::Section) -> Element<'_, Message> {
+    fn settings_window(&self, section: ui::Section) -> Element<'_, Message> {
         // Voice commands are experimental: no Conversation section while the daemon has them off.
-        let sections: Vec<korekore::Section> = korekore::Section::ALL
+        let sections: Vec<ui::Section> = ui::Section::ALL
             .into_iter()
-            .filter(|&section| section != korekore::Section::Conversation || self.resident)
+            .filter(|&section| section != ui::Section::Conversation || self.resident)
             .collect();
-        let picture = korekore::picture::BoxPicture::derive(self.status.as_ref());
-        korekore::view::settings(
+        let picture = ui::picture::BoxPicture::derive(self.status.as_ref());
+        ui::view::settings(
             &picture,
             &sections,
             section,
             env!("CARGO_PKG_VERSION"),
-            Message::Korekore,
-            self.korekore_page(section),
+            Message::Section,
+            self.section_page(section),
         )
     }
 
@@ -1972,27 +1967,6 @@ impl Lender {
 impl std::fmt::Display for Lender {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&assets::voice_name(self.id))
-    }
-}
-
-/// One entry of the box screens picker: `robot` or `korekore` (ADR-0021).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct BoxScreens(&'static str);
-
-impl BoxScreens {
-    const ALL: [BoxScreens; 2] = [BoxScreens("robot"), BoxScreens("korekore")];
-
-    fn of(style: &str) -> Option<BoxScreens> {
-        Self::ALL.into_iter().find(|screens| screens.0 == style)
-    }
-}
-
-impl std::fmt::Display for BoxScreens {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.0 {
-            "robot" => f.write_str(&tr("Robot", &[])),
-            other => f.write_str(other),
-        }
     }
 }
 
@@ -2199,7 +2173,7 @@ fn run_tray() -> impl futures::Stream<Item = Message> {
 
     iced::stream::channel(16, async |mut output| {
         let (events, mut clicks) = futures::channel::mpsc::unbounded();
-        let kore = korekore::picture::BoxPicture::derive(None);
+        let kore = ui::picture::BoxPicture::derive(None);
         let tray = tray::Tray {
             menu: MenuState::derive(None),
             kore,

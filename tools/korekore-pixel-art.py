@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Export the korekore pixel art (Kore, Characters, agent and nav tiles, the "your vibebuddy" tag)
 as exact data and nearest-neighbour PNG renders. This file is the source of truth for the pixels;
-see docs/design/korekore/README.md.
+see docs/design/.
 
 Usage: tools/korekore-pixel-art.py [json_out_dir] [png_out_dir]
-Defaults: docs/design/korekore/pixel and docs/design/korekore/images.
+Defaults: docs/design/pixel and docs/design/images.
 """
 import json
 import os
@@ -217,7 +217,7 @@ def write_png(path, rows, pal, scale):
 
 
 def main():
-    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'docs', 'design', 'korekore')
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'docs', 'design')
     jdir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(root, 'pixel')
     pdir = sys.argv[2] if len(sys.argv) > 2 else os.path.join(root, 'images')
     os.makedirs(jdir, exist_ok=True)

@@ -158,8 +158,7 @@ impl<'a> Canvas<'a> {
         }
     }
 
-    /// Mixes `color` into the pixel at (x, y) by `alpha` sixteenths (0 leaves it, 15 replaces it); the korekore
-    /// screens draw anti-aliased type this way.
+    /// Mixes `color` into the pixel at (x, y) by `alpha` sixteenths ( leaves it, replaces it).
     pub fn blend(&mut self, x: i32, y: i32, color: u16, alpha: u8) {
         if alpha == 0 || !(0..WIDTH).contains(&x) || !(0..HEIGHT).contains(&y) {
             return;

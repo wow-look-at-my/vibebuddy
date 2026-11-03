@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the fonts the korekore apps bundle, fonts/korekore/ (docs/design/korekore/README.md, "Fonts").
+"""Build the fonts the korekore apps bundle, fonts/ui/.
 
 M PLUS Rounded 1c (weights 400, 700, 800) for what people read and DotGothic16 for the machine-ish bits, both
 SIL OFL 1.1, taken from the Google Fonts repository at one commit and pinned by SHA-256, so the output is the same
@@ -43,7 +43,7 @@ from fontTools.pens.ttGlyphPen import TTGlyphPen
 from fontTools.ttLib import TTFont
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / "fonts/korekore"
+OUTPUT = ROOT / "fonts/ui"
 CACHE = Path.home() / ".cache/vibebuddy-fonts"
 
 GOOGLE_FONTS = "https://raw.githubusercontent.com/google/fonts/e7db6ca603fd4862010383ff17ffd6cc4ffac1c0/ofl"

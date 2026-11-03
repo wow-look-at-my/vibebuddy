@@ -96,7 +96,7 @@ echo "== Character packs"
 cp "${repo_root}/characters/robot/face.png" "${contents}/Resources/robot-face.png"
 # The korekore UI's fonts (ADR-0021), registered at launch only when that UI is on.
 mkdir -p "${contents}/Resources/fonts"
-cp "${repo_root}"/fonts/korekore/*.ttf "${contents}/Resources/fonts/"
+cp "${repo_root}"/fonts/ui/*.ttf "${contents}/Resources/fonts/"
 echo "  robot"
 for pack in "${repo_root}"/characters/*/pack.bin; do
     id="$(basename "$(dirname "${pack}")")"

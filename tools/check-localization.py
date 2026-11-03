@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCES = [ROOT / "app/Sources/VibeBuddy", ROOT / "app/Sources/VibeBuddyCore", ROOT / "app/Sources/KorekoreUI"]
+SOURCES = [ROOT / "app/Sources/VibeBuddy", ROOT / "app/Sources/VibeBuddyCore", ROOT / "app/Sources/BuddyUI"]
 RUST_SOURCES = ROOT / "desktop/src"
 TABLE = ROOT / "app/Localization/zh-Hans.lproj/Localizable.strings"
 
