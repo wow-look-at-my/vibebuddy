@@ -54,6 +54,7 @@ pub fn face<'a, M: 'a>(height: f32, gray: bool) -> Element<'a, M> {
     image(handle(gray))
         .width(Length::Fixed(height * FACE.width as f32 / FACE.height as f32))
         .height(Length::Fixed(height))
+        .filter_method(image::FilterMethod::Nearest)
         .into()
 }
 

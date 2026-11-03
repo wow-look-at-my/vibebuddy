@@ -197,13 +197,6 @@ impl crate::App {
                 .size(16)
                 .color(theme::MUTED),
             row![big(tr("Let's go", &[]), Fill::Sun, true, 17.0, Some(Message::Guide(Some(1))))],
-            container(text(tr("Already have a VibeBuddy? Same box, new name. Everything you set up carries over.", &[])).font(regular()).size(13).color(theme::MUTED))
-                .padding(Padding::from([8, 12]))
-                .style(|_| container::Style {
-                    background: Some(theme::PAPER.into()),
-                    border: Border { color: theme::MIST_TEXT, width: theme::STROKE_BASE, radius: 12.0.into() },
-                    ..container::Style::default()
-                }),
         ]
         .spacing(14);
         container(row![stage, right].spacing(36).align_y(Alignment::Center))

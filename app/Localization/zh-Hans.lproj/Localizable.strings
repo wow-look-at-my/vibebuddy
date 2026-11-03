@@ -374,7 +374,6 @@
 " for this box (%@)." = "，适用于这个盒子（%@）。";
 "%@ · %lld events" = "%@ · %lld 个事件";
 "All set." = "都好了。";
-"Already have a VibeBuddy? Same box, new name. Everything you set up carries over." = "已经有 VibeBuddy 了？同一个盒子，换了新名字。你设置过的一切都保留。";
 "Blink again" = "再闪一次";
 "Box now" = "盒子现在";
 "Codex asks you to trust its hooks once, in /hooks." = "Codex 会让你在 /hooks 里信任一次它的钩子。";
