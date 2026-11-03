@@ -1,5 +1,5 @@
 //! The tray icon, as a StatusNotifierItem: Omarchy's shell, KDE and waybar all host these. The icon is
-//! the robot face and the menu repeats the Mac app's menu bar menu; picking an item only sends an event to
+//! robot face and the menu repeats the Mac app's menu bar menu. Picking an item only sends an event to the
 //! the app, which does the work.
 
 use std::path::PathBuf;

@@ -248,14 +248,14 @@
 "Or let Claude Code answer, with your own Anthropic API key: add it above." = "也可以让 Claude Code 来回答，用你自己的 Anthropic API 密钥：在上面填入即可。";
 "How to install Claude Code" = "如何安装 Claude Code";
 
-/* korekore UI (ADR-0021) */
+/* The UI */
 "%lld done · %lld asks today" = "今天完成 %lld 个 · 提问 %lld 次";
 "DAEMON NOT RUNNING" = "daemon 没在运行";
 "BOX ONLINE · %@" = "盒子在线 · %@";
 "NO BOX LINKED" = "没有连上盒子";
 "app %@ · box fw %@" = "App %@ · 盒子固件 %@";
 "app %@" = "App %@";
-"This page comes with the next step of korekore." = "这一页会在 korekore 的下一步做好。";
+"This page comes with the next step of VibeBuddy." = "这一页会在 VibeBuddy 的下一步做好。";
 "%@ done" = "完成 %@";
 "%@ asks" = "提问 %@";
 "%@ busy" = "忙碌 %@";
@@ -268,34 +268,34 @@
 "Who the box watches" = "盒子替你看着谁";
 "Hold K0 on the box and ask" = "按住盒子上的 K0 提问";
 "The box, its firmware and its network" = "盒子、固件和网络";
-"How korekore behaves on this Mac" = "korekore 在这台 Mac 上怎么工作";
-"How korekore behaves on this computer" = "korekore 在这台电脑上怎么工作";
+"How VibeBuddy behaves on this Mac" = "VibeBuddy 在这台 Mac 上怎么工作";
+"How VibeBuddy behaves on this computer" = "VibeBuddy 在这台电脑上怎么工作";
 "For when something's off" = "出问题时来这里";
 "Check for updates…" = "检查更新…";
 "Report a problem…" = "报告问题…";
-"Quit korekore (the box goes offline)" = "退出 korekore（盒子将离线）";
+"Quit VibeBuddy (the box goes offline)" = "退出 VibeBuddy（盒子将离线）";
 
-/* korekore pages (2b) */
+/* UI pages */
 "A computer pairs when it's plugged in. To forget them all, use COMPUTERS in the box's menu." = "电脑插上盒子时会自动配对。要全部忘掉，用盒子菜单里的 COMPUTERS。";
 "Couldn't join" = "没能加入";
 "If flashing can't start: hold K0 while plugging in, to enter download mode." = "如果刷写开始不了：插线时按住 K0，进入下载模式。";
 "Logs, config and both sides' build IDs in one file, for a bug report." = "日志、配置和两边的构建号打包成一个文件，用来报告问题。";
-"Only korekore's own entries; your other hooks stay." = "只改 korekore 自己的条目，你的其他钩子保持不变。";
+"Only VibeBuddy's own entries; your other hooks stay." = "只改 VibeBuddy 自己的条目，你的其他钩子保持不变。";
 "Plug in the cable to change the box's network, update its firmware or see its paired computers." = "插上数据线才能更换盒子的网络、更新固件或查看已配对的电脑。";
 "Reach the box through the Relay when it's away from this computer" = "盒子不在这台电脑旁边时，通过 Relay 连接它";
 "Reach the box through the Relay when it's away from this Mac" = "盒子不在这台 Mac 旁边时，通过 Relay 连接它";
 "Released firmware doesn't run on it, so no update is offered." = "已发布的固件不能在它上面运行，所以不提供更新。";
-"The box isn't running korekore firmware" = "盒子运行的不是 korekore 固件";
+"The box isn't running VibeBuddy firmware" = "盒子运行的不是 VibeBuddy 固件";
 "The character didn't finish writing, so the box keeps its built-in voice for now. Write it again when you're ready." = "角色没写完，盒子暂时保留内置声音。准备好了再写一次。";
 "The daemon isn't running. Restart it on the Advanced page." = "daemon 没在运行。到“高级”页重启它。";
 "The daemon's log in the journal, and the hook's log as a file." = "daemon 的日志在 journal 里，钩子的日志是文件。";
 "The daemon's and the app's logs, as files." = "daemon 和 App 的日志文件。";
 "The firmware is on the box, but it didn't start. Unplug the box and plug it back in." = "固件已经写进盒子，但没有启动。把盒子拔下再插上。";
-"The hook config changed after Codex's last event, so Codex turned the hooks off. Type /hooks in Codex and trust korekore's hooks again." = "Codex 上次发来事件之后钩子配置改过，所以 Codex 把钩子关了。在 Codex 里输入 /hooks，重新信任 korekore 的钩子。";
+"The hook config changed after Codex's last event, so Codex turned the hooks off. Type /hooks in Codex and trust VibeBuddy's hooks again." = "Codex 上次发来事件之后钩子配置改过，所以 Codex 把钩子关了。在 Codex 里输入 /hooks，重新信任 VibeBuddy 的钩子。";
 "The update didn't finish" = "更新没有完成";
 "The update didn't take" = "更新没有生效";
 "This build doesn't download firmware. Use Flash from file… on the Device page." = "此版本不下载固件。请在“设备”页使用“从文件刷入…”。";
-"Update checks are off, so korekore doesn't download firmware. Turn them on in General, or get it from Releases." ="检查更新已关闭，所以 korekore 不会下载固件。在“通用”里打开，或者从发布页下载。";
+"Update checks are off, so VibeBuddy doesn't download firmware. Turn them on in General, or get it from Releases." ="检查更新已关闭，所以 VibeBuddy 不会下载固件。在“通用”里打开，或者从发布页下载。";
 "Allow it in System Settings › Privacy › Automation." = "在“系统设置 › 隐私与安全性 › 自动化”里允许它。";
 "Coming soon" = "即将推出";
 "Config file" = "配置文件";
@@ -303,9 +303,9 @@
 "Diagnostics" = "诊断";
 "Firmware flashed · the box has restarted" = "固件已刷入 · 盒子已重启";
 "Firmware" = "固件";
-"Flash korekore to use it; its current firmware will be replaced." = "刷入 korekore 才能使用，盒子现在的固件会被替换。";
-"Flash korekore" = "刷入 korekore";
-"Flash the box with korekore?" = "给盒子刷入 korekore？";
+"Flash VibeBuddy to use it; its current firmware will be replaced." = "刷入 VibeBuddy 才能使用，盒子现在的固件会被替换。";
+"Flash VibeBuddy" = "刷入 VibeBuddy";
+"Flash the box with VibeBuddy?" = "给盒子刷入 VibeBuddy？";
 "Forget" = "忘记";
 "Get a key in the Claude Console" = "在 Claude Console 获取密钥";
 "Hold K0 on the box and talk to the buddy. Your words and its replies show up here." = "按住盒子上的 K0 和伙伴说话。你说的话和它的回答会显示在这里。";
@@ -322,19 +322,18 @@
 "Open Settings" = "打开设置";
 "Play on box" = "在盒子上播放";
 "Preview %@" = "试听 %@";
-"Restart korekore to change the language?" = "重启 korekore 来切换语言？";
+"Restart VibeBuddy to change the language?" = "重启 VibeBuddy 来切换语言？";
 "Restart" = "重启";
 "Running" = "运行中";
-"Several devices are plugged in. Pick yours once; korekore remembers it." = "插着好几个设备。选一次哪个是你的盒子，korekore 会记住。";
+"Several devices are plugged in. Pick yours once; VibeBuddy remembers it." = "插着好几个设备。选一次哪个是你的盒子，VibeBuddy 会记住。";
 "Take it over to drive it from here." = "接管它，就能在这里驱动它。";
 "Tell me when the box disconnects or the daemon fails" = "盒子断开或 daemon 出错时通知我";
 "Terminal tabs · %@" = "终端标签页 · %@";
-"The box itself. “Kore kore!”" = "盒子本身。“Kore kore!”";
 "The box went back to firmware %@ and is fine. Try again later or report a problem." = "盒子已经回到固件 %@，一切正常。稍后再试，或者报告问题。";
 "The box" = "盒子";
 "This Mac" = "这台 Mac";
 "This is a %@ board." = "这是一块 %@ 板子。";
-"This version of korekore is no longer supported. It keeps working; update to keep getting firmware for the box." = "这个版本的 korekore 已不再受支持。它还能用；更新后才能继续为盒子获取固件。";
+"This version of VibeBuddy is no longer supported. It keeps working; update to keep getting firmware for the box." = "这个版本的 VibeBuddy 已不再受支持。它还能用；更新后才能继续为盒子获取固件。";
 "Trust again" = "需要重新信任";
 "Try again" = "再试一次";
 "Up to 15 seconds" = "最多 15 秒";
@@ -351,7 +350,7 @@
 "found on this Mac" = "已在这台 Mac 上找到";
 "found on this computer" = "已在这台电脑上找到";
 "install it, then connect" = "先安装，再接入";
-"korekore %@ is available" = "korekore %@ 可以更新了";
+"VibeBuddy %@ is available" = "VibeBuddy %@ 可以更新了";
 "last 20 exchanges · newest at the bottom · stays on this Mac" = "最近 20 轮 · 最新的在最下面 · 只保存在这台 Mac 上";
 "last 20 exchanges · newest at the bottom · stays on this computer" = "最近 20 轮 · 最新的在最下面 · 只保存在这台电脑上";
 "last event %@" = "上次事件 %@";
@@ -359,22 +358,22 @@
 "· %@ available" = "· %@ 可更新";
 "· up to date" = "· 已是最新";
 
-/* korekore onboarding and alerts (2c) */
+/* Onboarding and alerts */
 "I found these on this Mac. I'll show you each change before writing it." = "我在这台 Mac 上找到了这些。每次改动写入前都会先给你看。";
 "I watch Claude Code, Codex and CI from your desk and stay quiet while they work. Let's wake up the box first." = "我在你桌上看着 Claude Code、Codex 和 CI，它们干活时我保持安静。先把盒子叫醒吧。";
-"Kore kore!\nI'll call you when\nyour agents need you." = "Kore kore！\n你的 Agent 需要你时，\n我会叫你。";
+"I'll call you when\nyour agents need you." = "你的 Agent 需要你时，\n我会叫你。";
 "Let's go" = "开始吧";
 "So the box is never left waiting after a restart. macOS may say a background item was added; that's expected." = "这样电脑重启后盒子不会干等着。macOS 可能会提示添加了后台项目，这是正常的。";
 "The firmware is on the box, but it didn't start. Unplug the box and plug it back in. Don't hold K0 this time." = "固件已经写进盒子，但没有启动。把盒子拔下再插上，这次不要按住 K0。";
-"The install script has connected your agents and set korekore to start when you log in. Let's wake up the box first." = "安装脚本已经接好了你的 Agent，并设置了登录时启动 korekore。先把盒子叫醒吧。";
-"Trust korekore's hooks again with /hooks in Codex." = "在 Codex 里用 /hooks 重新信任 korekore 的钩子。";
+"The install script has connected your agents and set VibeBuddy to start when you log in. Let's wake up the box first." = "安装脚本已经接好了你的 Agent，并设置了登录时启动 VibeBuddy。先把盒子叫醒吧。";
+"Trust VibeBuddy's hooks again with /hooks in Codex." = "在 Codex 里用 /hooks 重新信任 VibeBuddy 的钩子。";
 "Yes, that's it" = "对，就是它";
-"a file of korekore's own" = "korekore 自己的一个文件";
-"korekore can remove it and take over, so the two don't fight over the box." = "korekore 可以移除它并接管，免得两个抢同一个盒子。";
-"korekore lives in the tray now, or in Omarchy's bar. Kore kore when someone needs you." = "korekore 现在在托盘里，或者在 Omarchy 的状态栏里。有人需要你时，Kore kore！";
+"a file of VibeBuddy's own" = "VibeBuddy 自己的一个文件";
+"VibeBuddy can remove it and take over, so the two don't fight over the box." = "VibeBuddy 可以移除它并接管，免得两个抢同一个盒子。";
+"VibeBuddy lives in the tray now, or in Omarchy's bar. It calls you when someone needs you." = "VibeBuddy 现在在托盘里，或者在 Omarchy 的状态栏里。有人需要你时，它会叫你。";
 " for this box (%@)." = "，适用于这个盒子（%@）。";
 "%@ · %lld events" = "%@ · %lld 个事件";
-"All set. Yatta!" = "都好了。Yatta！";
+"All set." = "都好了。";
 "Already have a VibeBuddy? Same box, new name. Everything you set up carries over." = "已经有 VibeBuddy 了？同一个盒子，换了新名字。你设置过的一切都保留。";
 "Blink again" = "再闪一次";
 "Box now" = "盒子现在";
@@ -383,7 +382,7 @@
 "Connect the box to this Mac with a USB cable. This page notices it on its own." = "用 USB 线把盒子接到这台 Mac。这一页会自己发现它。";
 "Connect the box to this computer with a USB cable. This page notices it on its own." = "用 USB 线把盒子接到这台电脑。这一页会自己发现它。";
 "Firmware package" = "固件包";
-"Flashing korekore firmware…" = "正在刷入 korekore 固件…";
+"Flashing VibeBuddy firmware…" = "正在刷入 VibeBuddy 固件…";
 "Is this your box blinking?" = "在闪的是你的盒子吗？";
 "Is this your box?" = "这是你的盒子吗？";
 "Keep it plugged in" = "别拔线";
@@ -393,20 +392,19 @@
 "Not this one" = "不是这个";
 "On Wi-Fi, this Mac reaches the box without the cable. Keep the cable in for this step." = "连上 Wi-Fi 后，这台 Mac 不插线也能连到盒子。这一步先别拔线。";
 "On Wi-Fi, this computer reaches the box without the cable. Keep the cable in for this step." = "连上 Wi-Fi 后，这台电脑不插线也能连到盒子。这一步先别拔线。";
-"Open korekore to restart it or export diagnostics." = "打开 korekore 重启它，或者导出诊断信息。";
+"Open VibeBuddy to restart it or export diagnostics." = "打开 VibeBuddy 重启它，或者导出诊断信息。";
 "Password for %@" = "%@ 的密码";
 "Plug in the box to set its network. You can also do it later on the Device page." = "插上盒子才能设置网络。也可以以后在“设备”页设置。";
 "Plug in the box to write a character to it. If you skip this, it speaks with its built-in voice, Jessica (English)." = "插上盒子才能写入角色。跳过的话，它用内置声音 Jessica（英语）说话。";
 "Plug in your box" = "插上你的盒子";
 "Skip for now" = "先跳过";
-"Start korekore when you log in" = "登录时启动 korekore";
-"Start korekore when you log in?" = "登录时启动 korekore？";
+"Start VibeBuddy when you log in" = "登录时启动 VibeBuddy";
+"Start VibeBuddy when you log in?" = "登录时启动 VibeBuddy？";
 "The box has been gone for 30 seconds." = "盒子已经离开 30 秒了。";
-"The box itself" = "盒子本身";
 "The daemon failed to start three times" = "daemon 连续三次没能启动";
 "The original robot" = "最初的机器人";
-"This box runs other firmware. Put korekore on it? Its current firmware will be replaced." = "这个盒子运行的是其他固件。要装上 korekore 吗？它现在的固件会被替换。";
-"Unplug it, then plug in your box. If several devices are plugged in, korekore asks which one is yours." = "拔掉它，再插上你的盒子。如果插着好几个设备，korekore 会问你哪个是你的。";
+"This box runs other firmware. Put VibeBuddy on it? Its current firmware will be replaced." = "这个盒子运行的是其他固件。要装上 VibeBuddy 吗？它现在的固件会被替换。";
+"Unplug it, then plug in your box. If several devices are plugged in, VibeBuddy asks which one is yours." = "拔掉它，再插上你的盒子。如果插着好几个设备，VibeBuddy 会问你哪个是你的。";
 "Update it from Settings › Device." = "到“设置 › 设备”里更新。";
 "Update now" = "现在更新";
 "What does it send?" = "它会发送什么？";
@@ -414,8 +412,8 @@
 "Who should I watch?" = "我该看着谁？";
 "Writing %@ to the box…" = "正在把 %@ 写入盒子…";
 "connected" = "已接入";
-"hajimemashite!" = "hajimemashite！";
-"korekore lives in the menu bar now. Kore kore when someone needs you." = "korekore 现在在菜单栏里。有人需要你时，Kore kore！";
+"Hello!" = "你好！";
+"VibeBuddy lives in the menu bar now. It calls you when someone needs you." = "VibeBuddy 现在在菜单栏里。有人需要你时，它会叫你。";
 "not found on this Mac" = "这台 Mac 上没找到";
 "the box blinks yellow" = "盒子闪黄光";
 "the character" = "角色";
@@ -517,10 +515,6 @@
 "It's on the box: put another character on the box to delete this one." = "它正在盒子上：先给盒子换个角色，才能删除它。";
 "Couldn't delete “%@”: %@" = "删除「%@」失败：%@";
 "Making “%@”…" = "正在创建「%@」…";
-"Box screens" = "盒子界面";
-"Robot" = "机器人";
-"Update the box's firmware to choose its screens." = "更新盒子固件后才能选择盒子界面。";
-"Changing the box screens was rejected (%lld)" = "更换盒子界面未被接受（%lld）";
 "Make your own" = "做一个自己的";
 "Your drawings, your lines, a voice you pick" = "你的画、你的台词、你挑的声音";
 "Bring your own drawings, pick a voice and say what it says. A character's own voice with its lines as they are is free: they are already made. Any other voice, or lines you change, VibeBuddy makes in that voice, which needs the Paid plan or your own key." = "换上你自己画的形象，挑一个声音，再定它说什么。用某个角色自己的声音、台词不改，就是免费的：这些已经做好了。换别的声音或改了台词，VibeBuddy 会用那个声音重新做每句台词，这需要付费版或你自己的 key。";

@@ -1,5 +1,4 @@
-//! The UI's controls in iced, the counterparts of the Mac app's `Controls.swift`: cards, pill buttons, the
-//! switch, pixel state tags, progress bars, pickers and fields. Every page uses these.
+//! The UI's controls in iced, the counterparts of the Mac app's `Controls.swift`: cards, pill buttons, the switch, pixel state tags, progress bars.
 
 use std::fmt::Display;
 
@@ -9,14 +8,13 @@ use iced::{Alignment, Background, Border, Color, Element, Font, Length, Padding,
 use super::theme::{self, typography};
 
 pub const PIXEL: Font = typography::BOX_TEXT.font;
-/// Fusion Pixel 12 px (fonts/ui), the small pixel type.
+/// Fusion a later pixel px (fonts/ui), the small pixel type.
 const PIXEL_SMALL: Font = Font {
     family: iced::font::Family::Name("Fusion Pixel 12px Prop latin"),
     ..Font::DEFAULT
 };
 
-/// Pixel type at a size, as the Mac's `Font.pixel` does it: a pixel font is clean only at its own size or a whole
-/// multiple, so below 15 px it is Fusion Pixel at 12, then DotGothic16 at 16, and at 32 from 24 px.
+/// Pixel type at a size, as the Mac's `Font.pixel` does it.
 pub fn pixel(size: f32) -> (Font, f32) {
     if size < 15.0 {
         (PIXEL_SMALL, 12.0)
@@ -47,7 +45,6 @@ pub fn regular() -> Font {
     rounded(iced::font::Weight::Normal)
 }
 
-/// A white card: 2 px ink outline, radius 16, the small sticker shadow.
 pub fn card<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> container::Container<'a, M> {
     card_with(content, theme::PAPER, theme::INK, theme::STROKE_BASE)
 }
@@ -78,7 +75,7 @@ pub fn card_with<'a, M: 'a>(
         })
 }
 
-/// A card of rows with 2 px `line` dividers between them.
+/// A card of rows with multiple px `line` dividers between them.
 pub fn rows<'a, M: 'a>(
     items: impl IntoIterator<Item = Element<'a, M>>,
 ) -> container::Container<'a, M> {
@@ -103,7 +100,6 @@ pub fn divider<'a, M: 'a>() -> Element<'a, M> {
         .into()
 }
 
-/// A settings row: a 14/700 label, then what controls it.
 pub fn setting<'a, M: 'a>(label: String, control: impl Into<Element<'a, M>>) -> Element<'a, M> {
     row![
         text(label)
@@ -138,7 +134,7 @@ impl Fill {
     }
 }
 
-/// Everything you press: a pill with a 2 px ink outline, 12/800 (13/800 for the larger ones). None disables it.
+/// None disables it.
 pub fn pill<'a, M: Clone + 'a>(
     label: String,
     fill: Fill,
@@ -189,7 +185,6 @@ pub fn pill_sized<'a, M: Clone + 'a>(
     })
 }
 
-/// The switch: a 48 × 28 pill, `pink` on, `backdrop` off, a white knob with an ink outline.
 pub fn switch<'a, M: Clone + 'a>(on: bool, toggle: Option<M>) -> Element<'a, M> {
     let knob = container(Space::new())
         .width(20)
@@ -241,7 +236,6 @@ pub fn tag<'a, M: 'a>(label: impl Display, color: Color) -> Element<'a, M> {
         .into()
 }
 
-/// Progress: a 12 px pill track in cream with a 2 px ink outline, filled in the given colour.
 pub fn bar<'a, M: 'a>(progress: f32, fill: Color) -> Element<'a, M> {
     let progress = progress.clamp(0.0, 1.0);
     let filled = container(Space::new())
@@ -277,7 +271,6 @@ pub fn heading<'a, M: 'a>(label: impl Display) -> Element<'a, M> {
         .into()
 }
 
-/// Body copy, 13 px `muted`.
 pub fn note<'a, M: 'a>(label: impl Display) -> Element<'a, M> {
     text(label.to_string())
         .font(regular())
@@ -322,7 +315,6 @@ where
         .into()
 }
 
-/// A text field: DotGothic16 14 px in a white box with a 2 px ink outline, radius 10.
 pub fn field<'a, M: Clone + 'a>(placeholder: &str, value: &str) -> text_input::TextInput<'a, M> {
     text_input(placeholder, value)
         .font(pixel(14.0).0)

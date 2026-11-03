@@ -1,6 +1,7 @@
 //! The app's only UI: the settings window, the first-run guide and the tray icon.
 
-// The generated theme and sprites hold all the design's tokens, and the views do not use each one.
+// The generated theme and sprites hold all the design's tokens, and the views
+// do not use each.
 #![allow(dead_code)]
 
 mod account;
@@ -31,8 +32,6 @@ pub const FONTS: [&[u8]; 5] = [
 /// Text that names no font: M PLUS Rounded 1c, regular.
 pub const DEFAULT_FONT: iced::Font = theme::typography::BODY.font;
 
-/// A palette-indexed sprite: one index per pixel, row by row; 0 is transparent and n is `palette[n - 1]`,
-/// as 0xRRGGBB.
 pub struct Sprite {
     pub width: u32,
     pub height: u32,

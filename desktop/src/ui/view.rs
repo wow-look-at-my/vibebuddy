@@ -1,6 +1,4 @@
-//! The settings window (canvas: "Mac · Character (sidebar)" and its siblings): the sidebar with the mini
-//! box, and the section's page beside it. The same layout as the Mac app's, in iced. Omarchy draws the
-//! window's frame here, so the view is the inside of the design's window: no outline or shadow of its own.
+//! The settings window (canvas: "Mac · Character (sidebar)" and its siblings): the sidebar with the mini box, and the section's page beside it.
 
 use iced::widget::{Space, button, column, container, image, row, text};
 use iced::{Alignment, Background, Border, Color, Element, Font, Length, Padding, Shadow, Vector};
@@ -81,8 +79,6 @@ fn tile(name: &str) -> &'static Sprite {
         .unwrap_or(&sprites::ICON_API)
 }
 
-/// The box's screen redrawn (canvas: "App sidebar component"): laid out at the box's 320 × 240 and shown at 0.65,
-/// 208 × 156, as the design does, inside a 3 px outline.
 pub fn mini_box<'a, M: 'a>(picture: &BoxPicture) -> Element<'a, M> {
     container(
         container(screen(picture, 0.65))
@@ -102,7 +98,6 @@ pub fn mini_box<'a, M: 'a>(picture: &BoxPicture) -> Element<'a, M> {
     .into()
 }
 
-/// The box's screen redrawn from the status, at `scale` of its 320 × 240.
 pub fn screen<'a, M: 'a>(picture: &BoxPicture, scale: f32) -> Element<'a, M> {
     #[allow(non_snake_case)]
     let S = scale;
@@ -343,7 +338,6 @@ fn sidebar<'a, M: Clone + 'a>(
     .into()
 }
 
-/// The whole window: sidebar, its 3 px ink edge, and the page.
 pub fn settings<'a, M: Clone + 'a>(
     picture: &BoxPicture,
     sections: &[Section],

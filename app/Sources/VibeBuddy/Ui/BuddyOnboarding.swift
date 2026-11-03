@@ -568,7 +568,7 @@ struct BuddyOnboarding: View {
                             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.Colors.ink, lineWidth: Theme.Stroke.base))
                         VStack(alignment: .leading, spacing: 4) {
                             Text("All set.").font(.rounded(22))
-                            KNote(String(localized: "VibeBuddy lives in the menu bar now. It calls you when an agent needs you."))
+                            KNote(String(localized: "VibeBuddy lives in the menu bar now. It calls you when someone needs you."))
                         }
                     }
                     HStack {

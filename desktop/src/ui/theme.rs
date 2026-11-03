@@ -4,7 +4,7 @@
 use iced::font::{Family, Weight};
 use iced::{Color, Font};
 
-/// Text, every outline (2-3 px), sticker shadows, selected nav row. Also the box's screen ground.
+/// Also the box's screen ground.
 pub const INK: Color = Color::from_rgb8(0x1C, 0x17, 0x30);
 /// App window and brand ground. Text on it: ink, muted, pink-text.
 pub const CREAM: Color = Color::from_rgb8(0xFF, 0xF6, 0xE8);
@@ -12,35 +12,29 @@ pub const CREAM: Color = Color::from_rgb8(0xFF, 0xF6, 0xE8);
 pub const PAPER: Color = Color::from_rgb8(0xFF, 0xFF, 0xFF);
 /// Behind windows in mockups; the toggle track when off.
 pub const BACKDROP: Color = Color::from_rgb8(0xE9, 0xE4, 0xF2);
-/// Dividers between rows inside a card (2 px). Never an outer border.
+/// Never an outer border.
 pub const LINE: Color = Color::from_rgb8(0xF1, 0xE7, 0xD6);
-/// Secondary text on cream and paper (about 9:1).
 pub const MUTED: Color = Color::from_rgb8(0x4A, 0x43, 0x60);
-/// Tertiary pixel text: versions, timestamps, footnotes (about 5:1 on cream).
 pub const MUTED_2: Color = Color::from_rgb8(0x6B, 0x64, 0x82);
-/// Brand accent as a FILL: selected character border, progress, toggle on, Connect button, Pomodoro screen. Ink text on it (5.3:1). Never small text on cream.
+/// Brand accent as a FILL: selected character border, progress, toggle on, Connect button, Pomodoro screen.
 pub const PINK: Color = Color::from_rgb8(0xF0, 0x58, 0x7F);
-/// Pink TEXT on cream or paper below 24 px: the small pixel tag, links, IN USE, kicker lines (5.0:1 on cream, 5.4:1 on paper).
 pub const PINK_TEXT: Color = Color::from_rgb8(0xC2, 0x33, 0x5B);
-/// The large bitmap tag (3-5 px dots) on cream or paper. Large-text contrast only.
+/// Large-text contrast only.
 pub const PINK_TAG: Color = Color::from_rgb8(0xE2, 0x46, 0x6F);
-/// Needs input: the one loud state. Full-screen takeover on the box; primary action fill in the app (ink text).
+/// Needs input: the loud state. Full-screen takeover on the box; primary action fill in the app (ink text).
 pub const SUN: Color = Color::from_rgb8(0xFF, 0xD2, 0x3F);
 /// Working. Calm, silent. RUN pills, the WORKING word.
 pub const SKY: Color = Color::from_rgb8(0x7C, 0xC8, 0xFF);
-/// Done. 3 s full-screen celebration on the box; done pills.
+/// Done.
 pub const MINT: Color = Color::from_rgb8(0x6E, 0xE7, 0xB7);
 /// Failed. Border and words on Ink, never a full red screen.
 pub const PEACH: Color = Color::from_rgb8(0xFF, 0x7A, 0x7A);
 /// Ready / idle and the ON DUTY label.
 pub const LAVENDER: Color = Color::from_rgb8(0xB9, 0xA8, 0xFF);
-/// No link. The whole box screen goes gray; mist is for the big NO LINK word (4.1:1 on box-gray-ground, large text only).
+/// No link.
 pub const MIST: Color = Color::from_rgb8(0x8A, 0x85, 0xA3);
-/// Small text on the no-link screen (6.0:1 on box-gray-ground).
 pub const MIST_TEXT: Color = Color::from_rgb8(0xA8, 0xA3, 0xBD);
-/// Done / watching / joined as TEXT on cream or paper (5.0:1 on cream; mint fails as text).
 pub const DONE_TEXT: Color = Color::from_rgb8(0x17, 0x7A, 0x56);
-/// Needs input / waiting as TEXT on cream or paper (5.3:1 on cream; sun fails as text).
 pub const WAIT_TEXT: Color = Color::from_rgb8(0x8A, 0x5F, 0x00);
 /// Working / busy as TEXT on cream or paper.
 pub const WORK_TEXT: Color = Color::from_rgb8(0x2E, 0x6F, 0xB0);
@@ -92,7 +86,7 @@ pub struct TextStyle {
 pub mod typography {
     use super::{Family, Font, TextStyle, Weight};
 
-    /// Rounded Mplus 1c 800. The wordmark, large lockups only.
+    /// The wordmark, large lockups only.
     pub const DISPLAY: TextStyle = TextStyle {
         font: Font {
             family: Family::Name("Rounded Mplus 1c"),
@@ -104,7 +98,7 @@ pub mod typography {
         letter_spacing: -3.1,
     };
 
-    /// Rounded Mplus 1c 800. Page title in the app's content area.
+    /// Page title in the app's content area.
     pub const TITLE: TextStyle = TextStyle {
         font: Font {
             family: Family::Name("Rounded Mplus 1c"),
@@ -116,7 +110,7 @@ pub mod typography {
         letter_spacing: 0.0,
     };
 
-    /// Rounded Mplus 1c 800. Onboarding headlines.
+    /// Onboarding headlines.
     pub const HERO: TextStyle = TextStyle {
         font: Font {
             family: Family::Name("Rounded Mplus 1c"),
@@ -128,7 +122,7 @@ pub mod typography {
         letter_spacing: 0.0,
     };
 
-    /// Rounded Mplus 1c 800. Card titles, banner lines.
+    /// Card titles, banner lines.
     pub const HEADING: TextStyle = TextStyle {
         font: Font {
             family: Family::Name("Rounded Mplus 1c"),
@@ -140,7 +134,7 @@ pub mod typography {
         letter_spacing: 0.0,
     };
 
-    /// Rounded Mplus 1c 800. Row names, nav items, character names.
+    /// Row names, nav items, character names.
     pub const LABEL: TextStyle = TextStyle {
         font: Font {
             family: Family::Name("Rounded Mplus 1c"),
@@ -152,7 +146,6 @@ pub mod typography {
         letter_spacing: 0.0,
     };
 
-    /// Rounded Mplus 1c 800. Buttons and chips (12 px in dense rows).
     pub const BUTTON: TextStyle = TextStyle {
         font: Font {
             family: Family::Name("Rounded Mplus 1c"),
@@ -164,7 +157,7 @@ pub mod typography {
         letter_spacing: 0.0,
     };
 
-    /// Rounded Mplus 1c 400. Paragraphs, chat bubbles.
+    /// Paragraphs, chat bubbles.
     pub const BODY: TextStyle = TextStyle {
         font: Font {
             family: Family::Name("Rounded Mplus 1c"),
@@ -176,7 +169,7 @@ pub mod typography {
         letter_spacing: 0.0,
     };
 
-    /// Rounded Mplus 1c 400. Row details, captions.
+    /// Row details, captions.
     pub const SMALL: TextStyle = TextStyle {
         font: Font {
             family: Family::Name("Rounded Mplus 1c"),
@@ -188,7 +181,6 @@ pub mod typography {
         letter_spacing: 0.0,
     };
 
-    /// DotGothic16 400. The state word on the box (22-36 px on a takeover).
     pub const BOX_STATE: TextStyle = TextStyle {
         font: Font {
             family: Family::Name("DotGothic16"),
@@ -200,7 +192,6 @@ pub mod typography {
         letter_spacing: 0.0,
     };
 
-    /// DotGothic16 400. Ticket titles on the box (9-12 px).
     pub const BOX_TEXT: TextStyle = TextStyle {
         font: Font {
             family: Family::Name("DotGothic16"),
@@ -212,7 +203,7 @@ pub mod typography {
         letter_spacing: 0.0,
     };
 
-    /// DotGothic16 400. Values, versions, ports in the app.
+    /// Values, versions, ports in the app.
     pub const PIXEL_VALUE: TextStyle = TextStyle {
         font: Font {
             family: Family::Name("DotGothic16"),
@@ -224,7 +215,7 @@ pub mod typography {
         letter_spacing: 0.0,
     };
 
-    /// DotGothic16 400. State tags in the app: uppercase, state *-text colour, no background.
+    /// State tags in the app: uppercase, state *-text colour, no background.
     pub const PIXEL_TAG: TextStyle = TextStyle {
         font: Font {
             family: Family::Name("DotGothic16"),
@@ -239,7 +230,6 @@ pub mod typography {
 
 /// Inside pills, icon-to-text in pixel rows.
 pub const SPACE_1: f32 = 4.0;
-/// Gaps in button rows, between tickets on the box (px x 1.5 there).
 pub const SPACE_2: f32 = 8.0;
 /// Row padding, card grid gaps.
 pub const SPACE_3: f32 = 12.0;
@@ -252,7 +242,6 @@ pub const SPACE_6: f32 = 40.0;
 
 /// Key chips (K0 K1 K2) and state pills on the box; pixel tags.
 pub const RADIUS_PIXEL: f32 = 4.0;
-/// Inner tiles: sprite stages, inputs, ticket rows on the box (8 px at 1x).
 pub const RADIUS_SM: f32 = 10.0;
 /// Cards and grouped lists.
 pub const RADIUS_MD: f32 = 16.0;
@@ -281,9 +270,6 @@ pub const STICKER_LG: f32 = 8.0;
 pub const DOT_SM: f32 = 2.0;
 /// Medium tag on Ink lockups.
 pub const DOT_MD: f32 = 3.0;
-/// Large tag: 3 px dot + 1 px grain gap, 1 px corner.
 pub const DOT_LG: f32 = 4.0;
-/// Characters in app cards: 1 sprite pixel = 4 px.
 pub const SPRITE_SCALE_APP: u32 = 4;
-/// Sprites on the 320x240 box screen in takeovers (4 on duty).
 pub const SPRITE_SCALE_BOX: u32 = 5;

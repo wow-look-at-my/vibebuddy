@@ -1,6 +1,4 @@
-//! What the UI shows of the box: the mini box in the sidebar and the tray icon. It is drawn
-//! from the daemon's status, not from a screen capture, so it costs nothing over the link. The Mac derives the same
-//! in `BoxPicture.swift`.
+//! What the UI shows of the box: the mini box in the sidebar and the tray icon.
 
 use crate::status::{Status, Today};
 
@@ -45,7 +43,6 @@ pub struct BoxPicture {
     pub daemon_alive: bool,
     /// How the box is linked; None without a link.
     pub link: Option<Link>,
-    /// The newest three, as the box's first page shows them.
     pub tickets: Vec<Ticket>,
     pub today: Today,
     pub firmware_version: Option<String>,

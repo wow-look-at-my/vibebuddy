@@ -1,6 +1,5 @@
-//! The settings pages on Linux (canvas: the "Mac · …" boards and their "every state" boards): the same state and
-//! messages as the current tabs in main.rs. Where the Mac shows a sheet, these show an
-//! inline panel, as the alerts board says for Linux.
+//! The settings pages on Linux (canvas: the "Mac · …" boards and their "every state" boards): the same state and messages
+//! as the current tabs in main.rs.
 
 use iced::widget::{Space, button, column, container, image, row, scrollable, text};
 use iced::{Alignment, Border, Element, Length, Padding};
@@ -274,7 +273,6 @@ impl crate::App {
                 .into()
         };
         let stage_content: Element<'_, Message> = match face {
-            // The robot's face (55 × 54) at the same 1.5 × as a look.
             Some(face) if preview == Some(ROBOT) => image(face)
                 .filter_method(image::FilterMethod::Nearest)
                 .width(82.5)
@@ -897,8 +895,7 @@ impl crate::App {
         let outdated = updates.is_some_and(status::Updates::firmware_update_available);
         let finding = self.finding();
 
-        // The box's screen as last captured, at one point per pixel in the design's 352 × 264 frame: any other scale
-        // makes the pixel art uneven. Before the first capture, the box redrawn from the status.
+        // Before the first capture, the box redrawn from the status.
         let screen: Element<'_, Message> = match &self.screenshot {
             Some((_, handle, _)) => image(handle.clone())
                 .filter_method(image::FilterMethod::Nearest)
@@ -1086,8 +1083,9 @@ impl crate::App {
         )
     }
 
-    /// Where the box is and what it runs, when that needs saying: taken by another computer, a pin, several devices
-    /// or none, other firmware, an unsupported board. The Device page and the first-run guide both show it.
+    /// Where the box is and what it runs. This happens when that needs saying: taken by another computer, a pin,
+    /// several devices or none, other firmware, an unsupported board. The Device page and the first-run guide both
+    /// show it.
     pub(super) fn finding(&self) -> iced::widget::Column<'_, Message> {
         let device = self.status.as_ref().map(|status| &status.device);
         let online = self.online();
@@ -2192,8 +2190,6 @@ fn buddy(words: &str) -> Element<'_, Message> {
     .into()
 }
 
-/// A look frame as a Character card shows it: 1.5 × (72 × 96, the design's figure on a 104 px stage), each look pixel
-/// three screen pixels on a 2× display.
 pub(super) fn figure(face: image::Handle) -> iced::widget::Image {
     image(face)
         .filter_method(image::FilterMethod::Nearest)

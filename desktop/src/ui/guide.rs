@@ -1,7 +1,5 @@
-//! The first run on Linux (canvas: "Mac · Onboarding welcome", "Onboarding · find the box,
-//! connect, pick, Wi-Fi", the end of onboarding on "App · alerts, notifications, banners"). As the current guide
-//! (`App::guide`): the install script already connected the agents and set up the start at login, so it is the Mac's
-//! without those two steps.
+//! The first run on Linux (canvas: "Mac · Onboarding welcome", "Onboarding · find the box, connect, pick, Wi-Fi", the end of
+//! onboarding on "App · alerts, notifications, banners").
 
 use iced::widget::{Space, button, column, container, row, scrollable, text};
 use iced::{Alignment, Border, Element, Length, Padding, Shadow, Vector};
@@ -14,8 +12,6 @@ use crate::i18n::tr;
 use crate::status::{OperationKind, OperationState};
 use crate::{BUILTIN, Message, ROBOT};
 
-/// The large pill the pages lead with: 15/800 (17 on the welcome page), a 3 px outline and the small shadow when it
-/// is the primary action.
 fn big<'a>(
     label: String,
     fill: Fill,

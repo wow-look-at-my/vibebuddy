@@ -1,5 +1,5 @@
-//! Draws the UI views headless, with the canvas's sample data, into PNGs to set beside the design's boards:
-//! `cargo test -p vibebuddy-desktop ui::snapshots -- --ignored`, then look in target/ui-preview.
+//! Draws the UI views headless, with the canvas's sample data, into PNGs to
+//! set beside the design's boards.
 
 use iced::{Element, Settings, Theme};
 use iced_test::simulator::Simulator;
@@ -67,7 +67,6 @@ fn draw_the_ui_views() {
             ("claude-code", "CC:Add Chinese to the box", "working"),
         ],
     );
-    // The window's inside, as on the canvas (960 × 772 less its 3 px outline).
     save(
         "window-character",
         (954.0, 766.0),
