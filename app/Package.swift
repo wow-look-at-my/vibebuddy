@@ -13,7 +13,7 @@ let package = Package(
     targets: [
         // Pure logic: status decoding, menu state derivation, hook config merging, voice pack parsing. No UI.
         .target(name: "VibeBuddyCore", path: "Sources/VibeBuddyCore"),
-        // The UI's views (ADR-0021), fed plain values so BuddyPreview can draw them without the app.
+        // The UI views, fed plain values so BuddyPreview can draw them without the app.
         .target(name: "BuddyUI", dependencies: ["VibeBuddyCore"], path: "Sources/BuddyUI"),
         .executableTarget(
             name: "VibeBuddy",

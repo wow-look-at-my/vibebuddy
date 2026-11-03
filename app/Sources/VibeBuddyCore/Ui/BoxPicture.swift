@@ -1,6 +1,6 @@
 import Foundation
 
-/// What the UI shows of the box (ADR-0021): the mini box in the sidebar, the menu bar panel and its icon.
+/// What the UI shows of the box: the mini box in the sidebar, the menu bar panel and its icon.
 /// It is drawn from the daemon's status, not from a screen capture, so it costs nothing over the link.
 /// desktop/src/ui/picture.rs derives the same for Linux.
 public struct BoxPicture: Equatable {
