@@ -8,7 +8,7 @@ use iced::{Alignment, Background, Border, Color, Element, Font, Length, Padding,
 use super::theme::{self, typography};
 
 pub const PIXEL: Font = typography::BOX_TEXT.font;
-/// Fusion a later pixel px (fonts/ui), the small pixel type.
+/// Fusion Pixel 12 px (fonts/ui), the small pixel type.
 const PIXEL_SMALL: Font = Font {
     family: iced::font::Family::Name("Fusion Pixel 12px Prop latin"),
     ..Font::DEFAULT

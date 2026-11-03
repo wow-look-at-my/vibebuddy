@@ -464,7 +464,7 @@ impl crate::App {
     }
 
     /// Making a Character of the user's own, in place of the Character page: start from a preset, bring a look, change
-    /// its lines (occasions stay, each keeps a line). It pick a voice. With only a look nothing is made: the drawings
+    /// its lines (occasions stay, each keeps a line) and pick a voice. With only a look nothing is made: the drawings
     /// go to the box with the preset lending its voice. With new lines or another voice, the daemon makes the audio.
     pub(super) fn make_form<'a>(&'a self, form: &'a MakeForm) -> Element<'a, Message> {
         let bases: Vec<Lender> = self.voices.iter().map(Lender::of).collect();
