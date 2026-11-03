@@ -34,7 +34,7 @@ extension Font {
     static let fusionPixel = "Fusion-Pixel-12px-Prop-latin-Regular"
 }
 
-/// A sprite from docs/design at a whole-number scale, every pixel a crisp square.
+/// A sprite at a whole-number scale, every pixel a crisp square.
 public struct Sprite: View {
     let name: String
     var scale = 1

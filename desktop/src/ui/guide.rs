@@ -5,9 +5,9 @@ use iced::widget::{Space, button, column, container, row, scrollable, text};
 use iced::{Alignment, Border, Element, Length, Padding, Shadow, Vector};
 
 use super::controls::{
-    Fill, bar, bold, card_with, heading, note, pill, pixel, regular, sprite, tag,
+    Fill, bar, bold, card_with, heading, note, pill, pixel, regular, tag,
 };
-use super::{face, sprites, theme};
+use super::{face, theme};
 use crate::i18n::tr;
 use crate::status::{OperationKind, OperationState};
 use crate::{BUILTIN, Message, ROBOT};

@@ -1,7 +1,7 @@
 import SwiftUI
 import VibeBuddyCore
 
-/// The settings window's sections, in the sidebar's order (docs/design).
+/// The settings window's sections, in the sidebar's order.
 public enum BuddySection: String, CaseIterable, Identifiable, Sendable {
     case character, agents, conversation, device, general, advanced
 

@@ -62,7 +62,7 @@ public struct BoxPicture: Equatable {
                           firmwareVersion: device?.firmwareVersion)
     }
 
-    /// The agent's tile in docs/design/pixel/icons.json; anything else is the user's own events.
+    /// The agent's icon tile; anything else is the user's own events.
     public static func icon(forAgent agent: String) -> String {
         switch agent {
         case "claude-code": "cc"

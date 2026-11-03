@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the fonts the korekore apps bundle, fonts/ui/.
+"""Build the fonts the apps bundle, fonts/ui/.
 
 M PLUS Rounded 1c (weights 400, 700, 800) for what people read and DotGothic16 for the machine-ish bits, both
 SIL OFL 1.1, taken from the Google Fonts repository at one commit and pinned by SHA-256, so the output is the same
@@ -26,7 +26,7 @@ copyright notices in the fonts and the licence text DotGothic16 ships.
 Downloads are cached in ~/.cache/vibebuddy-fonts. Needs fontTools (`pip install fonttools`) and 7-Zip's `7zz`
 (`brew install sevenzip`), since Resource Han Rounded is released as a 7z archive.
 
-Usage: tools/korekore-fonts.py
+Usage: tools/ui-fonts.py
 """
 import hashlib
 import io

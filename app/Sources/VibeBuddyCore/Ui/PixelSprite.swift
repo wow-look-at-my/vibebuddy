@@ -1,6 +1,6 @@
 import Foundation
 
-/// A palette-indexed sprite from docs/design (BuddySprites): one index per pixel, row by row; 0 is
+/// A palette-indexed sprite (BuddySprites): one index per pixel, row by row; 0 is
 /// transparent and n is `palette[n - 1]`, as 0xRRGGBB.
 public struct PixelSprite: Sendable {
     public let width: Int
