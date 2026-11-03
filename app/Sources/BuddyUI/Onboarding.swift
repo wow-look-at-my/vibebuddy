@@ -95,7 +95,7 @@ public struct KBigButtonStyle: ButtonStyle {
     }
 }
 
-/// The confirmations in the korekore look (canvas: "CONFIRMATIONS"): a cream sheet with the 3 px outline and the
+/// The confirmations in the app look (canvas: "CONFIRMATIONS"): a cream sheet with the 3 px outline and the
 /// medium shadow, a title, a note, an optional checkbox and the buttons, the last one the action. Shown modally like
 /// `NSAlert.runModal`, so it drops into the same places.
 @MainActor
@@ -124,7 +124,7 @@ public enum BuddyAlert {
     }
 
     /// The index of the button pressed (0 is the first in `buttons`), and the checkbox's final state. `warning`
-    /// draws the outline and the action in `kore-pink`, for what can't be undone. Not from a SwiftUI action: see `ask`.
+    /// draws the outline and the action in `pink`, for what can't be undone. Not from a SwiftUI action: see `ask`.
     public static func run(title: String, message: String?, buttons: [String], checkbox: Checkbox? = nil,
                            warning: Bool = false, facts: [(String, String)] = []) -> (button: Int, checked: Bool) {
         let state = AlertState(checked: checkbox?.isOn ?? false)

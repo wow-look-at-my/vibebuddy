@@ -1,6 +1,6 @@
 import SwiftUI
 
-// The korekore controls (canvas: the app boards and their "every state" boards). Every page uses these, so a page
+// The app controls (canvas: the app boards and their "every state" boards). Every page uses these, so a page
 // only says what goes where.
 
 /// A white card: 2 px ink outline, radius 16, the small sticker shadow.
@@ -59,7 +59,7 @@ public struct KDivider: View {
     }
 }
 
-/// The fills a pill button comes in: `sun` for the one primary action, `kore-pink` to commit a change.
+/// The fills a pill button comes in: `sun` for the one primary action, `pink` to commit a change.
 public enum KFill {
     case paper, sun, pink, ink
 
@@ -114,13 +114,13 @@ public struct KButtonStyle: ButtonStyle {
 }
 
 extension View {
-    /// The korekore pill for a button.
+    /// The pill for a button.
     public func kButton(_ fill: KFill = .paper, size: CGFloat = 12) -> some View {
         buttonStyle(KButtonStyle(fill, size: size))
     }
 }
 
-/// The switch: a 48 × 28 pill track, `kore-pink` on, `backdrop` off, a white knob with an ink outline.
+/// The switch: a 48 × 28 pill track, `pink` on, `backdrop` off, a white knob with an ink outline.
 public struct KToggle: View {
     @Binding var isOn: Bool
     let label: String
@@ -314,7 +314,7 @@ public struct KField: View {
     }
 }
 
-/// Kore on a small Ink stage, as the pages put it beside a note.
+/// The robot on a small Ink stage, as the pages put it beside a note.
 public struct RobotBadge: View {
     let expression: String
     var scale: Int

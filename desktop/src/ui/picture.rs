@@ -1,4 +1,4 @@
-//! What the korekore UI shows of the box (ADR-0021): the mini box in the sidebar and the tray's Kore. It is drawn
+//! What the UI shows of the box: the mini box in the sidebar and the tray icon. It is drawn
 //! from the daemon's status, not from a screen capture, so it costs nothing over the link. The Mac derives the same
 //! in `BoxPicture.swift`.
 
@@ -109,7 +109,7 @@ impl BoxPicture {
     }
 }
 
-/// The agent's tile in docs/design/korekore/pixel/icons.json; anything else is the user's own events.
+/// The agent's tile among the sprites; anything else is the user's own events.
 pub fn icon_for_agent(agent: &str) -> &'static str {
     match agent {
         "claude-code" => "cc",

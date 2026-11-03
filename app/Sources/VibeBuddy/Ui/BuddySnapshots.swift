@@ -4,7 +4,7 @@ import BuddyUI
 import SwiftUI
 import VibeBuddyCore
 
-/// Debug builds only: every korekore page, drawn in the real window off screen with a sample status, into PNGs to set
+/// Debug builds only: every app page, drawn in the real window off screen with a sample status, into PNGs to set
 /// beside the design canvas. `VIBEBUDDY_UI_SNAPSHOTS=<folder> swift run --package-path app VibeBuddy`. No
 /// daemon is started, and the conversation is canned, so it can run beside the installed app without showing what the
 /// user said. (The Agents page still reads this Mac's hook configs and terminal permissions, as it always does.)
@@ -15,12 +15,12 @@ enum BuddySnapshots {
      "device":{"connected":true,"port":"/dev/cu.usbmodem8301","bridge":false,"mode":"duty","firmware_version":"0.5.0",
        "firmware_build":"cc16829","voice":"mei","volume":50,"box_key":"k","computer_key":"me","paired":true,
        "paired_computers":[{"key":"me","name":"Michael's Mac Studio"},{"key":"t","name":"ThinkPad · Omarchy"}],
-       "wifi_network":"ByteTrade","wifi_address":"192.168.1.160","transfer":true,"screens":"korekore"},
+       "wifi_network":"ByteTrade","wifi_address":"192.168.1.160","transfer":true},
      "today":{"done":7,"asks":3,"busy_seconds":15120},
      "hooks":{"codex":"2026-10-21T16:40:00+08:00","claude":"2026-10-21T17:03:00+08:00"},
      "config":{"notify_link":true,"check_updates":true,"relay":false},
      "updates":{"enabled":true,"last_check":"2026-10-21T13:51:00+08:00","unsupported_app":false},
-     "account":{"available":true,"signed_in":true,"github_id":1,"github_login":"kore-sample",
+     "account":{"available":true,"signed_in":true,"github_id":1,"github_login":"buddy-sample",
        "today":{"day":"2026-10-21","commands":12,"commands_limit":200},
        "plan":{"name":"paid","period_end":"2026-11-24T00:00:00Z","characters":12300,"characters_limit":100000}},
      "voice_keys":{"elevenlabs":{"set":true,"refused":false},"volc":{"set":false,"refused":false}},
@@ -109,10 +109,10 @@ enum BuddySnapshots {
         let alerts: [(String, AnyView)] = [
             ("alert-take-over", AnyView(BuddyAlert.preview(
                 title: String(localized: "Found an old vibebuddyd background service"),
-                message: String(localized: "korekore can remove it and take over, so the two don't fight over the box."),
+                message: String(localized: "VibeBuddy can remove it and take over, so the two don't fight over the box."),
                 buttons: [String(localized: "Remove and take over"), String(localized: "Later")]))),
             ("alert-language", AnyView(BuddyAlert.preview(
-                title: String(localized: "Restart korekore to change the language?"),
+                title: String(localized: "Restart VibeBuddy to change the language?"),
                 message: String(localized: "The box goes offline for a few seconds while the app restarts."),
                 buttons: [String(localized: "Restart"), String(localized: "Not now")],
                 checkbox: .init(label: String(localized: "Also switch the box's voice to \("Xiaohe")"), isOn: true)))),
@@ -124,7 +124,7 @@ enum BuddySnapshots {
                 title: String(localized: "Update the box firmware to \("0.5.1")?"), message: update,
                 buttons: [String(localized: "Update"), String(localized: "Not now")]))),
             ("alert-foreign", AnyView(BuddyAlert.preview(
-                title: String(localized: "Flash the box with korekore?"),
+                title: String(localized: "Flash the box with VibeBuddy?"),
                 message: String(localized: "The box's current firmware and data will be erased and can't be recovered. It restarts on its own when done; over the UART port this takes a few minutes."),
                 buttons: [String(localized: "Flash"), String(localized: "Cancel")], warning: true))),
         ]

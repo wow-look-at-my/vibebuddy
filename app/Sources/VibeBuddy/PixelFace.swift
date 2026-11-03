@@ -1,7 +1,7 @@
 import AppKit
 
 /// An 18-point pixel face as a template image, so it adapts to light and dark. `scripts/make-app-icon.swift` draws the
-/// bundle's icon from it; while the App runs, the Dock shows the korekore icon instead.
+/// bundle's icon from it; while the App runs, the Dock shows the robot icon instead.
 enum PixelFace {
     static func image(eyesClosed: Bool) -> NSImage {
         let size = NSSize(width: 18, height: 18)

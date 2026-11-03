@@ -70,7 +70,7 @@ struct BuddyDevicePage: View {
                 KCard {
                     VStack(alignment: .leading, spacing: 8) {
                         KHeading(String(localized: "Which one is your box?"))
-                        KNote(String(localized: "Several devices are plugged in. Pick yours once; korekore remembers it."))
+                        KNote(String(localized: "Several devices are plugged in. Pick yours once; VibeBuddy remembers it."))
                         ForEach(candidates) { candidate in
                             KDivider()
                             HStack {
@@ -100,10 +100,10 @@ struct BuddyDevicePage: View {
         if model.foreignFirmware {
             KCard(dashed: true) {
                 VStack(alignment: .leading, spacing: 8) {
-                    KHeading(String(localized: "The box isn't running korekore firmware"))
+                    KHeading(String(localized: "The box isn't running VibeBuddy firmware"))
                     if model.firmwareDownloaded {
-                        KNote(String(localized: "Flash korekore to use it; its current firmware will be replaced."))
-                        Button(String(localized: "Flash korekore")) { BuddyFlash.foreign(then: model.updateFirmware) }.kButton(.pink)
+                        KNote(String(localized: "Flash VibeBuddy to use it; its current firmware will be replaced."))
+                        Button(String(localized: "Flash VibeBuddy")) { BuddyFlash.foreign(then: model.updateFirmware) }.kButton(.pink)
                             .disabled(model.operationRunning)
                     } else {
                         BuddyFirmwareUnavailable(model: model)
@@ -185,17 +185,6 @@ struct BuddyDevicePage: View {
         }
     }
 
-    /// Which set of screens the box draws (ADR-0021), as the box last said; firmware that predates the choice says nothing.
-    @ViewBuilder private var screensChoice: some View {
-        if let screens = device?.screens {
-            KMenu(selection: screens, options: [("robot", String(localized: "Robot")), ("korekore", "korekore")]) { style in
-                if style != screens { model.setScreens(style) }
-            }
-            .disabled(model.operationRunning || !connected)
-        } else {
-            Text(verbatim: "—")
-        }
-    }
 
     private func field<Value: View>(_ label: String, @ViewBuilder value: () -> Value) -> some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -367,7 +356,7 @@ struct BuddyFirmwareUnavailable: View {
                 }
                 Button(String(localized: "Check again")) { model.checkForUpdates() }.kButton()
             } else {
-                KNote(String(localized: "Update checks are off, so korekore doesn't download firmware. Turn them on in General, or get it from Releases."))
+                KNote(String(localized: "Update checks are off, so VibeBuddy doesn't download firmware. Turn them on in General, or get it from Releases."))
             }
             if UpdateSwitch.compiledIn {
                 Link(destination: Resources.releasesPage) {

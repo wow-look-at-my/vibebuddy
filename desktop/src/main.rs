@@ -61,7 +61,7 @@ fn main() -> iced::Result {
         .title(App::title)
         .theme(App::theme)
         .subscription(App::subscription);
-    // The korekore UI's fonts, there before any window opens (ADR-0021); its own face is the default.
+    // The UI's fonts, there before any window opens; its own face is the default.
     for font in ui::FONTS {
         app = app.font(font);
     }
@@ -140,7 +140,7 @@ enum Message {
     MakeLines(&'static str, Result<Vec<making::Line>, String>),
     MakeName(String),
     MakeVoice(making::Voice),
-    /// The korekore sheet's pick: a preset's voice takes that preset's lines too, while none has changed.
+    /// The Character sheet's pick: a preset's voice takes that preset's lines too, while none has changed.
     MakeVoiceAndLines(making::Voice),
     /// The form for a voice of the user's own: open or closed, its provider, voice id and name.
     MakeOwnOpen(bool),
@@ -243,7 +243,7 @@ enum Message {
     OwnKeySaved(client::KeyProvider, Result<(), String>),
     Done(Result<(), String>),
     Quit,
-    /// A section picked in the korekore UI's sidebar (ADR-0021).
+    /// A section picked in the sidebar.
     Section(ui::Section),
 }
 
@@ -436,7 +436,7 @@ impl App {
         let app = Self {
             status: None,
             settings: None,
-            // The korekore sidebar starts on Character, as the design does.
+            // The sidebar starts on Character, as the design does.
             tab: Tab::Sound,
             guide: None,
             not_this_one: false,
@@ -554,7 +554,7 @@ impl App {
         "VibeBuddy".to_owned()
     }
 
-    /// The korekore pages draw their own colors; widgets without a style of their own get the light theme the
+    /// The pages draw their own colors; widgets without a style of their own get the light theme the
     /// snapshots are drawn with.
     fn theme(&self, _window: window::Id) -> Theme {
         Theme::Light
@@ -1689,7 +1689,7 @@ impl App {
                 }
             }
             Message::Quit => return iced::exit(),
-            // The korekore sections are the tabs, so what a tab does on opening happens here too.
+            // The sections are the tabs, so what a tab does on opening happens here too.
             Message::Section(section) => return Task::done(Message::Tab(section.tab())),
         }
         Task::none()
@@ -1697,7 +1697,7 @@ impl App {
 
     /// Pushes the menu and the face's color to the tray; a no-op until the tray is up.
     /// Asks for the Characters made here, and the voices once.
-    /// The korekore Character page opens the look's card below the grid; go down to it.
+    /// The Character page opens the look's card below the grid; go down to it.
     fn show_custom_look(&self) -> Task<Message> {
         iced::widget::operation::snap_to_end(ui::pages::CHARACTER_PAGE)
     }
@@ -1762,12 +1762,12 @@ impl App {
         #[cfg(target_os = "linux")]
         if let Some(TrayHandle(handle)) = self.tray.clone() {
             let menu = MenuState::derive(self.status.as_ref());
-            let kore = ui::picture::BoxPicture::derive(self.status.as_ref());
+            let picture = ui::picture::BoxPicture::derive(self.status.as_ref());
             return Task::future(async move {
                 handle
                     .update(move |tray| {
                         tray.menu = menu;
-                        tray.kore = kore;
+                        tray.picture = picture;
                     })
                     .await;
             })
@@ -1783,7 +1783,7 @@ impl App {
         self.settings_window(ui::Section::of(self.tab))
     }
 
-    /// The korekore settings window (ADR-0021).
+    /// The settings window.
     fn settings_window(&self, section: ui::Section) -> Element<'_, Message> {
         // Voice commands are experimental: no Conversation section while the daemon has them off.
         let sections: Vec<ui::Section> = ui::Section::ALL
@@ -2043,7 +2043,7 @@ fn notify_new_firmware(status: &Status) {
     let _ = std::fs::create_dir_all(marker.parent().unwrap_or(&marker));
     let _ = std::fs::write(&marker, &offer.version);
     let title = tr("Box firmware %@ is available", &[&offer.version]);
-    // As the korekore canvas words it ("SYSTEM NOTIFICATIONS").
+    // As the design words it ("SYSTEM NOTIFICATIONS").
     let body = tr("Update it from Settings › Device.", &[]);
     if let Err(error) = launch(
         "notify-send",
@@ -2173,10 +2173,10 @@ fn run_tray() -> impl futures::Stream<Item = Message> {
 
     iced::stream::channel(16, async |mut output| {
         let (events, mut clicks) = futures::channel::mpsc::unbounded();
-        let kore = ui::picture::BoxPicture::derive(None);
+        let picture = ui::picture::BoxPicture::derive(None);
         let tray = tray::Tray {
             menu: MenuState::derive(None),
-            kore,
+            picture,
             events,
         };
         // At login the app can start before the shell's tray host is up; ksni then registers once it appears, and

@@ -294,7 +294,7 @@ impl crate::App {
                 .spacing(8)
                 .into(),
             };
-            column![title(tr("Flashing korekore firmware…", &[]), 26.0), state]
+            column![title(tr("Flashing VibeBuddy firmware…", &[]), 26.0), state]
                 .spacing(12)
                 .into()
         } else if let Some(device) = device.filter(|_| online) {
@@ -333,7 +333,7 @@ impl crate::App {
                 big(tr("Not this one", &[]), Fill::Paper, false, 15.0, Some(Message::NotThisOne)),
             ]
             .spacing(10))
-            .push(self.not_this_one.then(|| note(tr("Unplug it, then plug in your box. If several devices are plugged in, korekore asks which one is yours.", &[]))))
+            .push(self.not_this_one.then(|| note(tr("Unplug it, then plug in your box. If several devices are plugged in, VibeBuddy asks which one is yours.", &[]))))
             .spacing(12)
             .into()
         } else {
@@ -385,15 +385,14 @@ impl crate::App {
             .and_then(|status| status.device.voice.clone());
         let robot_in_use = matches!(current.as_deref(), Some(ROBOT | BUILTIN))
             && self.characters.robot_lender.is_none();
-        let mut cards = vec![self.kore_card()];
-        cards.push(self.character_card(
+        let mut cards = vec![self.character_card(
             "VibeBuddy".to_owned(),
             tr("The original robot", &[]),
             self.robot_face.clone(),
             robot_in_use,
             Some(ROBOT),
             Message::UseRobot,
-        ));
+        )];
         for (voice, face) in self.voices.iter().zip(&self.faces) {
             cards.push(self.character_card(
                 voice.name.clone(),
@@ -512,14 +511,14 @@ impl crate::App {
         let card = card_with(
             column![
                 row![
-                    container(sprite(&sprites::KORE_HAPPY, 3)).padding(Padding::from([6, 8])).style(|_| container::Style {
+                    container(face::face(54.0, false)).padding(Padding::from([6, 8])).style(|_| container::Style {
                         background: Some(theme::PINK.into()),
                         border: Border { color: theme::INK, width: theme::STROKE_BASE, radius: 12.0.into() },
                         ..container::Style::default()
                     }),
                     column![
-                        text(tr("All set. Yatta!", &[])).font(bold()).size(22).color(theme::INK),
-                        note(tr("korekore lives in the tray now, or in Omarchy's bar. Kore kore when someone needs you.", &[])),
+                        text(tr("All set.", &[])).font(bold()).size(22).color(theme::INK),
+                        note(tr("VibeBuddy lives in the tray now, or in Omarchy's bar. It calls you when someone needs you.", &[])),
                     ]
                     .spacing(4),
                 ]

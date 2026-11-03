@@ -22,7 +22,7 @@ public struct BuddyConversationPage: View {
     let setBrain: (ResidentBrainChoice) async throws -> ResidentInfo
     let setKey: (String?) async throws -> ResidentInfo
     let links: Links
-    /// The Character the box wears, at 1×, beside each reply; nil shows Kore.
+    /// The Character the box wears, at 1×, beside each reply; nil shows the robot.
     let avatar: NSImage?
 
     public static let limit = 20

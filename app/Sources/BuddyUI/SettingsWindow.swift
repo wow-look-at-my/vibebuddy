@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// A korekore window: no system frame, so the view draws the design's own (cream, 3 px ink outline, radius 20,
+/// An app window: no system frame, so the view draws the design's own (cream, 3 px ink outline, radius 20,
 /// solid shadow); the real window buttons move to where the design draws them.
 public final class BuddySettingsWindow: NSWindow {
     /// Where the design puts the first button, from the window's top-left corner.
@@ -26,7 +26,7 @@ public final class BuddySettingsWindow: NSWindow {
         super.init(contentRect: NSRect(x: 0, y: 0, width: size.width, height: size.height + shadow),
                    styleMask: NSWindow.StyleMask([.titled, .closable, .miniaturizable, .fullSizeContentView]).union(resizable ? .resizable : []),
                    backing: .buffered, defer: false)
-        title = "korekore"
+        title = "VibeBuddy"
         titleVisibility = .hidden
         titlebarAppearsTransparent = true
         isOpaque = false

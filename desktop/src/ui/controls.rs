@@ -344,7 +344,7 @@ pub fn field<'a, M: Clone + 'a>(placeholder: &str, value: &str) -> text_input::T
 
 /// A sprite at a whole-number scale.
 pub fn sprite<'a, M: 'a>(sprite: &super::Sprite, scale: u32) -> Element<'a, M> {
-    iced::widget::image(sprite.handle(scale, None))
+    iced::widget::image(sprite.handle(scale))
         .width(sprite.width as f32 * scale as f32)
         .height(sprite.height as f32 * scale as f32)
         .filter_method(iced::widget::image::FilterMethod::Nearest)

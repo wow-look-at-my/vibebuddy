@@ -30,16 +30,16 @@ extension Font {
         }
     }
 
-    /// Fusion Pixel 12 px (fonts/ui, tools/korekore-fonts.py), by its PostScript name.
+    /// Fusion Pixel 12 px (fonts/ui), by its PostScript name.
     static let fusionPixel = "Fusion-Pixel-12px-Prop-latin-Regular"
 }
 
-/// A sprite from docs/design/korekore at a whole-number scale, every pixel a crisp square.
+/// A sprite from docs/design at a whole-number scale, every pixel a crisp square.
 public struct Sprite: View {
     let name: String
     var scale = 1
     var tint: UInt32?
-    /// Kore asleep without a link: CSS `grayscale(1) brightness(0.75)`, as the canvas draws it.
+    /// The robot asleep without a link: CSS `grayscale(1) brightness(0.75)`, as the canvas draws it.
     var gray = false
 
     public init(name: String, scale: Int = 1, tint: UInt32? = nil, gray: Bool = false) {
@@ -84,7 +84,7 @@ extension View {
     }
 }
 
-/// How each state reads on the box: its word, its colour and Kore's face.
+/// How each state reads on the box: its word, its colour and the robot's face.
 extension BoxPicture.Mood {
     var word: String {
         switch self {

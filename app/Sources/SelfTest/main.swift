@@ -88,10 +88,6 @@ do {
     {"connected":false,"bridge":false,"relay_refused":"plan"}
     """.utf8))
     check(refused.relayRefused == "plan" && busy.relayRefused == nil, "the Relay's refusal decodes")
-    let screens = try StatusCoding.decoder().decode(DeviceState.self, from: Data("""
-    {"connected":true,"bridge":false,"screens":"korekore"}
-    """.utf8))
-    check(screens.screens == "korekore" && busy.screens == nil, "the box screens decode, and are nil from older firmware")
     let seen = try StatusCoding.decoder().decode(DeviceState.self, from: Data("""
     {"connected":true,"bridge":false,"wifi_seen":[{"ssid":"ByteTrade","rssi":-49}]}
     """.utf8))
@@ -486,21 +482,22 @@ do {
     check(false, "resident JSON fails to decode: \(error)")
 }
 
-// 7. korekore (ADR-0021): the sprites scaled whole times as drawn.
+// 7. The UI sprites, scaled whole times as drawn.
 do {
-    let kore = BuddySprites.koreNormal
-    check(kore.width == 20 && kore.height == 18 && kore.pixels.count == 360, "Kore is 20 x 18")
-    let rgba = kore.rgba(scale: 3)
+    let robot = RobotSprites.robotNormal
+    check(RobotSprites.all.values.allSatisfy { $0.width == 20 && $0.height == 18 && $0.pixels.count == 360 }, "every robot face is 20 x 18")
+    let rgba = robot.rgba(scale: 3)
     let at = { (x: Int, y: Int) in Array(rgba[(y * 60 + x) * 4..<(y * 60 + x) * 4 + 4]) }
     check(rgba.count == 60 * 54 * 4, "scale 3 triples both sides")
-    check(at(12, 0) == [0xF0, 0x58, 0x7F, 0xFF] && at(14, 2) == [0xF0, 0x58, 0x7F, 0xFF], "the pink key covers 3 x 3")
+    check(at(27, 0) == [0xF0, 0x58, 0x7F, 0xFF] && at(29, 2) == [0xF0, 0x58, 0x7F, 0xFF], "the pink antenna pixel covers 3 x 3")
     check(at(0, 0) == [0, 0, 0, 0], "transparent stays transparent")
-    let tag = BuddySprites.tagYourVibebuddy.rgba(scale: 1, tint: 0xE2466F)
-    check(stride(from: 0, to: tag.count, by: 4).allSatisfy { tag[$0 + 3] == 0 || Array(tag[$0..<$0 + 4]) == [0xE2, 0x46, 0x6F, 0xFF] }, "a tint recolours what is drawn")
-    check(BuddySprites.all.values.allSatisfy { s in s.pixels.count == s.width * s.height && s.pixels.allSatisfy { Int($0) <= s.palette.count } }, "every sprite is whole")
+    let tinted = robot.rgba(scale: 1, tint: 0xE2466F)
+    check(stride(from: 0, to: tinted.count, by: 4).allSatisfy { tinted[$0 + 3] == 0 || Array(tinted[$0..<$0 + 4]) == [0xE2, 0x46, 0x6F, 0xFF] }, "a tint recolours what is drawn")
+    let sprites = Array(BuddySprites.all.values) + Array(RobotSprites.all.values)
+    check(sprites.allSatisfy { s in s.pixels.count == s.width * s.height && s.pixels.allSatisfy { Int($0) <= s.palette.count } }, "every sprite is whole")
 }
 
-// 8. korekore's picture of the box (ADR-0021), drawn from the status's Activities.
+// 8. The picture of the box, drawn from the status's Activities.
 do {
     let json = #"""
     {"daemon":{"build":"x"},"device":{"connected":true,"bridge":false,"mode":"duty","network":true},
@@ -521,7 +518,7 @@ do {
     let old = try StatusCoding.decoder().decode(Status.self, from: Data(sample.utf8))
     check(old.activities == nil && BoxPicture.derive(status: old, daemonAlive: true).mood == .pomodoro, "an older daemon without activities still decodes; its box is in a Pomodoro")
 } catch {
-    check(false, "korekore status fails to decode: \(error)")
+    check(false, "the box picture status fails to decode: \(error)")
 }
 
 if failures > 0 {

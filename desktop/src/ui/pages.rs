@@ -1,5 +1,5 @@
-//! The korekore pages on Linux (canvas: the "Mac · …" boards and their "every state" boards): the same state and
-//! messages as the current tabs in main.rs, laid out in the korekore look. Where the Mac shows a sheet, these show an
+//! The settings pages on Linux (canvas: the "Mac · …" boards and their "every state" boards): the same state and
+//! messages as the current tabs in main.rs. Where the Mac shows a sheet, these show an
 //! inline panel, as the alerts board says for Linux.
 
 use iced::widget::{Space, button, column, container, image, row, scrollable, text};
@@ -25,7 +25,7 @@ pub(super) fn page<'a>(content: impl Into<Element<'a, Message>>) -> Element<'a, 
 }
 
 /// The Character page's scroller, so the page can go down to the card Make your own look opens below the grid.
-pub(crate) const CHARACTER_PAGE: &str = "korekore-character";
+pub(crate) const CHARACTER_PAGE: &str = "ui-character";
 
 fn percent(progress: f32) -> String {
     format!("{:.0}%", progress * 100.0)
@@ -153,15 +153,14 @@ impl crate::App {
             .and_then(|status| status.device.voice.clone());
         let wears_robot = matches!(current.as_deref(), Some(ROBOT | BUILTIN));
         let robot_in_use = wears_robot && self.characters.robot_lender.is_none();
-        let mut cards: Vec<Element<'_, Message>> = vec![self.kore_card()];
-        cards.push(self.character_card(
+        let mut cards: Vec<Element<'_, Message>> = vec![self.character_card(
             "VibeBuddy".to_owned(),
             tr("The original robot", &[]),
             self.robot_face.clone(),
             robot_in_use,
             Some(ROBOT),
             Message::UseRobot,
-        ));
+        )];
         for (voice, face) in self.voices.iter().zip(&self.faces) {
             cards.push(self.character_card(
                 voice.name.clone(),
@@ -233,27 +232,6 @@ impl crate::App {
         scrollable(container(content).padding(Padding::ZERO.right(14).bottom(8)))
             .id(CHARACTER_PAGE)
             .into()
-    }
-
-    pub(super) fn kore_card(&self) -> Element<'_, Message> {
-        card(
-            column![
-                container(sprite(&sprites::KORE_NORMAL, 4))
-                    .center_x(Length::Fill)
-                    .center_y(Length::Fixed(104.0))
-                    .style(|_| stage(theme::INK)),
-                row![
-                    text("Kore").font(bold()).size(16),
-                    Space::new().width(Length::Fill),
-                    tag(tr("Coming soon", &[]), theme::MUTED_2)
-                ]
-                .align_y(Alignment::Center),
-                small(tr("The box itself. “Kore kore!”", &[])),
-            ]
-            .spacing(6),
-        )
-        .padding(9)
-        .into()
     }
 
     pub(super) fn character_card(
@@ -473,7 +451,7 @@ impl crate::App {
                 tr("Trust again", &[]),
                 theme::PINK_TEXT,
                 tr(
-                    "The hook config changed after Codex's last event, so Codex turned the hooks off. Type /hooks in Codex and trust korekore's hooks again.",
+                    "The hook config changed after Codex's last event, so Codex turned the hooks off. Type /hooks in Codex and trust VibeBuddy's hooks again.",
                     &[],
                 ),
             )
@@ -595,7 +573,7 @@ impl crate::App {
             card_with(
                 column![
                     text(tr("Will change %@", &[&plan.config.display()])).font(bold()).size(16).color(theme::INK),
-                    note(tr("Only korekore's own entries; your other hooks stay.", &[])),
+                    note(tr("Only VibeBuddy's own entries; your other hooks stay.", &[])),
                     lines,
                 ]
                 .push((plan.agent == "codex").then(|| note(tr("After writing, open /hooks in Codex to review and trust this config — the app can't do that for you.", &[]))))
@@ -1206,7 +1184,7 @@ impl crate::App {
                 column![
                     heading(tr("Which one is your box?", &[])),
                     note(tr(
-                        "Several devices are plugged in. Pick yours once; korekore remembers it.",
+                        "Several devices are plugged in. Pick yours once; VibeBuddy remembers it.",
                         &[]
                     ))
                 ]
@@ -1233,11 +1211,11 @@ impl crate::App {
             let action: Element<'_, Message> = if downloaded {
                 column![
                     note(tr(
-                        "Flash korekore to use it; its current firmware will be replaced.",
+                        "Flash VibeBuddy to use it; its current firmware will be replaced.",
                         &[]
                     )),
                     pill(
-                        tr("Flash korekore", &[]),
+                        tr("Flash VibeBuddy", &[]),
                         Fill::Pink,
                         (!busy).then_some(Message::AskFirmwareUpdate(true))
                     ),
@@ -1248,7 +1226,7 @@ impl crate::App {
                 self.firmware_unavailable()
             };
             finding = finding.push(card(
-                column![heading(tr("The box isn't running korekore firmware", &[])), action, small(tr("If flashing can't start: hold K0 while plugging in, to enter download mode.", &[]))].spacing(8),
+                column![heading(tr("The box isn't running VibeBuddy firmware", &[])), action, small(tr("If flashing can't start: hold K0 while plugging in, to enter download mode.", &[]))].spacing(8),
             ));
         }
         if let Some(board) = device
@@ -1287,7 +1265,7 @@ impl crate::App {
                 (None, None) => tag(tr("Looking for firmware…", &[]), theme::MUTED_2),
             },
             _ => note(tr(
-                "Update checks are off, so korekore doesn't download firmware. Turn them on in General, or get it from Releases.",
+                "Update checks are off, so VibeBuddy doesn't download firmware. Turn them on in General, or get it from Releases.",
                 &[],
             )),
         };
@@ -1369,7 +1347,7 @@ impl crate::App {
                 .is_some_and(|device| device.foreign_firmware && device.firmware_build.is_none());
         if other {
             return Some(panel(
-                tr("Flash the box with korekore?", &[]),
+                tr("Flash the box with VibeBuddy?", &[]),
                 tr(
                     "The box's current firmware and data will be erased and can't be recovered. It restarts on its own when done; over the UART port this takes a few minutes.",
                     &[],
@@ -1686,7 +1664,7 @@ impl crate::App {
                         tag(tr("Last check failed: %@", &[error]), theme::PINK_TEXT)
                     }
                     (None, Some(app), _) => tag(
-                        tr("korekore %@ is available", &[&app.version]),
+                        tr("VibeBuddy %@ is available", &[&app.version]),
                         theme::DONE_TEXT,
                     ),
                     (None, None, Some(checked)) => tag(
@@ -1700,7 +1678,7 @@ impl crate::App {
         };
         let unsupported = updates.filter(|updates| updates.unsupported_app).map(|_| {
             card_with(
-                text(tr("This version of korekore is no longer supported. It keeps working; update to keep getting firmware for the box.", &[])).font(regular()).size(13).color(theme::INK),
+                text(tr("This version of VibeBuddy is no longer supported. It keeps working; update to keep getting firmware for the box.", &[])).font(regular()).size(13).color(theme::INK),
                 theme::CREAM,
                 theme::PINK_TEXT,
                 theme::STROKE_BASE,
@@ -1769,7 +1747,7 @@ impl crate::App {
         ]);
         let about = card(
             row![
-                container(sprite(&sprites::KORE_NORMAL, 2))
+                container(face::face(36.0, false))
                     .padding(Padding::from([5, 6]))
                     .style(|_| container::Style {
                         background: Some(theme::PINK.into()),
@@ -1781,12 +1759,7 @@ impl crate::App {
                         ..container::Style::default()
                     }),
                 column![
-                    row![
-                        text("korekore").font(bold()).size(18).color(theme::INK),
-                        sprite(&sprites::TAG_YOUR_VIBEBUDDY, 2)
-                    ]
-                    .spacing(8)
-                    .align_y(Alignment::End),
+                    text("VibeBuddy").font(bold()).size(18).color(theme::INK),
                     tag(format!("App {}", env!("CARGO_PKG_VERSION")), theme::MUTED),
                 ]
                 .spacing(3)
@@ -1839,7 +1812,7 @@ impl crate::App {
         )
     }
 
-    /// After a language change, inline (canvas: "Restart korekore to change the language?").
+    /// After a language change, inline (canvas: "Restart VibeBuddy to change the language?").
     fn restart_panel(&self, offer: &crate::RestartOffer) -> Element<'_, Message> {
         let device = self.status.as_ref().map(|status| &status.device);
         let voice: Option<Element<'_, Message>> = match &offer.voice {
@@ -1869,7 +1842,7 @@ impl crate::App {
         };
         card_with(
             column![
-                text(tr("Restart korekore to change the language?", &[]))
+                text(tr("Restart VibeBuddy to change the language?", &[]))
                     .font(bold())
                     .size(16)
                     .color(theme::INK)
@@ -1923,14 +1896,7 @@ impl crate::App {
         };
         let daemon = card_with(
             row![
-                sprite(
-                    if running {
-                        &sprites::KORE_WORKING
-                    } else {
-                        &sprites::KORE_SAD
-                    },
-                    3
-                ),
+                face::face(54.0, !running),
                 column![
                     text("DAEMON")
                         .font(pixel(13.0).0)
@@ -2190,10 +2156,10 @@ fn mine(words: &str) -> Element<'_, Message> {
     .into()
 }
 
-/// The buddy's reply: left, in a cream bubble, beside Kore.
+/// The buddy's reply: left, in a cream bubble, beside the robot's face.
 fn buddy(words: &str) -> Element<'_, Message> {
     row![
-        container(sprite(&sprites::KORE_HAPPY, 1))
+        container(face::face(18.0, false))
             .padding(Padding::from([3, 4]))
             .style(|_| container::Style {
                 background: Some(theme::INK.into()),

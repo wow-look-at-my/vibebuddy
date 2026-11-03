@@ -14,7 +14,7 @@ struct BuddyGeneralPage: View {
                 // Nothing stops working; the App just says, every time, that it's too old (ADR-0010).
                 if UpdateSwitch.compiledIn, model.updates?.unsupportedApp == true {
                     KCard(fill: Theme.Colors.cream, outline: Theme.Colors.pinkText) {
-                        KNote(String(localized: "This version of korekore is no longer supported. It keeps working; update to keep getting firmware for the box."),
+                        KNote(String(localized: "This version of VibeBuddy is no longer supported. It keeps working; update to keep getting firmware for the box."),
                               color: Theme.Colors.ink)
                     }
                 }
@@ -94,7 +94,7 @@ struct BuddyGeneralPage: View {
     private var updateLine: KTag {
         guard let updates = model.updates, updates.enabled else { return KTag(String(localized: "Update checks off")) }
         if let error = updates.error { return KTag(String(localized: "Last check failed: \(error)"), color: Theme.Colors.pinkText) }
-        if let app = updates.app { return KTag(String(localized: "korekore \(app.version) is available"), color: Theme.Colors.doneText) }
+        if let app = updates.app { return KTag(String(localized: "VibeBuddy \(app.version) is available"), color: Theme.Colors.doneText) }
         guard let checked = updates.lastCheck else { return KTag(String(localized: "Not checked yet")) }
         return KTag(String(localized: "Up to date · checked \(checked.formatted(.relative(presentation: .named)))"), color: Theme.Colors.doneText)
     }
@@ -121,7 +121,7 @@ struct BuddyGeneralPage: View {
         } else if !(device?.connected ?? false) {
             note += "\n" + String(localized: "The box isn't connected, so its character stays as it is. You can change it later on the Character tab.")
         }
-        BuddyAlert.ask(title: String(localized: "Restart korekore to change the language?"), message: note,
+        BuddyAlert.ask(title: String(localized: "Restart VibeBuddy to change the language?"), message: note,
                           buttons: [String(localized: "Restart"), String(localized: "Not now")], checkbox: checkbox) { [model, voiceSwitch] answer in
             let voice = answer.checked ? voiceSwitch?.id : nil
             if answer.button == 0 {

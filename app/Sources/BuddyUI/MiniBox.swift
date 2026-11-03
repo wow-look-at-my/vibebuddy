@@ -38,7 +38,7 @@ public struct MiniBox: View {
         }
     }
 
-    /// No link: the whole screen gray, Kore asleep and grayed at scale 6 (README, "No link").
+    /// No link: the whole screen gray, the robot asleep and grayed at scale 6 (README, "No link").
     private var asleep: some View {
         VStack(spacing: 6) {
             Text(verbatim: "Z z").font(.pixel(14)).foregroundStyle(Theme.Colors.mist)

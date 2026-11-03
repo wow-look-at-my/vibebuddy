@@ -1,5 +1,5 @@
-//! Draws the korekore views headless, with the canvas's sample data, into PNGs to set beside the design's boards:
-//! `cargo test -p vibebuddy-desktop ui::snapshots -- --ignored`, then look in target/korekore-preview.
+//! Draws the UI views headless, with the canvas's sample data, into PNGs to set beside the design's boards:
+//! `cargo test -p vibebuddy-desktop ui::snapshots -- --ignored`, then look in target/ui-preview.
 
 use iced::{Element, Settings, Theme};
 use iced_test::simulator::Simulator;
@@ -36,7 +36,7 @@ fn save<M: Clone>(name: &str, size: (f32, f32), element: Element<'_, M>) {
     };
     let mut simulator = Simulator::with_size(settings, size, element);
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../target/korekore-preview")
+        .join("../target/ui-preview")
         .join(format!("{name}.png"));
     // The simulator only writes a file that isn't there yet.
     let written = path.with_file_name(format!("{name}-tiny-skia.png"));
@@ -51,7 +51,7 @@ fn save<M: Clone>(name: &str, size: (f32, f32), element: Element<'_, M>) {
 
 #[test]
 #[ignore = "writes PNGs for review; run with --ignored"]
-fn draw_the_korekore_views() {
+fn draw_the_ui_views() {
     let working = picture(
         true,
         &[
@@ -112,12 +112,12 @@ const SAMPLE: &str = r#"{"daemon":{"build":"0.5.0 cc16829","revision":"firmware-
  "device":{"connected":true,"port":"/dev/ttyACM0","mode":"duty","firmware_version":"0.5.0","firmware_build":"cc16829",
    "voice":"robot","volume":50,"box_key":"k","computer_key":"me",
    "paired_computers":[{"key":"me","name":"ThinkPad · Omarchy"},{"key":"m","name":"Michael's Mac Studio"}],
-   "wifi_network":"ByteTrade","wifi_address":"192.168.1.160","transfer":true,"screens":"korekore"},
+   "wifi_network":"ByteTrade","wifi_address":"192.168.1.160","transfer":true},
  "today":{"done":7,"asks":3,"busy_seconds":15120},
  "hooks":{"codex":"2026-10-21T16:40:00+08:00","claude":"2026-10-21T17:03:00+08:00"},
  "config":{"notify_link":true,"check_updates":true,"relay":false},
  "updates":{"enabled":true,"last_check":"2026-10-21T13:51:00+08:00"},
- "account":{"available":true,"signed_in":true,"github_id":1,"github_login":"kore-sample",
+ "account":{"available":true,"signed_in":true,"github_id":1,"github_login":"vibebuddy-sample",
    "today":{"day":"2026-10-21","commands":12,"commands_limit":200},
    "plan":{"name":"paid","period_end":"2026-11-24T00:00:00Z","characters":12300,"characters_limit":100000}},
  "voice_keys":{"elevenlabs":{"set":true,"refused":false},"volc":{"set":false,"refused":false}},

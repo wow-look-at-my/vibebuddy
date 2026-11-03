@@ -1,4 +1,4 @@
-// Draws the korekore views with the canvas's sample data into PNGs (2×), to set beside the design's boards.
+// Draws the app views with the canvas's sample data into PNGs (2×), to set beside the design's boards.
 // `swift run --package-path app BuddyPreview <output dir> [fonts dir]`; the fonts default to fonts/ui.
 import AppKit
 import BuddyUI

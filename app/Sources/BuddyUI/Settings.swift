@@ -1,7 +1,7 @@
 import SwiftUI
 import VibeBuddyCore
 
-/// The settings window's sections, in the sidebar's order (docs/design/korekore/README.md).
+/// The settings window's sections, in the sidebar's order (docs/design).
 public enum BuddySection: String, CaseIterable, Identifiable, Sendable {
     case character, agents, conversation, device, general, advanced
 
@@ -24,7 +24,7 @@ public enum BuddySection: String, CaseIterable, Identifiable, Sendable {
         case .agents: String(localized: "Who the box watches")
         case .conversation: String(localized: "Hold K0 on the box and ask")
         case .device: String(localized: "The box, its firmware and its network")
-        case .general: String(localized: "How korekore behaves on this Mac")
+        case .general: String(localized: "How VibeBuddy behaves on this Mac")
         case .advanced: String(localized: "For when something's off")
         }
     }
@@ -189,12 +189,12 @@ public struct BuddySettings<Page: View>: View {
     }
 }
 
-/// Stands in for a page that comes with a later step of the korekore UI.
+/// Stands in for a page that comes with a later step of the UI.
 public struct BuddyPagePending: View {
     public init() {}
 
     public var body: some View {
-        Text("This page comes with the next step of korekore.")
+        Text("This page comes with the next step of VibeBuddy.")
             .font(.rounded(14, weight: 400))
             .foregroundStyle(Theme.Colors.muted)
             .frame(maxWidth: .infinity, minHeight: 120)

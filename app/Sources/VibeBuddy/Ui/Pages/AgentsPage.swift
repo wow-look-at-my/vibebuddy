@@ -149,7 +149,7 @@ struct BuddyAgentRow: View {
         }
         if case .changedSinceLastEvent? = codexHint {
             return (KTag(String(localized: "Trust again"), color: Theme.Colors.pinkText),
-                    String(localized: "The hook config changed after Codex's last event, so Codex turned the hooks off. Type /hooks in Codex and trust korekore's hooks again."))
+                    String(localized: "The hook config changed after Codex's last event, so Codex turned the hooks off. Type /hooks in Codex and trust VibeBuddy's hooks again."))
         }
         if let lastEvent {
             return (KTag(String(localized: "Watching"), color: Theme.Colors.doneText),
@@ -161,7 +161,7 @@ struct BuddyAgentRow: View {
     }
 }
 
-/// Before writing an agent's config: what changes, in the korekore look (canvas: "AGENTS · BEFORE WRITING A HOOK").
+/// Before writing an agent's config: what changes, in the app look (canvas: "AGENTS · BEFORE WRITING A HOOK").
 struct BuddyPlanSheet: View {
     let plan: HookInstaller.Plan
     let confirm: () -> Void
@@ -173,7 +173,7 @@ struct BuddyPlanSheet: View {
             if plan.diff.isEmpty {
                 KTag(String(localized: "Nothing to change · already connected"))
             } else {
-                KNote(String(localized: "Only korekore's own entries; your other hooks stay."))
+                KNote(String(localized: "Only VibeBuddy's own entries; your other hooks stay."))
                 ScrollView {
                     VStack(alignment: .leading, spacing: 2) {
                         ForEach(plan.diff, id: \.self) { line in

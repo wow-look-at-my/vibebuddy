@@ -139,7 +139,7 @@ public struct BuddyMenuPanel: View {
                 item(1, String(localized: "Check for updates…"), action: actions.checkForUpdates)
             }
             item(2, String(localized: "Report a problem…"), action: actions.reportProblem)
-            item(3, String(localized: "Quit korekore (the box goes offline)"), key: "⌘Q", action: actions.quit)
+            item(3, String(localized: "Quit VibeBuddy (the box goes offline)"), key: "⌘Q", action: actions.quit)
         }
         .padding(.top, 6)
         .overlay(alignment: .top) { Rectangle().fill(Theme.Colors.line).frame(height: Theme.Stroke.base) }

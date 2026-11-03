@@ -2,7 +2,7 @@ import BuddyUI
 import SwiftUI
 import VibeBuddyCore
 
-/// First-run onboarding in the korekore look (canvas: "Mac · Onboarding welcome", "Onboarding · find the box,
+/// First-run onboarding in the app look (canvas: "Mac · Onboarding welcome", "Onboarding · find the box,
 /// connect, pick, Wi-Fi", and the end of onboarding on "App · alerts, notifications, banners").
 struct BuddyOnboarding: View {
     @ObservedObject var model: AppModel
@@ -152,9 +152,9 @@ struct BuddyOnboarding: View {
         }
     }
 
-    private func screenWord(_ kore: String, _ word: String, fill: Color, text: Color, gray: Bool = false) -> some View {
+    private func screenWord(_ face: String, _ word: String, fill: Color, text: Color, gray: Bool = false) -> some View {
         VStack(spacing: 6) {
-            Sprite(name: kore, scale: 4, gray: gray)
+            Sprite(name: face, scale: 4, gray: gray)
             Text(verbatim: word).font(.pixel(18)).foregroundStyle(text)
         }
         .frame(width: 240, height: 180)
@@ -166,7 +166,7 @@ struct BuddyOnboarding: View {
         if let operation = model.operation, operation.kind == .firmware, operation.state != .done {
             // The daemon lets go of the port while flashing, so the box reads as gone: progress comes first, or this page
             // falls back to "no box yet" and it looks as if nothing started.
-            title(String(localized: "Flashing korekore firmware…"), size: 26)
+            title(String(localized: "Flashing VibeBuddy firmware…"), size: 26)
             switch operation.state {
             case .failed:
                 KNote(String(localized: "Hold K0 on the box and replug the cable to put it in download mode, then retry."))
@@ -196,9 +196,9 @@ struct BuddyOnboarding: View {
             .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.Colors.ink, lineWidth: Theme.Stroke.base))
             if model.foreignFirmware {
                 VStack(alignment: .leading, spacing: 8) {
-                    KNote(String(localized: "This box runs other firmware. Put korekore on it? Its current firmware will be replaced."), color: Theme.Colors.ink)
+                    KNote(String(localized: "This box runs other firmware. Put VibeBuddy on it? Its current firmware will be replaced."), color: Theme.Colors.ink)
                     if model.firmwareDownloaded {
-                        Button(String(localized: "Flash korekore")) { BuddyFlash.foreign(then: model.updateFirmware) }.kButton(.pink)
+                        Button(String(localized: "Flash VibeBuddy")) { BuddyFlash.foreign(then: model.updateFirmware) }.kButton(.pink)
                     } else {
                         BuddyFirmwareUnavailable(model: model)
                     }
@@ -213,7 +213,7 @@ struct BuddyOnboarding: View {
                     Button(String(localized: "Not this one")) { notThisOne = true }.buttonStyle(KBigButtonStyle(.paper, primary: false))
                 }
                 if notThisOne {
-                    KNote(String(localized: "Unplug it, then plug in your box. If several devices are plugged in, korekore asks which one is yours."))
+                    KNote(String(localized: "Unplug it, then plug in your box. If several devices are plugged in, VibeBuddy asks which one is yours."))
                 }
                 // The cable is in and someone is watching: the best moment to bring older factory firmware up to date.
                 // Firmware without TRANSFER 1 is flashed over the cable only (ADR-0016), as the Device page says.
@@ -332,7 +332,7 @@ struct BuddyOnboarding: View {
     private func detail(_ agent: HookAgent, present: Bool, installed: Bool) -> String {
         if !present { return String(localized: "not found on this Mac") }
         if installed { return String(localized: "connected") }
-        if agent.ownsFile { return String(localized: "a file of korekore's own") }
+        if agent.ownsFile { return String(localized: "a file of VibeBuddy's own") }
         let path = HookInstaller.configURL(for: agent).path.replacingOccurrences(of: FileManager.default.homeDirectoryForCurrentUser.path, with: "~")
         return String(localized: "\(path) · \(agent.events.count) events")
     }
@@ -541,13 +541,13 @@ struct BuddyOnboarding: View {
 
     private var launchAtLogin: some View {
         VStack(alignment: .leading, spacing: 14) {
-            title(String(localized: "Start korekore when you log in?"))
+            title(String(localized: "Start VibeBuddy when you log in?"))
             KCard(padding: EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16)) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        KHeading(String(localized: "Start korekore when you log in"))
+                        KHeading(String(localized: "Start VibeBuddy when you log in"))
                         Spacer()
-                        KToggle(String(localized: "Start korekore when you log in"),
+                        KToggle(String(localized: "Start VibeBuddy when you log in"),
                                 isOn: Binding(get: { model.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
                     }
                     KNote(String(localized: "So the box is never left waiting after a restart. macOS may say a background item was added; that's expected."))

@@ -1,6 +1,6 @@
 import Foundation
 
-/// A palette-indexed sprite from docs/design/korekore (BuddySprites): one index per pixel, row by row; 0 is
+/// A palette-indexed sprite from docs/design (BuddySprites): one index per pixel, row by row; 0 is
 /// transparent and n is `palette[n - 1]`, as 0xRRGGBB.
 public struct PixelSprite: Sendable {
     public let width: Int
@@ -16,7 +16,7 @@ public struct PixelSprite: Sendable {
     }
 
     /// RGBA bytes at `scale` whole times the size, nearest-neighbour. `tint` (0xRRGGBB) replaces every colour,
-    /// for the one-colour tag.
+    /// to draw the sprite in one colour.
     public func rgba(scale: Int, tint: UInt32? = nil) -> [UInt8] {
         let (outWidth, outHeight) = (width * scale, height * scale)
         var bytes = [UInt8](repeating: 0, count: outWidth * outHeight * 4)
@@ -36,7 +36,7 @@ public struct PixelSprite: Sendable {
     }
 
     /// The sprite in gray, as CSS `grayscale(1) brightness(b)` draws it: each colour's luminance (Rec. 709
-    /// weights), scaled by `brightness`. The canvas grays Kore this way when the box has no link.
+    /// weights), scaled by `brightness`. The UI grays the robot this way when the box has no link.
     public func grayed(brightness: Double) -> PixelSprite {
         // Typed step by step: as one expression it is too slow for the type checker on CI's Xcode.
         let palette = palette.map { (rgb: UInt32) -> UInt32 in

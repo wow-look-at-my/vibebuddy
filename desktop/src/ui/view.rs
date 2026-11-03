@@ -29,7 +29,7 @@ fn sprite(sprite: &Sprite, scale: u32) -> image::Image<image::Handle> {
 
 /// A sprite drawn at `scale` whole times and shown at `shown` points per pixel, never resampled smoothly.
 fn sized(sprite: &Sprite, scale: u32, shown: f32) -> image::Image<image::Handle> {
-    image(sprite.handle(scale, None))
+    image(sprite.handle(scale))
         .width(Length::Fixed(sprite.width as f32 * shown))
         .height(Length::Fixed(sprite.height as f32 * shown))
         .filter_method(image::FilterMethod::Nearest)

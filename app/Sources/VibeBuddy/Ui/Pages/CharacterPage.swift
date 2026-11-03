@@ -4,7 +4,7 @@ import VibeBuddyCore
 
 /// The Character page (canvas: "Mac · Character (sidebar)"; the write and Make-your-own states on "App · Device &
 /// firmware states" and "App · Agents, Conversation, Character states"). What it does is the current Character
-/// tab's, in the korekore look.
+/// tab's, in the app look.
 struct BuddyCharacterPage: View {
     @ObservedObject var model: AppModel
     @State private var makingCharacter = false
@@ -70,7 +70,7 @@ struct BuddyCharacterPage: View {
     }
 
     /// A Character card: the look on a dark stage 104 px high, the name, ▷ and Use, one line about who it is. The
-    /// one the box wears has a 3 px `kore-pink` outline and IN USE.
+    /// one the box wears has a 3 px `pink` outline and IN USE.
     private func card<Stage: View>(name: String, summary: String, inUse: Bool, previewID: String?, use: (() -> Void)?,
                                    stageFill: Color = Theme.Colors.boxCard, @ViewBuilder stage: () -> Stage) -> some View {
         KCard(padding: EdgeInsets(top: 9, leading: 9, bottom: 9, trailing: 9),

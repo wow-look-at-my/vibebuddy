@@ -1,8 +1,8 @@
 import Foundation
 
-/// What the korekore UI shows of the box (ADR-0021): the mini box in the sidebar, the menu bar panel and its icon.
+/// What the UI shows of the box (ADR-0021): the mini box in the sidebar, the menu bar panel and its icon.
 /// It is drawn from the daemon's status, not from a screen capture, so it costs nothing over the link.
-/// desktop/src/korekore/picture.rs derives the same for Linux.
+/// desktop/src/ui/picture.rs derives the same for Linux.
 public struct BoxPicture: Equatable {
     public enum Mood: Equatable, Sendable {
         case ready, working, input, pomodoro, leisure, noLink
@@ -62,7 +62,7 @@ public struct BoxPicture: Equatable {
                           firmwareVersion: device?.firmwareVersion)
     }
 
-    /// The agent's tile in docs/design/korekore/pixel/icons.json; anything else is the user's own events.
+    /// The agent's tile in docs/design/pixel/icons.json; anything else is the user's own events.
     public static func icon(forAgent agent: String) -> String {
         switch agent {
         case "claude-code": "cc"

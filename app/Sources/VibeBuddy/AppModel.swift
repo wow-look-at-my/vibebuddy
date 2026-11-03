@@ -54,7 +54,7 @@ final class AppModel: ObservableObject {
             // With "Notify me" off, not even this one shows; without a daemon there's no config, so default to on.
             if self.status?.config.notifyLink ?? true {
                 Notifier.notify(title: String(localized: "The daemon failed to start three times"),
-                                body: String(localized: "Open korekore to restart it or export diagnostics."))
+                                body: String(localized: "Open VibeBuddy to restart it or export diagnostics."))
             }
         }
         refreshHookStates()
@@ -70,7 +70,7 @@ final class AppModel: ObservableObject {
             // as changed and silently disabled them, and the box announced nothing from Codex for four hours. This one ignores the
             // link-notification switch: the app itself made the change, so a person has to finish the job.
             Notifier.notify(title: String(localized: "Codex hook config updated"),
-                            body: String(localized: "Trust korekore's hooks again with /hooks in Codex."))
+                            body: String(localized: "Trust VibeBuddy's hooks again with /hooks in Codex."))
         }
         refreshHookStates()
         if managesDaemon { supervisor.start() }
@@ -124,7 +124,7 @@ final class AppModel: ObservableObject {
     }
 
     #if DEBUG
-    /// Debug builds only: shows a sample status without a daemon, for the korekore page snapshots.
+    /// Debug builds only: shows a sample status without a daemon, for the app page snapshots.
     func showSample(_ status: Status) {
         self.status = status
         daemonAlive = true

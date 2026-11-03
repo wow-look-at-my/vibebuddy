@@ -17,12 +17,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         #if DEBUG
-        // Debug builds only: draw every korekore page with sample data into a folder and quit, touching nothing else.
+        // Debug builds only: draw every app page with sample data into a folder and quit, touching nothing else.
         if let folder = ProcessInfo.processInfo.environment["VIBEBUDDY_UI_SNAPSHOTS"] {
             BuddySnapshots.write(to: URL(fileURLWithPath: folder), model: model)
             exit(0)
         }
-        // Debug builds only: run against the daemon already running, as a guest, and draw the korekore windows with
+        // Debug builds only: run against the daemon already running, as a guest, and draw the app windows with
         // what it reports, then quit.
         if let folder = ProcessInfo.processInfo.environment["VIBEBUDDY_UI_LIVE_SHOTS"] {
             model.managesDaemon = false
@@ -94,7 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Shows a window with a Dock icon, so it can be found again; the icon goes when the last window closes.
     private func present(_ window: NSWindow) {
         NSApp.setActivationPolicy(.regular)
-        // The Dock tile takes the bundle's icon each time it appears, so the korekore one goes on after it.
+        // The Dock tile takes the bundle's icon each time it appears, so the robot one goes on after it.
         NSApp.applicationIconImage = BuddyAppIcon.image()
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
@@ -277,7 +277,7 @@ enum LegacyLaunchAgent {
         let occupied = await portOccupied()
         guard hasPlist || occupied else { return }
         let title = hasPlist ? String(localized: "Found an old vibebuddyd background service") : String(localized: "A daemon is already running on port 7331")
-        let takeOver = BuddyAlert.run(title: title, message: String(localized: "korekore can remove it and take over, so the two don't fight over the box."),
+        let takeOver = BuddyAlert.run(title: title, message: String(localized: "VibeBuddy can remove it and take over, so the two don't fight over the box."),
                                          buttons: [String(localized: "Remove and take over"), String(localized: "Later")]).button == 0
         if takeOver {
             let bootout = Process()

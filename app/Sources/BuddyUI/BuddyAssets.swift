@@ -2,16 +2,16 @@ import AppKit
 import CoreText
 import VibeBuddyCore
 
-/// The korekore UI's fonts and sprite images (ADR-0021).
+/// The UI fonts and sprite images.
 public enum BuddyAssets {
-    /// Makes the fonts in `directory` (the bundle's Resources/fonts, from tools/korekore-fonts.py) available to this
-    /// process only. Called at launch when the korekore UI is on; the current UI keeps the system font.
+    /// Makes the fonts in `directory` (the bundle's Resources/fonts) available to this
+    /// process only. Called at launch.
     public static func registerFonts(in directory: URL) {
         let fonts = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
         for font in fonts where font.pathExtension == "ttf" {
             var error: Unmanaged<CFError>?
             if !CTFontManagerRegisterFontsForURL(font as CFURL, .process, &error) {
-                NSLog("korekore: couldn't register \(font.lastPathComponent): \(String(describing: error?.takeRetainedValue()))")
+                NSLog("VibeBuddy: couldn't register \(font.lastPathComponent): \(String(describing: error?.takeRetainedValue()))")
             }
         }
     }

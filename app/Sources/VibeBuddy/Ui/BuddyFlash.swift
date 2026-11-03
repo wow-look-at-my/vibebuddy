@@ -2,7 +2,7 @@ import AppKit
 import BuddyUI
 import VibeBuddyCore
 
-/// Asking before flashing, in the korekore look (canvas: "CONFIRMATIONS"): before an update, and before
+/// Asking before flashing, in the app look (canvas: "CONFIRMATIONS"): before an update, and before
 /// flashing over firmware that isn't ours.
 @MainActor
 enum BuddyFlash {
@@ -17,7 +17,7 @@ enum BuddyFlash {
 
     static func foreign(then flash: @escaping @MainActor () -> Void) {
         BuddyAlert.ask(
-            title: String(localized: "Flash the box with korekore?"),
+            title: String(localized: "Flash the box with VibeBuddy?"),
             message: String(localized: "The box's current firmware and data will be erased and can't be recovered. It restarts on its own when done; over the UART port this takes a few minutes."),
             buttons: [String(localized: "Flash"), String(localized: "Cancel")], warning: true) { answer in
             if answer.button == 0 { flash() }

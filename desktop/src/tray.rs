@@ -1,5 +1,5 @@
 //! The tray icon, as a StatusNotifierItem: Omarchy's shell, KDE and waybar all host these. The icon is
-//! Kore and the menu repeats the Mac app's menu bar menu; picking an item only sends an event to
+//! the robot face and the menu repeats the Mac app's menu bar menu; picking an item only sends an event to
 //! the app, which does the work.
 
 use std::path::PathBuf;
@@ -26,8 +26,8 @@ pub enum TrayEvent {
 
 pub struct Tray {
     pub menu: MenuState,
-    /// The icon is Kore (ADR-0021), drawn from this.
-    pub kore: crate::ui::picture::BoxPicture,
+    /// The icon is drawn from this.
+    pub picture: crate::ui::picture::BoxPicture,
     pub events: UnboundedSender<TrayEvent>,
 }
 
@@ -44,7 +44,7 @@ impl ksni::Tray for Tray {
         [1, 2]
             .into_iter()
             .map(|scale| {
-                let (width, height, data) = crate::ui::tray_icon(&self.kore, scale);
+                let (width, height, data) = crate::ui::tray_icon(&self.picture, scale);
                 Icon {
                     width: width as i32,
                     height: height as i32,
