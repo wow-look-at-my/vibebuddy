@@ -1,7 +1,7 @@
 # Rebuilds and signs the update manifest (ADR-0010) from every published release and the notes in docs/releases,
 # and Sparkle's appcast for the macOS App, with its DMG signed by the separate Sparkle key.
 # Called after each release of the App or the firmware, so either keeps the other's entry; run it by hand to rebuild.
-# Both go to the korekore-updates R2 bucket, served at https://updates.korekore.ai/vibebuddy/, and are kept as an
+# Both go to the updates R2 bucket (the URL and name are in the steps below), and are kept as an
 # artifact too.
 name: update-manifest
 
