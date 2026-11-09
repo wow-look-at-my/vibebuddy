@@ -17,7 +17,6 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 base64 = "0.22"
 crc32fast = "1"
 ed25519-dalek = "2"
-futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 getrandom = "0.3"
 libc = "0.2"
 png = "0.17"
@@ -25,17 +24,10 @@ serialport = "4"
 md-5 = "0.10"
 tracing.workspace = true
 tracing-subscriber.workspace = true
-semver = "1"
 sha2 = "0.10"
-# HTTPS for the update manifest: ring rather than aws-lc (whose OpenSSL license the packaging allowlist doesn't take),
+# HTTPS for speech providers: ring rather than aws-lc (whose OpenSSL license the packaging allowlist doesn't take),
 # and the system's certificate store, so a proxy whose CA the user trusts still works.
 ureq = { version = "3", default-features = false, features = ["_ring", "rustls-no-provider", "platform-verifier"] }
-vibebuddy-manifest = { path = "../manifest" }
-# The Relay's WebSocket (ADR-0012), on the same rustls + ring + platform verifier as ureq, never aws-lc.
-rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-rustls-platform-verifier = "0.7"
-tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "__rustls-tls"] }
-zip = { version = "2", default-features = false, features = ["deflate"] }
 mdns-sd = "0.21.5"
 # Noise sessions with the box off the cable (noise_link.rs, ADR-0015): only what Noise_IK_25519_ChaChaPoly_SHA256 needs.
 snow = { version = "0.10", default-features = false, features = ["std", "default-resolver", "use-curve25519", "use-chacha20poly1305", "use-sha2", "use-getrandom"] }

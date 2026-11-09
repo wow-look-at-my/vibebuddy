@@ -1,6 +1,6 @@
 [Unit]
 Description=VibeBuddy daemon
-Documentation=https://github.com/second-state/vibebuddy
+Documentation=https://github.com/wow-look-at-my/vibebuddy
 
 [Service]
 ExecStart=%h/.local/bin/vibebuddyd

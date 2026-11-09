@@ -21,7 +21,7 @@ pub enum Row {
     Mute,
     /// Who trusts the box: K0 opens FORGET ALL and NEW IDENTITY.
     Computers,
-    /// How the box is linked, its Wi-Fi and its Relay.
+    /// How the box is linked and its Wi-Fi.
     Network,
     Status,
 }
@@ -74,7 +74,7 @@ pub enum Action {
     ToggleMute,
     /// Forget every paired computer; back on the list afterwards.
     ForgetComputers,
-    /// Make a new key and forget pairings, Wi-Fi and the Relay; this closes the menu.
+    /// Make a new key and forget pairings and Wi-Fi; this closes the menu.
     NewIdentity,
 }
 

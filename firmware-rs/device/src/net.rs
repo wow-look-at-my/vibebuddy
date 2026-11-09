@@ -1,4 +1,4 @@
-//! The box on Wi-Fi (ADR-0012, docs/protocol.md "Local network link"): joining the network the user set
+//! The box on Wi-Fi (docs/protocol.md "Local network link"): joining the network the user set over
 //! over USB, DHCP, and the TCP server computers on the local network connect to. Who may link is
 //! decided by firmware-core (`lan.rs`); this only moves bytes. The main loop owns the firmware, so
 //! everything crosses over in static channels: [`EVENTS`] towards the main loop, a pipe per
@@ -28,8 +28,8 @@ use static_cell::StaticCell;
 const PORT: u16 = 7340;
 /// Connections served at once: the linked computer, and one more so a takeover can get through.
 const SLOTS: usize = 2;
-/// Sockets beyond the servers: DHCP, DNS, SNTP, the Relay and mDNS.
-const EXTRA_SOCKETS: usize = 5;
+/// Sockets beyond the servers: DHCP, DNS and mDNS, with one spare.
+const EXTRA_SOCKETS: usize = 4;
 /// The receive window: a firmware update keeps several 5.7 KB sealed chunks in flight, and the main loop reads the
 /// socket only between its passes, so a small window caps the update at a couple of KB per pass (ADR-0016).
 const SOCKET_RX_BYTES: usize = 32 * 1024;
@@ -49,12 +49,12 @@ pub enum NetEvent {
 pub static EVENTS: Channel<CriticalSectionRawMutex, NetEvent, 16> = Channel::new();
 /// The computer on the cable asked for the networks the box can hear.
 pub static SCAN: Signal<CriticalSectionRawMutex, ()> = Signal::new();
-/// The address the box has on Wi-Fi, or None while it has none; for the mDNS and Relay tasks. embassy-net keeps one
+/// The address the box has on Wi-Fi, or None while it has none; for the mDNS task. embassy-net keeps one
 /// waker for its state, so two tasks waiting on it at once keep waking each other: only [`address_task`] waits there.
 /// A `Watch` gives each reader its own waker, and the current value to one that starts late.
 pub static ADDRESS: Watch<CriticalSectionRawMutex, Option<core::net::Ipv4Addr>, ADDRESS_READERS> = Watch::new();
-/// The mDNS task and the Relay task.
-const ADDRESS_READERS: usize = 2;
+/// The mDNS task.
+const ADDRESS_READERS: usize = 1;
 /// The network to join, or None to leave Wi-Fi; signalled at boot and whenever the user changes it.
 pub static CREDENTIALS: Signal<CriticalSectionRawMutex, Option<(String, String)>> = Signal::new();
 
@@ -101,7 +101,7 @@ pub fn close(conn: u32) {
 }
 
 /// Starts Wi-Fi and the server. Nothing joins a network until [`CREDENTIALS`] names one. Returns the
-/// network stack for the Relay task, or None if Wi-Fi didn't start.
+/// network stack, or None if Wi-Fi didn't start.
 pub fn start(spawner: &Spawner, wifi: esp_hal::peripherals::WIFI<'static>) -> Option<Stack<'static>> {
     let Ok(mut controller) = WifiController::new(wifi, ControllerConfig::default()) else {
         let _ = EVENTS.try_send(NetEvent::Line(String::from("WIFI FAILED init")));
@@ -299,7 +299,7 @@ async fn mdns_task(stack: Stack<'static>, box_key: String) {
 }
 
 /// Reports the address each time the network comes up, so the computer on the cable can find the box, and hands it
-/// to the mDNS and Relay tasks through [`ADDRESS`].
+/// hands it hands it hands it hands it hands it hands it to the mDNS task through [`ADDRESS`].
 #[embassy_executor::task]
 async fn address_task(stack: Stack<'static>) {
     loop {

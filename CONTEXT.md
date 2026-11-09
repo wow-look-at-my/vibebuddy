@@ -34,37 +34,11 @@ _Avoid_: client, panel, console, companion app
 The semantic version of a firmware release, such as 0.2.2. It orders releases and decides what is offered; it is independent of the App's version. The build ID next to it on the box only identifies the exact build.
 _Avoid_: build, build number (those are the build ID), firmware hash
 
-**Update manifest (更新清单)**:
-The signed list of what can be installed: the latest App per platform and every released firmware with the oldest App it needs.
-_Avoid_: appcast (Sparkle's feed for the macOS App only), update server, feed
+**Link (链路)**: The connection between one computer and the box. A box has at most one link at a time, to one computer, and a computer links to at most one box. A link is carried over USB or over the local network. When both are available, USB wins. Moving the link from one way to another is not a drop. The link drops only when no way is left.
 
-**Link (链路)**:
-The connection between one computer and the box. A box has at most one link at a time, to one computer, and a computer links to at most one box. A link is carried over USB, over the local network, or through the Relay; when more than one is available, USB wins, then the local network, then the Relay. Moving the link from one way to another is not a drop; the link drops only when no way is left. When the link drops, the buddy closes its eyes and turns gray; a link failure is the only thing the App announces on its own.
-_Avoid_: connection, USB, serial port, Wi-Fi (those are ways of carrying the link)
+When the link drops, the buddy closes its eyes and turns gray. A link failure is the only thing the App announces on its own. _Avoid_: connection, USB, serial port, Wi-Fi (those are ways of carrying the link)
 
-**Relay (中转)**:
-VibeBuddy's online service that carries a link when the computer and the box can't reach each other directly, such as when they are on different networks. It passes the link along and decides nothing about Agents. It carries a link only for an account on the Paid plan. It is never required: a box works over USB or the local network without it.
-_Avoid_: cloud, server, backend (too broad: later online features are not the Relay)
-
-**Pairing (配对)**:
-The lasting permission for a computer to link to a box. Pairing is done once per computer and box and needs no account; the paired computers of a box are the only ones that may link to it or take it over.
-_Avoid_: binding, registration, login (an account is a separate thing, see below)
-
-**Account (账户)**:
-A person's identity with VibeBuddy's online services, needed only for features that cost us money to run: our voices and the Relay. It belongs to a person, never to a box: the user signs in on a computer, in the App, and a box is never signed in. It is layered on pairing and changes nothing about it: linking and takeover need no account; only the Relay needs one, on the Paid plan.
-_Avoid_: user (the person, not their account), box account, device registration, login (the act of signing in)
-
-**Daily allowance (每日额度)**:
-How many voice commands and spoken replies one account may have in a day. Every account has one; the Paid plan's commands allowance is larger. Past it, voice stops for that account until the next day; nothing else about the box changes.
-_Avoid_: quota, credits, plan, limit (on its own)
-
-**Paid plan (付费版)**:
-The one thing VibeBuddy sells: a monthly subscription on an account, paid through Stripe on the website. It opens the Relay and gives the monthly allowance. An account without it is on Free (免费版), which keeps everything over USB and the local network. When the plan ends, the account goes back to Free, and nothing the user has made is taken away.
-_Avoid_: subscription (Stripe's word), Pro, premium, membership, VIP, credits
-
-**Monthly allowance (每月额度)**:
-How many characters of our voices an account on the Paid plan may have spoken in one billing period, by spoken replies and by making Characters. Past it, the daily allowance applies until the next period. Speech made with the user's own key never counts.
-_Avoid_: credits, quota, tokens, balance
+**Pairing (配对)**: The lasting permission for a computer to link to a box. Pairing is done once per computer and box. The paired computers of a box are the only ones that may link to it or take it over. _Avoid_: binding, registration, login
 
 **Own key (自己的密钥)**:
 A key the user has with a speech provider, entered in the App and kept only on the computer. The daemon calls the provider with it directly; it never reaches us.
@@ -207,9 +181,6 @@ Fixed wording for the App's English UI and English logs. Use these words when wr
 | 触摸屏 / 点按 / 摸摸 | touchscreen / tap / pet | Only some boxes have a touchscreen; on the box's STATUS view the row is TOUCH |
 | 固件 / 刷入 | firmware / flash | |
 | 配对 / 已配对的电脑 | pair / paired computers | On the box's menu the row is COMPUTERS; "this computer" marks the one the App runs on |
-| 账户 / 登录 / 退出登录 | account / sign in / sign out | Never "log in" or "login"; the account belongs to the person, never the box |
-| 付费版 / 免费版 / 升级 | Paid plan / Free / upgrade | Never "Pro" or "premium" |
-| 每月额度 / 每日额度 | monthly allowance / daily allowance | |
 | 自己的密钥 | your own key | A speech provider's key; never "token" |
 | 创建角色 | make a Character | |
 | UART 桥 / 原生 USB | UART bridge / native USB | |

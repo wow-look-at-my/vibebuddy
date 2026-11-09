@@ -1,4 +1,6 @@
 
+// sprites.rs holds ALL.
+
 use super::Sprite;
 
 pub static ICON_CC: Sprite = Sprite {

@@ -1,4 +1,4 @@
-//! The box's side of a link over the local network (ADR-0011, ADR-0012, ADR-0015): who may connect, and
+//! The box's side of a link over the local network (ADR-0011, ADR-0015): who may connect, and
 //! which one computer the box is linked to. The device layer runs the TCP server and hands each connection
 //! here by a number; this decides, and says what to send, what to close and which lines to act on.
 //!
@@ -98,39 +98,10 @@ impl Lan {
             .map(|owner| owner.key)
     }
 
-    /// A computer is linked through the Relay right now.
-    pub fn relay_link_active(&self) -> bool {
-        self.owner
-            .is_some_and(|owner| owner.conn.is_none() && owner.gone_since.is_none())
-    }
-
     /// A computer talked over the cable in the last [`USB_QUIET_MS`].
     pub fn cable_in_use(&self, now: u32) -> bool {
         self.usb_at
             .is_some_and(|at| now.wrapping_sub(at) < USB_QUIET_MS)
-    }
-
-    /// A computer linked through the Relay, or that link ended. The Relay decides that link (ADR-0012); this
-    /// only keeps the local network from taking the box from it without a takeover, and lets the same
-    /// computer move to the local network.
-    pub fn relay_linked(&mut self, key: Option<[u8; 32]>, now: u32) {
-        match key {
-            Some(key) => {
-                self.owner = Some(Owner {
-                    key,
-                    conn: None,
-                    gone_since: None,
-                })
-            }
-            None => {
-                if let Some(owner) = &mut self.owner
-                    && owner.conn.is_none()
-                    && owner.gone_since.is_none()
-                {
-                    owner.gone_since = Some(now);
-                }
-            }
-        }
     }
 
     /// A new connection. `ephemeral` must be fresh randomness: the box's ephemeral key for this session.
@@ -626,23 +597,6 @@ mod tests {
         assert_eq!(
             first_event(&connect(&mut lan, &link, 3, &a, false, 100 + USB_QUIET_MS).1),
             "link.welcome"
-        );
-    }
-
-    #[test]
-    fn a_relay_link_holds_off_other_computers_but_not_its_own() {
-        let a = Computer::new(2);
-        let b = Computer::new(3);
-        let (mut lan, link) = setup(&[&a, &b]);
-        lan.relay_linked(Some(a.public()), 0);
-        assert_eq!(
-            first_event(&connect(&mut lan, &link, 1, &b, false, 10).1),
-            "link.busy"
-        );
-        assert_eq!(
-            first_event(&connect(&mut lan, &link, 2, &a, false, 20).1),
-            "link.welcome",
-            "the same computer moves to the network"
         );
     }
 

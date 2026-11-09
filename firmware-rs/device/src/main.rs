@@ -22,7 +22,6 @@ mod audio;
 mod lcd;
 mod mic;
 mod net;
-mod relay;
 mod serial;
 mod storage;
 
@@ -54,7 +53,6 @@ use vibebuddy_firmware_core::canvas::FRAME_BYTES;
 use vibebuddy_firmware_core::display::Screen;
 use vibebuddy_firmware_core::firmware::{AudioStatus, Board, Firmware, FrameAction, VolumeError};
 use vibebuddy_firmware_core::noise::{self, SealedLines, Sealer};
-use vibebuddy_firmware_core::relay_box::{self, RelayBox};
 use vibebuddy_firmware_core::spoken_reply::ReplyAudio;
 use vibebuddy_firmware_core::storage::Flash;
 use vibebuddy_firmware_core::touch;
@@ -163,8 +161,6 @@ struct DeviceBoard {
     has_codec: bool,
     /// The computer linked over the network, which gets the box's output too, sealed for its session.
     lan_peer: Option<(u32, SealedLines)>,
-    /// The session with a computer linked through the Relay: the box's output goes there as whole sealed lines.
-    relay_peer: Option<SealedLines>,
     /// The firmware asked to restart; the main loop closes the sockets first.
     restart: bool,
     /// The UART bridge's rate and whether the computer confirmed it (docs/protocol.md, "Link speed on the UART
@@ -212,9 +208,6 @@ impl Screen for DeviceBoard {
     }
 }
 
-/// Places in the Relay's outgoing queue a stream line never takes (see [`Board::write_stream`]).
-const STREAM_HEADROOM: usize = 8;
-
 impl Board for DeviceBoard {
     fn now_ms(&self) -> u32 {
         Instant::now().as_millis() as u32
@@ -223,37 +216,17 @@ impl Board for DeviceBoard {
     fn write(&mut self, bytes: &[u8]) {
         self.transport.write(bytes);
         self.write_lan(bytes);
-        if let Some(lines) = &mut self.relay_peer {
-            lines.lines(
-                bytes,
-                |_| relay::OUT.free_capacity() > 0,
-                |line| {
-                    let _ = relay::OUT.try_send((relay::current_socket(), relay_box::data(line)));
-                },
-            );
-        }
     }
 
-    /// `VOICE DATA`, 16 KB/s of it: USB, the local network and the Relay (ADR-0018), about 21 of the Relay's 50
-    /// messages a second. The UART only once the computer on the bridge moved it to the fast rate: 115200 baud carries
-    /// 11.5 KB/s. A line that doesn't fit the UART's send ring or the Relay's queue right now is dropped, as a full
-    /// network buffer drops one: a gap in `seq`, never a stalled recording. It leaves [`STREAM_HEADROOM`] of the queue
-    /// to the box's other lines, so `VOICE END` still gets through behind a backlog of audio.
+    /// `VOICE DATA`, several KB/s of it: USB and the local network.
+    /// A line that doesn't fit the UART's send ring right now is
+    /// dropped, as a full network buffer drops one.
     fn write_stream(&mut self, line: &[u8]) {
         self.transport.write_usb(line);
         if self.uart_rate.carries_stream() {
             self.transport.write_uart_stream(line);
         }
         self.write_lan(line);
-        if let Some(lines) = &mut self.relay_peer {
-            lines.lines(
-                line,
-                |_| relay::OUT.free_capacity() > STREAM_HEADROOM,
-                |line| {
-                    let _ = relay::OUT.try_send((relay::current_socket(), relay_box::data(line)));
-                },
-            );
-        }
     }
 
     fn lan_send(&mut self, conn: u32, bytes: &[u8]) {
@@ -278,13 +251,8 @@ impl Board for DeviceBoard {
         }
     }
 
-    fn relay_peer(&mut self, sealer: Option<Sealer>) {
-        self.relay_peer = sealer.map(SealedLines::new);
-    }
-
     fn peer_can_take(&self, bytes: usize) -> bool {
-        // A Relay slot holds a line of any length; leave a couple for the box's other messages.
-        self.lan_peer.as_ref().is_none_or(|(conn, _)| net::room(*conn) > noise::sealed_len(bytes)) && (self.relay_peer.is_none() || relay::OUT.free_capacity() > 2)
+        self.lan_peer.as_ref().is_none_or(|(conn, _)| net::room(*conn) > noise::sealed_len(bytes))
     }
 
     // With the radio on, the RNG draws on real noise.
@@ -543,7 +511,6 @@ async fn main(spawner: Spawner) -> ! {
         _lcd_read: lcd_read,
         has_codec: false,
         lan_peer: None,
-        relay_peer: None,
         restart: false,
         uart_rate: UartRate::new(),
     };
@@ -555,7 +522,6 @@ async fn main(spawner: Spawner) -> ! {
     let seed = Rng::new().random();
     // The box's pairing key is made from this on its first boot, so it must be true randomness: the
     // RNG only gets that with the radio on or the ADC sampling noise, and nothing else uses ADC1.
-    // The source stays on: TLS for the Relay draws on the TRNG too.
     static TRNG_SOURCE: static_cell::StaticCell<TrngSource<'static>> = static_cell::StaticCell::new();
     TRNG_SOURCE.init(TrngSource::new(peripherals.RNG, peripherals.ADC1));
     static TRNG: static_cell::StaticCell<Trng> = static_cell::StaticCell::new();
@@ -569,13 +535,9 @@ async fn main(spawner: Spawner) -> ! {
     net::CREDENTIALS.signal(wifi_credentials(&firmware));
     report_reset(&mut board);
     report_memory(&mut board);
-    if let Some(stack) = stack {
-        if let Some(link) = firmware.link() {
-            net::advertise(&spawner, stack, vibebuddy_firmware_core::link::encode(&link.public_key()).into());
-        }
-        relay::start(&spawner, stack, trng, &firmware);
+    if let (Some(stack), Some(link)) = (stack, firmware.link()) {
+        net::advertise(&spawner, stack, vibebuddy_firmware_core::link::encode(&link.public_key()).into());
     }
-    let mut relay_box = RelayBox::new();
 
     let mut input = [0u8; 256];
     // UART and USB feed one line parser, so UART bytes are held here until their line is whole: a stray byte on
@@ -631,39 +593,8 @@ async fn main(spawner: Spawner) -> ! {
                 net::NetEvent::Closed(conn) => firmware.lan_closed(&mut board, conn),
             }
         }
-        while let Ok(event) = relay::IN.try_receive() {
-            match event {
-                relay::RelayIn::Challenge(socket, nonce) => {
-                    if let Some(hello) = relay_box.hello(&firmware, &nonce) {
-                        let _ = relay::OUT.try_send((socket, hello));
-                    }
-                }
-                relay::RelayIn::Message(text) => {
-                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) {
-                        for message in relay_box.message(&mut firmware, &mut board, &value) {
-                            let _ = relay::OUT.try_send((relay::current_socket(), message));
-                        }
-                    }
-                }
-                relay::RelayIn::Gone => relay_box.gone(&mut firmware, &mut board),
-                relay::RelayIn::Line(line) => {
-                    board.write(line.as_bytes());
-                    board.write(b"\n");
-                    // With TLS up, what is left (#108).
-                    if line == "RELAY CONNECTED" {
-                        report_memory(&mut board);
-                    }
-                }
-            }
-        }
-        for message in relay_box.report(&firmware, board.now_ms()) {
-            let _ = relay::OUT.try_send((relay::current_socket(), message));
-        }
         if firmware.take_scan_request() {
             net::SCAN.signal(());
-        }
-        if firmware.take_relay_change() {
-            relay::URL.signal(firmware.relay_url().into());
         }
         if firmware.take_wifi_change() {
             net::CREDENTIALS.signal(wifi_credentials(&firmware));
@@ -683,15 +614,13 @@ async fn main(spawner: Spawner) -> ! {
             board.write(note.as_bytes());
             board.write(b"\n");
         }
-        // Before restarting, close the Relay socket and the network connections so the computers and the
-        // Relay see the box go at once, rather than after their silence timeouts; a new identity has a new
-        // box-id, so nothing would replace the old one's socket (#122). The wait also lets the last line out.
+        // Before restarting, close the network connections so the computers see the box go at once, rather
+        // than after their silence timeouts. The wait also lets the last line out.
         if board.restart {
             // The box comes back at 115200; a computer on the bridge at the fast rate must move first.
             if board.uart_rate.reset() {
                 board.transport.write_uart(alloc::format!("BAUD {}\n", uart_rate::SLOW).as_bytes());
             }
-            relay::STOP.signal(());
             net::close_all();
             Timer::after_millis(500).await;
             esp_hal::system::software_reset();

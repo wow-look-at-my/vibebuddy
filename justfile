@@ -87,7 +87,6 @@ release version:
     git push -q origin main "v${v}"
     echo "pushed v${v}; CI will notarize and publish the Release: gh run watch"
 
-# Cut a firmware release: just release-firmware 0.3.3 → bump firmware-rs/device/Cargo.toml, commit, tag firmware-v0.3.3, push; CI publishes it and rebuilds the update manifest
 release-firmware version:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -98,12 +97,9 @@ release-firmware version:
     git fetch -q origin main
     [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] || { echo "local main differs from origin/main" >&2; exit 2; }
     ! git rev-parse -q --verify "refs/tags/firmware-v${v}" >/dev/null || { echo "firmware-v${v} already exists" >&2; exit 2; }
-    # The notes say what the firmware does, and their front matter names the oldest App it runs with: the update
-    # manifest offers it only to that App or newer.
+    # The notes say what the firmware does.
     notes="docs/releases/firmware-v${v}.md"
-    [[ -s "${notes}" ]] || { echo "write ${notes} (front matter with min_app, then what this firmware does) and commit it first" >&2; exit 2; }
-    sed -n '2,/^---$/p' "${notes}" | grep -q '^min_app: [0-9]*\.[0-9]*\.[0-9]*$' \
-        || { echo "${notes} must start with ---, min_app: X.Y.Z, ---" >&2; exit 2; }
+    [[ -s "${notes}" ]] || { echo "write ${notes} (what this firmware does) and commit it first" >&2; exit 2; }
     perl -pi -e 'BEGIN{$new=shift} s/^version = ".*"/version = "$new"/ && ($done++) unless $done' "${v}" firmware-rs/device/Cargo.toml
     RUSTUP_TOOLCHAIN=stable cargo update --manifest-path firmware-rs/device/Cargo.toml -p vibebuddy-firmware --offline -q
     git add firmware-rs/device/Cargo.toml firmware-rs/device/Cargo.lock

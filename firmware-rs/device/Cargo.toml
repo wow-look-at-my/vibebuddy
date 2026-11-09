@@ -26,7 +26,7 @@ fast-clock = ["vibebuddy-firmware-core/fast-clock"]
 # The microphone and the speaker, which share I2S0. Off: the bus is never set up, the amplifier is held off and the
 # codec stays unconfigured.
 audio = []
-# Taking a firmware image over USB, the LAN or the Relay into the other OTA slot. Off: the box refuses it.
+# Taking a firmware image over USB or the LAN into the other OTA slot. Off: the box refuses it.
 firmware-update = ["vibebuddy-firmware-core/firmware-update"]
 
 [dependencies]
@@ -34,19 +34,13 @@ vibebuddy-firmware-core = { path = "../core", default-features = false }
 
 esp-hal = { version = "~1.2.2", features = ["esp32s3", "unstable"] }
 esp-rtos = { version = "0.4.0", features = ["embassy", "esp-alloc", "esp-radio", "esp32s3"] }
-# Wi-Fi (ADR-0012, src/net.rs). beta.2 was yanked; beta.1 is the one that matches esp-hal 1.2 and esp-rtos 0.4.
+# Wi-Fi (src/net.rs). beta.2 was yanked; beta.1 is the one that matches esp-hal 1.2 and esp-rtos 0.4.
 esp-radio = { version = "=1.0.0-beta.1", features = ["esp32s3", "wifi", "unstable"] }
 embassy-net = { version = "0.9.1", features = ["dhcpv4", "medium-ethernet", "proto-ipv4", "tcp", "udp", "dns", "multicast"] }
 # mDNS (src/net.rs): the box advertises _vibebuddy._tcp so computers find it after its address changes.
 edge-mdns = { version = "0.8.0", default-features = false, features = ["io"] }
 edge-nal = "0.7"
 edge-nal-embassy = { version = "0.9.0", default-features = false, features = ["proto-ipv4", "udp", "multicast"] }
-# The Relay (src/relay.rs): TLS 1.2/1.3 with certificate checks against certs/relay-roots.pem, and WebSocket framing.
-mbedtls-rs = { version = "0.3.0", features = ["esp32s3", "embassy-time", "hook-wall-clock"] }
-# The wall-clock hook means mbedtls is compiled here rather than taken prebuilt; use-gcc builds it with the
-# Xtensa GCC that ~/export-esp.sh (and CI) already provides, not a separate Xtensa clang.
-mbedtls-rs-sys = { version = "0.3.1", features = ["use-gcc"] }
-edge-ws = { version = "0.8.0", default-features = false }
 serde_json = { version = "1", default-features = false, features = ["alloc"] }
 embassy-futures = "0.1"
 esp-bootloader-esp-idf = { version = "0.6.0", features = ["esp32s3"] }
