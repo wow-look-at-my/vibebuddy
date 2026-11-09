@@ -1,6 +1,6 @@
 import AppKit
 import Combine
-import KorekoreUI
+import BuddyUI
 import SwiftUI
 import VibeBuddyCore
 
@@ -8,7 +8,7 @@ import VibeBuddyCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = AppModel()
     /// The menu bar item and its panel.
-    private var korekoreItem: KorekoreStatusItem?
+    private var statusItem: BuddyStatusItem?
     private var settingsWindow: NSWindow?
     private var onboardingWindow: NSWindow?
     private var subscriptions: Set<AnyCancellable> = []
@@ -17,18 +17,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         #if DEBUG
-        // Debug builds only: draw every korekore page with sample data into a folder and quit, touching nothing else.
-        if let folder = ProcessInfo.processInfo.environment["VIBEBUDDY_KOREKORE_SNAPSHOTS"] {
-            KorekoreSnapshots.write(to: URL(fileURLWithPath: folder), model: model)
+        // Debug builds only: draw every app page with sample data into a folder and quit, touching nothing else.
+        if let folder = ProcessInfo.processInfo.environment["VIBEBUDDY_UI_SNAPSHOTS"] {
+            BuddySnapshots.write(to: URL(fileURLWithPath: folder), model: model)
             exit(0)
         }
-        // Debug builds only: run against the daemon already running, as a guest, and draw the korekore windows with
+        // Debug builds only: run against the daemon already running, as a guest, and draw the app windows with
         // what it reports, then quit.
-        if let folder = ProcessInfo.processInfo.environment["VIBEBUDDY_KOREKORE_LIVE_SHOTS"] {
+        if let folder = ProcessInfo.processInfo.environment["VIBEBUDDY_UI_LIVE_SHOTS"] {
             model.managesDaemon = false
-            KorekoreAssets.registerFonts(in: Resources.resourcesDirectory.appendingPathComponent("fonts"))
+            BuddyAssets.registerFonts(in: Resources.resourcesDirectory.appendingPathComponent("fonts"))
             model.start()
-            KorekoreSnapshots.live(to: URL(fileURLWithPath: folder), model: model)
+            BuddySnapshots.live(to: URL(fileURLWithPath: folder), model: model)
             return
         }
         #endif
@@ -37,7 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if SingleInstance.handOffToRunningCopy() { exit(0) }
         // An installed copy with the old file name renames itself (or gives way to a new copy) and starts again.
         if BundleRename.migrateIfNeeded() { exit(0) }
-        KorekoreAssets.registerFonts(in: Resources.resourcesDirectory.appendingPathComponent("fonts"))
+        BuddyAssets.registerFonts(in: Resources.resourcesDirectory.appendingPathComponent("fonts"))
         DistributedNotificationCenter.default().addObserver(forName: SingleInstance.showSettings, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.showMainWindow() }
         }
@@ -51,7 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         source.resume()
         terminationSignal = source
 
-        korekoreItem = KorekoreStatusItem(model: model, actions: KorekoreMenuActions(
+        statusItem = BuddyStatusItem(model: model, actions: BuddyMenuActions(
             settings: { [weak self] in self?.showSettings() }, checkForUpdates: { [weak self] in self?.checkForUpdates() },
             reportProblem: { [weak self] in self?.reportProblem() }, quit: { [weak self] in self?.quit() },
             restartDaemon: { [weak self] in self?.restartDaemon() }))
@@ -94,8 +94,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Shows a window with a Dock icon, so it can be found again; the icon goes when the last window closes.
     private func present(_ window: NSWindow) {
         NSApp.setActivationPolicy(.regular)
-        // The Dock tile takes the bundle's icon each time it appears, so the korekore one goes on after it.
-        NSApp.applicationIconImage = KorekoreAppIcon.image()
+        // The Dock tile takes the bundle's icon each time it appears, so the robot one goes on after it.
+        NSApp.applicationIconImage = BuddyAppIcon.image()
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
     }
@@ -147,7 +147,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func showSettings() {
         if settingsWindow == nil {
-            let window = KorekoreSettingsWindow(rootView: KorekoreSettingsRoot(model: model))
+            let window = BuddySettingsWindow(rootView: BuddySettingsRoot(model: model))
             window.center()
             window.isReleasedWhenClosed = false
             watchClose(window)
@@ -158,7 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func showOnboarding() {
         if onboardingWindow == nil {
-            let window = KorekoreSettingsWindow.onboarding(rootView: KorekoreOnboarding(model: model, finish: { [weak self] in
+            let window = BuddySettingsWindow.onboarding(rootView: BuddyOnboarding(model: model, finish: { [weak self] in
                 UserDefaults.standard.set(true, forKey: "onboardingDone")
                 self?.onboardingWindow?.close()
             }))
@@ -277,7 +277,7 @@ enum LegacyLaunchAgent {
         let occupied = await portOccupied()
         guard hasPlist || occupied else { return }
         let title = hasPlist ? String(localized: "Found an old vibebuddyd background service") : String(localized: "A daemon is already running on port 7331")
-        let takeOver = KorekoreAlert.run(title: title, message: String(localized: "korekore can remove it and take over, so the two don't fight over the box."),
+        let takeOver = BuddyAlert.run(title: title, message: String(localized: "VibeBuddy can remove it and take over, so the two don't fight over the box."),
                                          buttons: [String(localized: "Remove and take over"), String(localized: "Later")]).button == 0
         if takeOver {
             let bootout = Process()

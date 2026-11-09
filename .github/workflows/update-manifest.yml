@@ -1,7 +1,7 @@
 # Rebuilds and signs the update manifest (ADR-0010) from every published release and the notes in docs/releases,
 # and Sparkle's appcast for the macOS App, with its DMG signed by the separate Sparkle key.
 # Called after each release of the App or the firmware, so either keeps the other's entry; run it by hand to rebuild.
-# Both go to the korekore-updates R2 bucket, served at https://updates.korekore.ai/vibebuddy/, and are kept as an
+# Both go to the updates R2 bucket (the URL and name are in the steps below), and are kept as an
 # artifact too.
 name: update-manifest
 
@@ -71,15 +71,19 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
           ENDPOINT: https://144772c196f3327fb8e8af4cfdf09cc6.r2.cloudflarestorage.com
+          BUCKET: ${{ vars.UPDATES_BUCKET }}
+          UPDATES_URL: ${{ vars.UPDATES_URL }}
         run: |
+          : "${BUCKET:?the repository variable UPDATES_BUCKET names the R2 bucket}"
+          : "${UPDATES_URL:?the repository variable UPDATES_URL is the public base URL of that bucket}"
           # The manifest last: an appcast pointing at a release the manifest doesn't know yet does no harm.
           if [[ -f appcast.xml ]]; then
-            aws s3 cp appcast.xml s3://korekore-updates/vibebuddy/appcast.xml --endpoint-url "${ENDPOINT}" \
+            aws s3 cp appcast.xml "s3://${BUCKET}/vibebuddy/appcast.xml" --endpoint-url "${ENDPOINT}" \
               --content-type application/xml --cache-control "public, max-age=300"
           fi
-          aws s3 cp manifest.json s3://korekore-updates/vibebuddy/manifest.json --endpoint-url "${ENDPOINT}" \
+          aws s3 cp manifest.json "s3://${BUCKET}/vibebuddy/manifest.json" --endpoint-url "${ENDPOINT}" \
             --content-type application/json --cache-control "public, max-age=300"
           # What clients now get is what was just signed.
-          curl -fsS "https://updates.korekore.ai/vibebuddy/manifest.json?check=${GITHUB_RUN_ID}" -o served.json
+          curl -fsS "${UPDATES_URL}/vibebuddy/manifest.json?check=${GITHUB_RUN_ID}" -o served.json
           cargo run --locked --release -q -p vibebuddy-manifest -- verify manifest/manifest-key.pub served.json
           cmp manifest.json served.json

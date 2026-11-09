@@ -1,0 +1,186 @@
+import SwiftUI
+
+/// The design tokens.
+public enum BuddyTheme {
+    public enum Colors {
+        /// Text, every outline (2-3 px), sticker shadows, selected nav row. Also the box's screen ground.
+        public static let ink = Color(hexRGB: 0x1C1730)
+        /// App window and brand ground. Text on it: ink, muted, pink-text.
+        public static let cream = Color(hexRGB: 0xFFF6E8)
+        /// Cards, list rows, secondary buttons, inputs on cream.
+        public static let paper = Color(hexRGB: 0xFFFFFF)
+        /// Behind windows in mockups; the toggle track when off.
+        public static let backdrop = Color(hexRGB: 0xE9E4F2)
+        /// Dividers between rows inside a card (2 px). Never an outer border.
+        public static let line = Color(hexRGB: 0xF1E7D6)
+        /// Secondary text on cream and paper (about 9:1).
+        public static let muted = Color(hexRGB: 0x4A4360)
+        /// Tertiary pixel text: versions, timestamps, footnotes (about 5:1 on cream).
+        public static let muted2 = Color(hexRGB: 0x6B6482)
+        /// Brand accent as a FILL: selected character border, progress, toggle on, Connect button, Pomodoro screen. Ink text on it (5.3:1). Never small text on cream.
+        public static let pink = Color(hexRGB: 0xF0587F)
+        /// Pink TEXT on cream or paper below 24 px: the small pixel tag, links, IN USE, kicker lines (5.0:1 on cream, 5.4:1 on paper).
+        public static let pinkText = Color(hexRGB: 0xC2335B)
+        /// Needs input: the one loud state. Full-screen takeover on the box; primary action fill in the app (ink text).
+        public static let sun = Color(hexRGB: 0xFFD23F)
+        /// Working. Calm, silent. RUN pills, the WORKING word, the robot's ... marks.
+        public static let sky = Color(hexRGB: 0x7CC8FF)
+        /// Done. 3 s full-screen celebration on the box; done pills.
+        public static let mint = Color(hexRGB: 0x6EE7B7)
+        /// Failed. Border and words on Ink, never a full red screen.
+        public static let peach = Color(hexRGB: 0xFF7A7A)
+        /// Ready / idle and the ON DUTY label.
+        public static let lavender = Color(hexRGB: 0xB9A8FF)
+        /// No link. The whole box screen goes gray; mist is for the big NO LINK word (4.1:1 on box-gray-ground, large text only).
+        public static let mist = Color(hexRGB: 0x8A85A3)
+        /// Small text on the no-link screen (6.0:1 on box-gray-ground).
+        public static let mistText = Color(hexRGB: 0xA8A3BD)
+        /// Done / watching / joined as TEXT on cream or paper (5.0:1 on cream; mint fails as text).
+        public static let doneText = Color(hexRGB: 0x177A56)
+        /// Needs input / waiting as TEXT on cream or paper (5.3:1 on cream; sun fails as text).
+        public static let waitText = Color(hexRGB: 0x8A5F00)
+        /// Working / busy as TEXT on cream or paper.
+        public static let workText = Color(hexRGB: 0x2E6FB0)
+        /// The box's screen background in calm states.
+        public static let boxGround = Color(hexRGB: 0x1C1730)
+        /// Task tickets and the side panel on the box; agent rows on Ink.
+        public static let boxCard = Color(hexRGB: 0x2A2345)
+        /// The robot's face; empty segments of meters on the box.
+        public static let boxFace = Color(hexRGB: 0x3B2F63)
+        /// Primary text on the box. Also the robot's shell.
+        public static let boxText = Color(hexRGB: 0xFFF3DD)
+        /// Project names, times, hints on the box.
+        public static let boxTextMuted = Color(hexRGB: 0xA9A2C2)
+        /// Dimmed screen behind the box's MENU card.
+        public static let boxDim = Color(hexRGB: 0x0F0C1C)
+        /// The box's ground while there is no link.
+        public static let boxGrayGround = Color(hexRGB: 0x2A2833)
+        /// Cheeks on the robot and every Character.
+        public static let blush = Color(hexRGB: 0xFF9EB8)
+        /// Claude Code tile.
+        public static let agentCc = Color(hexRGB: 0xF2A27E)
+        /// Codex tile.
+        public static let agentCx = Color(hexRGB: 0x9DB4FF)
+        /// GitHub Actions tile; General and Advanced nav tiles.
+        public static let agentCi = Color(hexRGB: 0xD9D3EA)
+        /// OpenCode tile.
+        public static let agentOc = Color(hexRGB: 0x8FE3C4)
+        /// GitHub Copilot CLI tile.
+        public static let agentGh = Color(hexRGB: 0xA8D8FF)
+        /// Pi tile.
+        public static let agentPi = Color(hexRGB: 0xFFC59E)
+        /// Your own events (POST /v1/events) tile; Conversation nav tile.
+        public static let agentApi = Color(hexRGB: 0xFFE58A)
+    }
+
+    /// The bundled fonts (Resources/fonts) by PostScript name.
+    public enum FontName {
+        public static let roundedRegular = "RoundedMplus1c-Regular"
+        public static let roundedBold = "RoundedMplus1c-Bold"
+        public static let roundedExtraBold = "RoundedMplus1c-ExtraBold"
+        public static let pixelRegular = "DotGothic16-Regular"
+    }
+
+    public enum Typography {
+        /// Rounded Mplus 1c 800. The wordmark, large lockups only.
+        public static let display = BuddyTextStyle(font: "RoundedMplus1c-ExtraBold", size: 104, lineHeight: 93.6, letterSpacing: -3.12)
+        /// Rounded Mplus 1c 800. Page title in the app's content area.
+        public static let title = BuddyTextStyle(font: "RoundedMplus1c-ExtraBold", size: 28, lineHeight: 34, letterSpacing: 0)
+        /// Rounded Mplus 1c 800. Onboarding headlines.
+        public static let hero = BuddyTextStyle(font: "RoundedMplus1c-ExtraBold", size: 42, lineHeight: 47, letterSpacing: 0)
+        /// Rounded Mplus 1c 800. Card titles, banner lines.
+        public static let heading = BuddyTextStyle(font: "RoundedMplus1c-ExtraBold", size: 17, lineHeight: 22, letterSpacing: 0)
+        /// Rounded Mplus 1c 800. Row names, nav items, character names.
+        public static let label = BuddyTextStyle(font: "RoundedMplus1c-ExtraBold", size: 15, lineHeight: 20, letterSpacing: 0)
+        /// Rounded Mplus 1c 800. Buttons and chips (12 px in dense rows).
+        public static let button = BuddyTextStyle(font: "RoundedMplus1c-ExtraBold", size: 13, lineHeight: 18, letterSpacing: 0)
+        /// Rounded Mplus 1c 400. Paragraphs, chat bubbles.
+        public static let body = BuddyTextStyle(font: "RoundedMplus1c-Regular", size: 14, lineHeight: 21, letterSpacing: 0)
+        /// Rounded Mplus 1c 400. Row details, captions.
+        public static let small = BuddyTextStyle(font: "RoundedMplus1c-Regular", size: 12, lineHeight: 17, letterSpacing: 0)
+        /// DotGothic16 400. The state word on the box (22-36 px on a takeover).
+        public static let boxState = BuddyTextStyle(font: "DotGothic16-Regular", size: 24, lineHeight: 24, letterSpacing: 0)
+        /// DotGothic16 400. Ticket titles on the box (9-12 px).
+        public static let boxText = BuddyTextStyle(font: "DotGothic16-Regular", size: 11, lineHeight: 14, letterSpacing: 0)
+        /// DotGothic16 400. Values, versions, ports in the app.
+        public static let pixelValue = BuddyTextStyle(font: "DotGothic16-Regular", size: 13, lineHeight: 18, letterSpacing: 0)
+        /// DotGothic16 400. State tags in the app: uppercase, state *-text colour, no background.
+        public static let pixelTag = BuddyTextStyle(font: "DotGothic16-Regular", size: 12, lineHeight: 16, letterSpacing: 0)
+    }
+
+    public enum Space {
+        /// Inside pills, icon-to-text in pixel rows.
+        public static let s1: CGFloat = 4
+        /// Gaps in button rows, between tickets on the box (px x 1.5 there).
+        public static let s2: CGFloat = 8
+        /// Row padding, card grid gaps.
+        public static let s3: CGFloat = 12
+        /// Card padding, content-area gaps.
+        public static let s4: CGFloat = 16
+        /// Window inset, page padding.
+        public static let s5: CGFloat = 24
+        /// Onboarding columns, board margins.
+        public static let s6: CGFloat = 40
+    }
+
+    public enum Radius {
+        /// Key chips (K0 K1 K2) and state pills on the box; pixel tags.
+        public static let pixel: CGFloat = 4
+        /// Inner tiles: sprite stages, inputs, ticket rows on the box (8 px at 1x).
+        public static let sm: CGFloat = 10
+        /// Cards and grouped lists.
+        public static let md: CGFloat = 16
+        /// Windows and panels.
+        public static let lg: CGFloat = 20
+        /// Hero panels (the onboarding robot stage).
+        public static let xl: CGFloat = 28
+        /// Buttons, chips, toggles, tabs.
+        public static let pill: CGFloat = 999
+    }
+
+    public enum Stroke {
+        /// Pixel-tag outlines on the box and status squares.
+        public static let thin: CGFloat = 1.5
+        /// Cards, buttons, toggles, inputs, chips.
+        public static let base: CGFloat = 2
+        /// Windows, the selected character card (pink), primary hero buttons.
+        public static let bold: CGFloat = 3
+    }
+
+    /// Solid ink drop shadows: how far down they fall.
+    public enum Sticker {
+        /// Cards, list groups, the sidebar box mirror. Solid ink, no blur: the sticker look.
+        public static let sm: CGFloat = 4
+        /// Hero panels, lockup cards, the menu bar panel.
+        public static let md: CGFloat = 6
+        /// App windows.
+        public static let lg: CGFloat = 8
+    }
+
+    public enum Pixel {
+        /// Small bitmap tag (sidebar, title bar), solid, no grain.
+        public static let dotSm: CGFloat = 2
+        /// Medium tag on Ink lockups.
+        public static let dotMd: CGFloat = 3
+        /// Large tag: 3 px dot + 1 px grain gap, 1 px corner.
+        public static let dotLg: CGFloat = 4
+        /// The robot and Characters in app cards: 1 sprite pixel = 4 px.
+        public static let spriteScaleApp: Int = 4
+        /// The robot on the 320x240 box screen in takeovers (4 on duty).
+        public static let spriteScaleBox: Int = 5
+    }
+}
+
+/// A type style: the font file, its size, line height and letter spacing, all in points.
+public struct BuddyTextStyle: Sendable {
+    public let font: String
+    public let size: CGFloat
+    public let lineHeight: CGFloat
+    public let letterSpacing: CGFloat
+}
+
+extension Color {
+    public init(hexRGB rgb: UInt32) {
+        self.init(.sRGB, red: Double(rgb >> 16 & 0xFF) / 255, green: Double(rgb >> 8 & 0xFF) / 255, blue: Double(rgb & 0xFF) / 255)
+    }
+}

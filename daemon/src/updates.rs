@@ -19,11 +19,7 @@ use crate::status::DeviceState;
 pub const COMPILED_IN: bool = false;
 
 /// Where the manifest lives: R2 behind our own domain, so it can move or gain a Worker without an App release.
-const MANIFEST_URL: Option<&str> = if COMPILED_IN {
-    Some("https://updates.korekore.ai/vibebuddy/manifest.json")
-} else {
-    None
-};
+const MANIFEST_URL: Option<&str> = None;
 
 /// The key CI signs the manifest with (`tools/setup-update-signing.sh`).
 const PUBLIC_KEY: &str = include_str!("../../manifest/manifest-key.pub");
