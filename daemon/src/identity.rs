@@ -1,5 +1,4 @@
-//! This computer's side of pairing: an Ed25519 key that tells the box, the local network
-//! which computer is talking. Plus the name the box shows for it.
+//! This computer's side of pairing: an Ed25519 key that tells the box, the local network which computer is talking.
 
 use std::path::{Path, PathBuf};
 

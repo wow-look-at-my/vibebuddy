@@ -126,19 +126,19 @@ Until those tests are done, "one cable for every link" should not be written up 
 
 Neither repository in this section is official ALIENTEK or Espressif material, so **neither may be used as a basis for board type, GPIOs, BSP, schematic or electrical safety**.
 
-### `echokit_box`
+### `second-state/echokit_box`
 
 Worth borrowing:
 
-- It organizes device firmware with Rust + ESP-IDF and selects an integrated BOX configuration through a Cargo feature. The README shows the `espflash` build/flash flow.
-- `atom_box.rs` gathers the screen, audio, buttons, I2C/I/O expander and so on into a single board implementation. VibeBuddy can borrow this structure: business logic never references raw GPIOs, and board differences are encapsulated in a board profile.
+- It organizes device firmware with Rust + ESP-IDF and selects an integrated BOX configuration through a Cargo feature; the README shows the `espflash` build/flash flow. [Project README](https://github.com/second-state/echokit_box/blob/4484efca885c2ffd01ffb1acdbb5817421583bd8/README.md)
+- `atom_box.rs` gathers the screen, audio, buttons, I2C/I/O expander and so on into a single board implementation. VibeBuddy can borrow this structure: business logic never references raw GPIOs, and board differences are encapsulated in a board profile. [Board implementation](https://github.com/second-state/echokit_box/blob/4484efca885c2ffd01ffb1acdbb5817421583bd8/src/boards/atom_box.rs)
 - Its concurrency layout for the framebuffer, audio task and button task is worth referencing, but timing, buffers and pins must be re-verified against the target board's official material and on-device tests.
 
 Not usable as a source: the HAL drivers the project bundles or modifies, and the I2C, I2S, LCD and I/O expander pins in `atom_box.rs`. Even where comments mention ALIENTEK or ESP32S3 BOX, these are only a third-party implementation's claims. They differ clearly from the confirmed BOX3/DNESP32S3 pins above, which is exactly why the name "ESP32S3 BOX" is not enough to identify the hardware.
 
-### `echokit_server`
+### `second-state/echokit_server`
 
-Worth borrowing: the device/server layering, WebSocket sessions, and the engineering organization of ASR→LLM→TTS orchestration with configurable providers.
+Worth borrowing: the device/server layering, WebSocket sessions, and the engineering organization of ASR→LLM→TTS orchestration with configurable providers. [Project README](https://github.com/second-state/echokit_server/blob/d1d976596f122976095b7da4df3e946baf152b96/README.md)
 
 Not usable as a source: this is a higher-level voice agent server and provides no official hardware evidence for ALIENTEK carrier boards. If VibeBuddy v1 uses a local daemon + USB NDJSON, WebSocket and a full cloud voice pipeline should not be brought in without validated requirements.
 

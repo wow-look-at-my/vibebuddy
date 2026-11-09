@@ -1,21 +1,23 @@
-# Checks every push: tests only, with no secrets, signing or uploads; release-firmware.yml builds the device firmware.
+# Checks every pull request, and master after it merges: the tests that were otherwise only run by hand.
+# It builds nothing for release and publishes nothing: no secrets, no signing, no uploads. The device firmware
+# (Xtensa toolchain) is left to release-firmware.yml; its logic is in firmware-rs/core, tested here on the host.
 name: ci
 
 on:
+  pull_request:
   push:
-    branches: ['**']
-  workflow_dispatch:
+    branches: [master]
 
 permissions:
   contents: read
 
 concurrency:
-  group: gha_${{ github.repository }}_${{ github.workflow }}_${{ github.ref != 'refs/heads/master' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   rust:
-    # The daemon, the Linux app, the hook, the protocol and the firmware's host-tested core.
+    # The daemon, the Linux app, the hook, the manifest tool, the protocol and the firmware's host-tested core.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,6 +29,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Test
         run: cargo test --workspace --locked
+      - name: Firmware core with updates off
+        run: cargo test -p vibebuddy-firmware-core --no-default-features --lib --locked disabled_build
       - name: Clippy
         # Errors fail the check; existing warnings are reported, not fatal.
         run: cargo clippy --workspace --all-targets --locked
@@ -41,6 +45,8 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      # Built and run in two steps: since the package depends on Sparkle (a binary framework), the runner's
+      # `swift run` gets SelfTest killed with SIGKILL as it starts, while the same binary run directly passes.
       - name: SelfTest
         run: |
           swift build --package-path app --product SelfTest

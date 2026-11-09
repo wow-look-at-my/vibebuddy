@@ -1,4 +1,7 @@
-# Apple-silicon DMG and x86_64 Linux tarball; a vX.Y.Z tag notarizes and publishes a GitHub Release, and release-firmware.yml releases the firmware.
+# Apple-silicon DMG and x86_64 Linux tarball. Only a vX.Y.Z tag notarizes and publishes a GitHub Release; commits
+# to main that touch packaged content only build, test and sign, keeping both packages as 7-day artifacts for self-testing.
+# Firmware isn't in either package: it is released on its own by release-firmware.yml and the daemon downloads it
+# (ADR-0010). firmware-rs/core stays a trigger path because the workspace tests run it on the host.
 name: release-app
 
 on:
@@ -12,6 +15,7 @@ on:
       - "hook/**"
       - "protocol/**"
       - "firmware-rs/core/**"
+      - "manifest/**"
       - "characters/**"
       - "fonts/**"
       - "tools/check-localization.py"
@@ -37,9 +41,15 @@ jobs:
     # macos-15 is an Apple-silicon runner, so the output is arm64; no Intel build yet.
     runs-on: macos-15
     env:
-      # Developer ID signing and notarization need the secrets from tools/setup-release-signing.sh; without them the build is ad-hoc signed.
+      # Developer ID signing plus notarization only runs when all five signing secrets are set; otherwise fall back to ad-hoc.
+      # See tools/setup-release-signing.sh for how to configure them.
+      # Secrets are snapshotted when the run is created; ones written while the run is queued aren't seen, so trigger again.
       SIGNED: ${{ secrets.MACOS_CERT_P12 != '' && secrets.APPLE_APP_PASSWORD != '' }}
       RELEASE: ${{ startsWith(github.ref, 'refs/tags/') }}
+      # Builds CI makes check for updates by default; builds from source don't (ADR-0010).
+      VIBEBUDDY_RELEASE_BUILD: "1"
+      # Only a tag's build uses the production Relay; main's and source builds use staging (docs/relay-protocol.md).
+      VIBEBUDDY_RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && '1' || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,6 +72,8 @@ jobs:
         run: |
           rustup update stable --no-self-update
           cargo test --workspace
+          # Built and run in two steps: since the package depends on Sparkle (a binary framework), the runner's
+          # `swift run` gets SelfTest killed with SIGKILL as it starts, while the same binary run directly passes.
           swift build --package-path app --product SelfTest
           "$(swift build --package-path app --show-bin-path)/SelfTest"
       - name: Import signing certificate
@@ -100,7 +112,10 @@ jobs:
           codesign --force --timestamp --sign "${CODESIGN_IDENTITY}" "${dmg}"
           xcrun notarytool submit "${dmg}" --wait \
             --apple-id "${APPLE_ID}" --team-id "${APPLE_TEAM_ID}" --password "${APPLE_APP_PASSWORD}"
-          # A failed notarization fails stapling, retried while the ticket propagates, and Gatekeeper's own assessment confirms it.
+          # notarytool doesn't always exit non-zero when notarization fails, but staple fails without a ticket, so it is the gate;
+          # then confirm once more with Gatekeeper's own assessment, and don't publish if it fails.
+          # Right after "Accepted" the ticket may not be served yet (v0.3.1's first run: "Could not find base64 encoded
+          # ticket"), so give it a few tries before treating a missing ticket as a failed notarization.
           for attempt in 1 2 3 4 5; do
             xcrun stapler staple "${dmg}" && break
             [[ "${attempt}" -lt 5 ]] || exit 1
@@ -120,6 +135,10 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       RELEASE: ${{ startsWith(github.ref, 'refs/tags/') }}
+      # Builds CI makes check for updates by default; builds from source don't (ADR-0010).
+      VIBEBUDDY_RELEASE_BUILD: "1"
+      # Only a tag's build uses the production Relay; main's and source builds use staging (docs/relay-protocol.md).
+      VIBEBUDDY_RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && '1' || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -185,7 +204,7 @@ jobs:
           cat >> notes.md <<NOTES
           - **macOS** (Apple silicon, macOS 14+): open the DMG and drag VibeBuddy into Applications.
           - **Linux** (x86_64, tested on Omarchy): \`tar xf VibeBuddy-${label}-linux-x86_64.tar.gz && cd VibeBuddy-${label}-linux-x86_64 && ./install.sh\`
-          - **Firmware** comes in its own releases (\`firmware-v...\`); pick the zip with Settings -> Device -> Flash from file.
+          - **Firmware** comes in its own releases (\`firmware-v…\`); the app downloads it and offers it on the Device tab.
           NOTES
           if [[ "${SIGNED}" != "true" ]]; then
             cat >> notes.md <<'NOTES'
@@ -198,3 +217,10 @@ jobs:
             "VibeBuddy-${label}-linux-x86_64.tar.gz" \
             --title "VibeBuddy ${label}" \
             --notes-file notes.md
+
+  manifest:
+    if: false
+    # The new App version goes into the update manifest, next to every released firmware.
+    needs: publish
+    uses: ./.github/workflows/update-manifest.yml
+    secrets: inherit

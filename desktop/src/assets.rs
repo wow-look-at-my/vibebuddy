@@ -1,5 +1,6 @@
-//! What was installed next to the app: the Character packs from
-//! `characters/`. On the Mac the packs ride inside the app bundle.
+//! What was installed next to the app: the Character packs from `characters/`. Firmware isn't installed; the daemon
+//! downloads it (ADR-0010). On the Mac the packs ride inside the app bundle. Here `install.sh` puts them in `~/.local/share/vibebuddy`
+//! and a distribution package in `/usr/share/vibebuddy`; the user's copy wins, as XDG data lookups go.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};

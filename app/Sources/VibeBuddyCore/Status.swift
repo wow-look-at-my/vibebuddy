@@ -8,25 +8,31 @@ public struct Status: Codable, Equatable {
     public var hooks: HooksSeen
     public var operation: DeviceOperation?
     public var config: DaemonConfig
+    /// What the update manifest offers (ADR-0010); absent from older daemons.
+    public var updates: UpdateStatus?
     /// Every Activity, newest first, as the box's task cards show them; absent from older daemons.
     public var activities: [ActivitySummary]?
 
+    /// The person's VibeBuddy account (ADR-0018); absent from older daemons, which can't sign in.
+    public var account: AccountStatus?
     /// Which of the user's own keys for spoken replies are set (ADR-0020); absent from older daemons.
     public var voiceKeys: VoiceKeysStatus?
     /// The Character being made, or the last one made since the daemon started (ADR-0020); absent when there is none,
     /// and from older daemons.
     public var making: MakingStatus?
 
-    enum CodingKeys: String, CodingKey { case daemon, device, today, hooks, operation, config, voiceKeys = "voice_keys", making, activities }
+    enum CodingKeys: String, CodingKey { case daemon, device, today, hooks, operation, config, updates, account, voiceKeys = "voice_keys", making, activities }
 
-    public init(daemon: DaemonInfo, device: DeviceState, today: TodaySummary, hooks: HooksSeen, operation: DeviceOperation?, config: DaemonConfig, voiceKeys: VoiceKeysStatus? = nil, making: MakingStatus? = nil, activities: [ActivitySummary]? = nil) {
+    public init(daemon: DaemonInfo, device: DeviceState, today: TodaySummary, hooks: HooksSeen, operation: DeviceOperation?, config: DaemonConfig, updates: UpdateStatus? = nil, account: AccountStatus? = nil, voiceKeys: VoiceKeysStatus? = nil, making: MakingStatus? = nil, activities: [ActivitySummary]? = nil) {
         self.daemon = daemon
         self.device = device
         self.today = today
         self.hooks = hooks
         self.operation = operation
         self.config = config
+        self.updates = updates
         self.activities = activities
+        self.account = account
         self.voiceKeys = voiceKeys
         self.making = making
     }
@@ -58,7 +64,69 @@ public struct VoiceKeysStatus: Codable, Equatable {
         public init(set: Bool, refused: Bool = false) { self.set = set; self.refused = refused }
     }
     public var elevenlabs: Key
-    public init(elevenlabs: Key) { self.elevenlabs = elevenlabs }
+    public var volc: Key
+    public init(elevenlabs: Key, volc: Key) { self.elevenlabs = elevenlabs; self.volc = volc }
+}
+
+/// An account has an email or a GitHub user, never both.
+public struct AccountStatus: Codable, Equatable {
+    /// This build has a service to sign in to.
+    public var available: Bool
+    public var signedIn: Bool
+    public var email: String?
+    public var githubID: Int?
+    /// Looked up on GitHub when signing in; nil if that lookup failed.
+    public var githubLogin: String?
+    /// Voice used in the current UTC day, when the daemon knows; absent from daemons before it.
+    public var today: AccountUsage?
+    /// Why the service refused voice today: `allowance` or `global_cap`.
+    public var refused: String?
+    /// The account's plan (ADR-0020), when the daemon knows.
+    public var plan: AccountPlan?
+    enum CodingKeys: String, CodingKey { case available, signedIn = "signed_in", email, githubID = "github_id", githubLogin = "github_login", today, refused, plan }
+    public init(available: Bool, signedIn: Bool, email: String? = nil, githubID: Int? = nil, githubLogin: String? = nil, today: AccountUsage? = nil, refused: String? = nil, plan: AccountPlan? = nil) {
+        self.available = available; self.signedIn = signedIn; self.email = email; self.githubID = githubID; self.githubLogin = githubLogin
+        self.today = today; self.refused = refused; self.plan = plan
+    }
+
+    /// When refused voice comes back: the next 00:00 UTC after `now`, when the service's day starts over, as HH:mm
+    /// (24 hours) in `timeZone`, the same time the box shows.
+    public static func voiceComesBack(after now: Date = Date(), in timeZone: TimeZone = .current) -> String {
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        let midnight = utc.date(byAdding: .day, value: 1, to: utc.startOfDay(for: now))!
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: midnight)
+    }
+}
+
+/// `free`, or `paid` with the billing period's end and its monthly allowance, in characters of our voices.
+public struct AccountPlan: Codable, Equatable {
+    public var name: String
+    public var periodEnd: Date?
+    public var characters: Int?
+    public var charactersLimit: Int?
+    enum CodingKeys: String, CodingKey { case name, periodEnd = "period_end", characters, charactersLimit = "characters_limit" }
+    public init(name: String, periodEnd: Date? = nil, characters: Int? = nil, charactersLimit: Int? = nil) {
+        self.name = name; self.periodEnd = periodEnd; self.characters = characters; self.charactersLimit = charactersLimit
+    }
+    public var paid: Bool { name == "paid" }
+    /// Whether the App shows the Paid plan. Off until the plan is on sale (2026-10-28): the plan row, the Relay switch
+    /// and its refusals, and making a Character with VibeBuddy's voices are hidden. The daemon doesn't change.
+    public static let shown = false
+}
+
+public struct AccountUsage: Codable, Equatable {
+    public var day: String
+    public var commands: Int
+    public var commandsLimit: Int
+    enum CodingKeys: String, CodingKey { case day, commands, commandsLimit = "commands_limit" }
+    public init(day: String, commands: Int, commandsLimit: Int) {
+        self.day = day; self.commands = commands; self.commandsLimit = commandsLimit
+    }
 }
 
 public struct DaemonInfo: Codable, Equatable {
@@ -124,8 +192,6 @@ public struct DeviceState: Codable, Equatable {
     public var voice: String?
     /// Speaker volume (20 to 100) as reported by the box; the app is just a remote control.
     public var volume: Int?
-    /// Which set of screens the box draws, `robot` or `korekore` (ADR-0021); nil from firmware that predates the choice, and from older daemons.
-    public var screens: String?
     /// Connected but running other firmware, as the daemon judged it; absent from older daemons.
     public var foreignFirmware: Bool?
     /// Absent from older daemons, like the two below.
@@ -140,6 +206,8 @@ public struct DeviceState: Codable, Equatable {
     public var pairedComputers: [PairedComputer]?
     /// Linked over the local network; `port` is then the box's address. Absent from older daemons.
     public var network: Bool?
+    /// Linked through the Relay; `port` is then the Relay's address. Absent from older daemons, like busy.
+    public var relay: Bool?
     public var busy: BoxBusy?
     /// The Wi-Fi network the box is set to join, and the address it got there. Absent from older daemons.
     public var wifiNetwork: String?
@@ -152,7 +220,9 @@ public struct DeviceState: Codable, Equatable {
     public var transfer: Bool?
     /// The last image sent over the link didn't confirm itself, and the box went back (`FIRMWARE ROLLED BACK`).
     public var rolledBack: Bool?
-    enum CodingKeys: String, CodingKey { case transfer, rolledBack = "rolled_back", wifiNetwork = "wifi_network", wifiAddress = "wifi_address", wifiError = "wifi_error", wifiSeen = "wifi_seen", busy, connected, port, bridge, network, mode, firmwareBuild = "firmware_build", firmwareVersion = "firmware_version", voice, volume, screens, foreignFirmware = "foreign_firmware", pin, candidates, unsupportedBoard = "unsupported_board", boxKey = "box_key", computerKey = "computer_key", pairedComputers = "paired_computers" }
+    /// Why the Relay won't carry the link (ADR-0020): `signed_out`, `plan` or `unavailable`. Absent from older daemons.
+    public var relayRefused: String?
+    enum CodingKeys: String, CodingKey { case transfer, rolledBack = "rolled_back", relayRefused = "relay_refused", wifiNetwork = "wifi_network", wifiAddress = "wifi_address", wifiError = "wifi_error", wifiSeen = "wifi_seen", relay, busy, connected, port, bridge, network, mode, firmwareBuild = "firmware_build", firmwareVersion = "firmware_version", voice, volume, foreignFirmware = "foreign_firmware", pin, candidates, unsupportedBoard = "unsupported_board", boxKey = "box_key", computerKey = "computer_key", pairedComputers = "paired_computers" }
     public init(connected: Bool, port: String? = nil, bridge: Bool = false, mode: String? = nil, firmwareBuild: String? = nil, firmwareVersion: String? = nil, voice: String? = nil, volume: Int? = nil, foreignFirmware: Bool? = nil) {
         self.connected = connected; self.port = port; self.bridge = bridge; self.mode = mode; self.firmwareBuild = firmwareBuild; self.firmwareVersion = firmwareVersion; self.voice = voice; self.volume = volume
         self.foreignFirmware = foreignFirmware
@@ -204,9 +274,51 @@ public struct DeviceOperation: Codable, Equatable {
 public struct DaemonConfig: Codable, Equatable {
     public var voice: String?
     public var notifyLink: Bool
-    enum CodingKeys: String, CodingKey { case voice, notifyLink = "notify_link" }
-    public init(voice: String? = nil, notifyLink: Bool = true) {
-        self.voice = voice; self.notifyLink = notifyLink
+    /// nil follows the build: on in releases CI makes, off when built from source.
+    public var checkUpdates: Bool?
+    /// Reach the box through the Relay when nothing closer does (ADR-0012); nil, from an older daemon, means on.
+    public var relay: Bool?
+    enum CodingKeys: String, CodingKey { case voice, notifyLink = "notify_link", checkUpdates = "check_updates", relay }
+    public init(voice: String? = nil, notifyLink: Bool = true, checkUpdates: Bool? = nil, relay: Bool? = nil) {
+        self.voice = voice; self.notifyLink = notifyLink; self.checkUpdates = checkUpdates; self.relay = relay
+    }
+}
+
+/// The daemon's view of updates, from the signed update manifest.
+public struct UpdateStatus: Codable, Equatable {
+    /// Checks run: switched on, and the build knows where to check.
+    public var enabled: Bool
+    public var lastCheck: Date?
+    public var error: String?
+    /// A newer App for this platform.
+    public var app: AppOffer?
+    /// This App is older than the oldest one still supported.
+    public var unsupportedApp: Bool
+    /// The newest firmware this App can run.
+    public var firmware: FirmwareOffer?
+    enum CodingKeys: String, CodingKey { case enabled, lastCheck = "last_check", error, app, unsupportedApp = "unsupported_app", firmware }
+    public init(enabled: Bool, lastCheck: Date? = nil, error: String? = nil, app: AppOffer? = nil, unsupportedApp: Bool = false, firmware: FirmwareOffer? = nil) {
+        self.enabled = enabled; self.lastCheck = lastCheck; self.error = error; self.app = app; self.unsupportedApp = unsupportedApp; self.firmware = firmware
+    }
+}
+
+public struct AppOffer: Codable, Equatable {
+    public var version: String
+    public var url: String
+    public var notes: [String: String]
+    public init(version: String, url: String, notes: [String: String]) { self.version = version; self.url = url; self.notes = notes }
+}
+
+public struct FirmwareOffer: Codable, Equatable {
+    public var version: String
+    public var notes: [String: String]
+    /// The unpacked images once the daemon has downloaded and checked them.
+    public var directory: String?
+    /// The connected box runs something older, unversioned or a dirty build; never set for a downgrade.
+    public var newerThanBox: Bool
+    enum CodingKeys: String, CodingKey { case version, notes, directory, newerThanBox = "newer_than_box" }
+    public init(version: String, notes: [String: String], directory: String? = nil, newerThanBox: Bool) {
+        self.version = version; self.notes = notes; self.directory = directory; self.newerThanBox = newerThanBox
     }
 }
 

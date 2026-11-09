@@ -3,7 +3,7 @@
 //!
 //! `POST /v1/characters` starts one job at a time on its own thread. Each line is synthesized as 16 kHz PCM with the
 //! user's own ElevenLabs key. A voice of the user's own ([`crate::own_voices`]) takes the base preset's language. Then,
-//! as `tools/make-character.sh` does with ffmpeg, it is trimmed of leading and trailing silence and normalized to a -1
+//! as `tools/make-character.sh` does with ffmpeg. It is trimmed of leading and trailing silence and normalized to a -1
 //! trimmed of leading and trailing silence and normalized to a -1 dBFS peak. Everything lands in
 //! `config_dir()/characters/<id>/`, laid out as `make-character.sh` lays out `characters/<id>/`:
 //!
@@ -14,7 +14,7 @@
 //! - `manifest.json`: the name, base, voice and lines asked for.
 //!
 //! A line already made is never made again. A refusal (the provider refusing the own key, or no key, `own_key`)
-//! stops the job, keeps the lines made, and starting the same Character again (its `id`) picks up where it
+//! stops the job, keeps the lines made. And starting the same Character again (its `id`) picks up where it
 //! (its `id`) picks up where it stopped. Progress, the state and why it stopped are `making` in `/v1/status`.
 
 use std::path::{Path, PathBuf};

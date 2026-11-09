@@ -11,6 +11,18 @@ func check(_ condition: Bool, _ message: String, file: String = #file, line: Int
     }
 }
 
+// 0. The shipped Info.plist asks Sparkle for no checks, no automatic installs and carries no feed.
+let infoPlist = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    .appendingPathComponent("Info.plist")
+if let data = try? Data(contentsOf: infoPlist), let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] {
+    check(plist["SUEnableAutomaticChecks"] as? Bool == false, "Info.plist: no automatic update checks")
+    check(plist["SUAllowsAutomaticUpdates"] as? Bool == false, "Info.plist: no automatic update installs")
+    check(plist["SUAutomaticallyUpdate"] as? Bool == false, "Info.plist: no silent update downloads")
+    check(plist["SUFeedURL"] == nil, "Info.plist: no feed URL")
+} else {
+    check(false, "Info.plist is readable at \(infoPlist.path)")
+}
+
 // 1. Status JSON decoding, with microsecond timestamps and time zones.
 let sample = """
 {"daemon":{"build":"0.3.0 abc1234 2026-09-16 10:50","app_version":"0.3.0"},
@@ -18,7 +30,10 @@ let sample = """
  "today":{"done":3,"asks":1,"busy_seconds":4980},
  "hooks":{"codex":"2026-09-16T13:31:30.060465+08:00","claude":null},
  "operation":{"kind":"voice_pack","state":"running","progress":0.42,"message":"writing hsiaoyu"},
- "config":{"voice":"xiaohe2","notify_link":true}}
+ "config":{"voice":"xiaohe2","notify_link":true,"check_updates":null},
+ "updates":{"enabled":true,"last_check":"2026-10-07T12:43:11.068011+08:00","error":null,
+  "app":{"version":"0.4.0","url":"https://example/app.dmg","notes":{"en":"- New"}},"unsupported_app":false,
+  "firmware":{"version":"0.4.0","notes":{"en":"- Fix","zh-Hans":"- 修复"},"directory":"/tmp/fw/0.4.0","newer_than_box":true}}}
 """
 do {
     let status = try StatusCoding.decoder().decode(Status.self, from: Data(sample.utf8))
@@ -30,6 +45,18 @@ do {
     check(status.hooks.codex != nil && status.hooks.claude == nil, "hook timestamps decode")
     check(status.hooks.opencode == nil && status.hooks.lastEvent(.codex) == status.hooks.codex, "a daemon without OpenCode and Copilot still decodes")
     check(status.operation?.kind == .voicePack && status.operation?.progress == 0.42, "operation decodes")
+    check(status.config.checkUpdates == nil, "check_updates null follows the build")
+    check(status.updates?.app?.version == "0.4.0" && status.updates?.lastCheck != nil, "updates decode")
+    check(Firmware.updateAvailable(status.updates), "a downloaded firmware newer than the box is offered")
+    check(Firmware.files(of: status.updates?.firmware)?.app.path == "/tmp/fw/0.4.0/vibebuddy-fw.bin", "flashing uses the downloaded images")
+    var notDownloaded = status.updates
+    notDownloaded?.firmware?.directory = nil
+    check(!Firmware.updateAvailable(notDownloaded), "nothing to flash before the download")
+    var sameAsBox = status.updates
+    sameAsBox?.firmware?.newerThanBox = false
+    check(!Firmware.updateAvailable(sameAsBox), "the box already runs it")
+    check(!Firmware.updateAvailable(nil), "an older daemon offers nothing")
+    check(Firmware.notes(["en": "a", "zh-Hans": "b"], chinese: true) == "b" && Firmware.notes(["en": "a"], chinese: true) == "a", "notes fall back to English")
     check(!Firmware.foreign(status.device), "an older daemon without the field: not foreign")
     check(Firmware.foreign(DeviceState(connected: true, foreignFirmware: true)), "the daemon judged it other firmware")
     check(!Firmware.foreign(DeviceState(connected: true)), "just connected, not judged yet: not foreign")
@@ -54,34 +81,41 @@ do {
     """.utf8))
     check(wifi.network == true && wifi.wifiNetwork == "Home" && wifi.wifiAddress == "192.168.1.23" && wifi.wifiError == "password", "Wi-Fi fields decode")
     let busy = try StatusCoding.decoder().decode(DeviceState.self, from: Data("""
-    {"connected":false,"bridge":false,"busy":{"owner":"omarchy","reason":"linked"}}
+    {"connected":false,"bridge":false,"relay":false,"busy":{"owner":"omarchy","reason":"linked"}}
     """.utf8))
     check(busy.busy == BoxBusy(owner: "omarchy", reason: "linked"), "busy decodes")
-    let screens = try StatusCoding.decoder().decode(DeviceState.self, from: Data("""
-    {"connected":true,"bridge":false,"screens":"korekore"}
+    let refused = try StatusCoding.decoder().decode(DeviceState.self, from: Data("""
+    {"connected":false,"bridge":false,"relay_refused":"plan"}
     """.utf8))
-    check(screens.screens == "korekore" && busy.screens == nil, "the box screens decode, and are nil from older firmware")
+    check(refused.relayRefused == "plan" && busy.relayRefused == nil, "the Relay's refusal decodes")
     let seen = try StatusCoding.decoder().decode(DeviceState.self, from: Data("""
     {"connected":true,"bridge":false,"wifi_seen":[{"ssid":"ByteTrade","rssi":-49}]}
     """.utf8))
     check(seen.wifiSeen == [SeenNetwork(ssid: "ByteTrade", rssi: -49)], "scan results decode")
+    check(status.account == nil, "an older daemon: no account")
+    let account = try StatusCoding.decoder().decode(AccountStatus.self, from: Data("""
+    {"available":true,"signed_in":true,"email":null,"github_id":583231,"github_login":"octocat"}
+    """.utf8))
+    check(account == AccountStatus(available: true, signedIn: true, githubID: 583231, githubLogin: "octocat"), "account decodes")
     check(status.voiceKeys == nil, "an older daemon: no own keys")
     let keys = try StatusCoding.decoder().decode(VoiceKeysStatus.self, from: Data("""
-    {"elevenlabs":{"set":true,"refused":true}}
+    {"elevenlabs":{"set":true,"refused":true},"volc":{"set":false,"refused":false}}
     """.utf8))
-    check(keys == VoiceKeysStatus(elevenlabs: .init(set: true, refused: true)), "own keys decode")
+    check(keys == VoiceKeysStatus(elevenlabs: .init(set: true, refused: true), volc: .init(set: false)), "own keys decode")
     check(status.making == nil, "an older daemon, or nothing made: no making")
     let making = try StatusCoding.decoder().decode(MakingStatus.self, from: Data("""
-    {"id":"night-owl-1a2b3c4d","name":"Night Owl","state":"failed","done":2,"total":6,"reason":"own_key"}
+    {"id":"night-owl-1a2b3c4d","name":"Night Owl","state":"failed","done":2,"total":6,"reason":"plan","error":"making a Character with our voices needs the Paid plan"}
     """.utf8))
-    check(making.failed && !making.running && making.reason == "own_key" && making.progress == 2.0 / 6.0, "making decodes")
-    check(making.explanation()?.contains("ElevenLabs refused your own key") == true, "a refused key is explained")
+    check(making.failed && !making.running && making.reason == "plan" && making.progress == 2.0 / 6.0, "making decodes")
+    let planText = AccountPlan.shown ? "Paid plan, or your own key for ElevenLabs" : "your own key for ElevenLabs"
+    check(making.explanation(provider: "ElevenLabs")?.contains(planText) == true, "a plan refusal names the provider, and the Paid plan when it is shown")
     let made = try StatusCoding.decoder().decode([MadeCharacter].self, from: Data(#"[{"id":"night-owl-1a2b3c4d","name":"Night Owl","base":"ada","voice":"luna","lines":55,"complete":false}]"#.utf8))
     check(made == [MadeCharacter(id: "night-owl-1a2b3c4d", name: "Night Owl", base: "ada", voice: "luna", lines: 55, complete: false)], "made Characters decode")
-    let voices = try StatusCoding.decoder().decode([CharacterVoice].self, from: Data(#"[{"id":"ada","provider":"elevenlabs","voice":"tcSs","language":"en","gender":"female","name":"Ada"},{"id":"wanwanxiaohe","provider":"elevenlabs","voice":"zh_f","language":"zh","gender":"female","name":"Xiaohe"}]"#.utf8))
+    let voices = try StatusCoding.decoder().decode([CharacterVoice].self, from: Data(#"[{"id":"ada","provider":"elevenlabs","voice":"tcSs","language":"en","gender":"female","name":"Ada"},{"id":"wanwanxiaohe","provider":"volc","voice":"zh_f","language":"zh","gender":"female","name":"Xiaohe"}]"#.utf8))
     check(CharacterVoice.sorted(voices, preferring: .zh).map(\.id) == ["wanwanxiaohe", "ada"], "voices in the base's language first")
+    check(voices[1].providerName == "Volcano Engine" && voices[0].providerName == "ElevenLabs", "providers named")
     check(voices.allSatisfy { !$0.own }, "a voice without own is ours")
-    let withOwn = try StatusCoding.decoder().decode([CharacterVoice].self, from: Data(#"[{"id":"own-1a2b3c4d","provider":"elevenlabs","voice":"S_me","language":"","gender":"","name":"Me","own":true},{"id":"ada","provider":"elevenlabs","voice":"tcSs","language":"en","gender":"female","name":"Ada","own":false}]"#.utf8))
+    let withOwn = try StatusCoding.decoder().decode([CharacterVoice].self, from: Data(#"[{"id":"own-1a2b3c4d","provider":"volc","voice":"S_me","language":"","gender":"","name":"Me","own":true},{"id":"ada","provider":"elevenlabs","voice":"tcSs","language":"en","gender":"female","name":"Ada","own":false}]"#.utf8))
     check(withOwn[0].own && withOwn[0].voiceLanguage == nil, "a voice of the user's own decodes, with no language")
     check(CharacterVoice.sorted(withOwn, preferring: nil).map(\.id) == ["ada", "own-1a2b3c4d"], "the user's own voices come after ours, whatever the language")
     let request = CharacterRequest(id: nil, name: "Owl", base: "ada", voice: "luna", lines: [CharacterLine(occasion: "done", text: "Done.")])
@@ -89,6 +123,23 @@ do {
     check(!sent.contains("\"id\"") && sent.contains(#""occasion":"done""#), "a new Character is sent without an id: \(sent)")
     let manifest = try StatusCoding.decoder().decode(CharacterRequest.self, from: Data(#"{"name":"Owl","base":"ada","voice":"luna","lines":[{"occasion":"done","text":"Done."}]}"#.utf8))
     check(manifest == request, "a manifest reads back as the request it was")
+    let used = try StatusCoding.decoder().decode(AccountStatus.self, from: Data("""
+    {"available":true,"signed_in":true,"github_id":1,"today":{"day":"2026-10-24","commands":7,"commands_limit":100},"refused":"allowance"}
+    """.utf8))
+    check(used.today == AccountUsage(day: "2026-10-24", commands: 7, commandsLimit: 100) && used.refused == "allowance", "today's voice use decodes")
+    // Refused voice comes back at the next 00:00 UTC, in the computer's own time.
+    let afternoon = ISO8601DateFormatter().date(from: "2026-10-27T15:59:00Z")!
+    check(AccountStatus.voiceComesBack(after: afternoon, in: TimeZone(secondsFromGMT: 8 * 3600)!) == "08:00", "voice comes back at 08:00 in UTC+8")
+    check(AccountStatus.voiceComesBack(after: afternoon, in: TimeZone(secondsFromGMT: -5 * 3600)!) == "19:00", "voice comes back at 19:00 in UTC-5")
+    check(AccountStatus.voiceComesBack(after: ISO8601DateFormatter().date(from: "2026-12-31T23:59:59Z")!, in: TimeZone(identifier: "UTC")!) == "00:00", "and at 00:00 in UTC")
+    let free = try StatusCoding.decoder().decode(AccountStatus.self, from: Data("""
+    {"available":true,"signed_in":true,"plan":{"name":"free"}}
+    """.utf8))
+    check(free.plan == AccountPlan(name: "free") && free.plan?.paid == false, "the Free plan decodes")
+    let paid = try StatusCoding.decoder().decode(AccountPlan.self, from: Data("""
+    {"name":"paid","period_end":"2026-11-24T00:00:00.000Z","characters":12300,"characters_limit":100000}
+    """.utf8))
+    check(paid.paid && paid.periodEnd == Date(timeIntervalSince1970: 1_795_478_400) && paid.characters == 12300 && paid.charactersLimit == 100_000, "the Paid plan decodes")
 } catch {
     check(false, "status decoding threw: \(error)")
 }
@@ -337,9 +388,17 @@ for bad in [" ", "Two\nrows", "Hey {adress}.", String(repeating: "x", count: 100
     check(CharacterDraft.problem(name: "Owl", lines: edited, occasions: ["done", "failed"]) != nil, "a bad line: \(bad.prefix(20))")
 }
 check(CharacterDraft.problem(name: "Owl", lines: Array(repeating: lines[1], count: 111) + [lines[2]], occasions: ["done"]) != nil, "too many lines")
-check(MakingReadiness.of(keys: VoiceKeysStatus(elevenlabs: .init(set: true))) == .ownKey, "an own key is enough")
-check(MakingReadiness.of(keys: VoiceKeysStatus(elevenlabs: .init(set: true, refused: true))) == .needsKey, "a refused key doesn't count")
-check(MakingReadiness.of(keys: nil) == .needsKey && !MakingReadiness.needsKey.canStart, "no key")
+let eleven = CharacterVoice(id: "luna", provider: "elevenlabs", voice: "g", language: "en", gender: "female", name: "Luna")
+let volc = CharacterVoice(id: "wanwanxiaohe", provider: "volc", voice: "z", language: "zh", gender: "female", name: "Xiaohe")
+let ownEleven = VoiceKeysStatus(elevenlabs: .init(set: true), volc: .init(set: true, refused: true))
+let signedIn = AccountStatus(available: true, signedIn: true)
+check(MakingReadiness.of(eleven, keys: ownEleven, account: nil) == .ownKey, "an own key for the voice's provider is enough")
+check(MakingReadiness.of(volc, keys: ownEleven, account: signedIn) == (AccountPlan.shown ? .paidPlan : .ownKeyOnly), "a refused key doesn't count: VibeBuddy's voices, on the Paid plan when it is shown")
+check(MakingReadiness.of(volc, keys: nil, account: AccountStatus(available: true, signedIn: false)) == (AccountPlan.shown ? .signIn : .ownKeyOnly), "signed out and no key")
+check(MakingReadiness.of(eleven, keys: nil, account: nil) == .ownKeyOnly && !MakingReadiness.ownKeyOnly.canStart, "no service and no key")
+let mine = CharacterVoice(id: "own-1a2b3c4d", provider: "volc", voice: "S_me", language: "", gender: "", name: "Me", own: true)
+check(MakingReadiness.of(mine, keys: ownEleven, account: signedIn) == .ownKeyOnly, "a voice of the user's own needs their own key, not the Paid plan")
+check(MakingReadiness.of(mine, keys: VoiceKeysStatus(elevenlabs: .init(set: false), volc: .init(set: true)), account: nil) == .ownKey, "and their own key is enough")
 let madePools: [[(audio: Data, samples: Int)]] = [[(Data([1, 2]), 4), (Data([3]), 2)], [(Data([4]), 2)], []]
 if let pack = VoicePack.build(id: "night-owl-1a2b3c4d", pools: madePools, look: nil),
    let variant = VoicePack.build(id: "night-owl-1a2b3c4d", pools: [[(Data([9, 9]), 3)], [], []], look: nil),
@@ -377,7 +436,7 @@ check(VoiceCatalogEntry.switchSuggestion(boxVoice: "wanwanxiaohe", to: .en, bund
 // "Report a problem" opens a new issue with the versions in its body, "+" and line breaks intact.
 let report = IssueReport.url(summary: "App 0.3.5 (12)\nmacOS 15.1+beta")
 let reportBody = URLComponents(url: report, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "body" }?.value
-check(report.absoluteString.hasPrefix("https://github.com/wow-look-at-my/vibebuddy/issues/new?body="), "report: a new issue on GitHub")
+check(report.absoluteString.hasPrefix("https://github.com/second-state/vibebuddy/issues/new?body="), "report: a new issue on GitHub")
 check(reportBody?.contains("App 0.3.5 (12)\nmacOS 15.1+beta") == true && !report.absoluteString.contains("+"), "report: the versions survive the URL")
 
 // The bundle's file name moved from "Vibe Buddy.app" to "VibeBuddy.app"; only installed copies follow.
@@ -423,21 +482,22 @@ do {
     check(false, "resident JSON fails to decode: \(error)")
 }
 
-// 7. korekore (ADR-0021): the sprites scaled whole times as drawn.
+// 7. The UI sprites, scaled whole times as drawn.
 do {
-    let kore = KorekoreSprites.koreNormal
-    check(kore.width == 20 && kore.height == 18 && kore.pixels.count == 360, "Kore is 20 x 18")
-    let rgba = kore.rgba(scale: 3)
+    let robot = RobotSprites.robotNormal
+    check(RobotSprites.all.values.allSatisfy { $0.width == 20 && $0.height == 18 && $0.pixels.count == 360 }, "every robot face is 20 x 18")
+    let rgba = robot.rgba(scale: 3)
     let at = { (x: Int, y: Int) in Array(rgba[(y * 60 + x) * 4..<(y * 60 + x) * 4 + 4]) }
     check(rgba.count == 60 * 54 * 4, "scale 3 triples both sides")
-    check(at(12, 0) == [0xF0, 0x58, 0x7F, 0xFF] && at(14, 2) == [0xF0, 0x58, 0x7F, 0xFF], "the pink key covers 3 x 3")
+    check(at(27, 0) == [0xF0, 0x58, 0x7F, 0xFF] && at(29, 2) == [0xF0, 0x58, 0x7F, 0xFF], "the pink antenna pixel covers 3 x 3")
     check(at(0, 0) == [0, 0, 0, 0], "transparent stays transparent")
-    let tag = KorekoreSprites.tagYourVibebuddy.rgba(scale: 1, tint: 0xE2466F)
-    check(stride(from: 0, to: tag.count, by: 4).allSatisfy { tag[$0 + 3] == 0 || Array(tag[$0..<$0 + 4]) == [0xE2, 0x46, 0x6F, 0xFF] }, "a tint recolours what is drawn")
-    check(KorekoreSprites.all.values.allSatisfy { s in s.pixels.count == s.width * s.height && s.pixels.allSatisfy { Int($0) <= s.palette.count } }, "every sprite is whole")
+    let tinted = robot.rgba(scale: 1, tint: 0xE2466F)
+    check(stride(from: 0, to: tinted.count, by: 4).allSatisfy { tinted[$0 + 3] == 0 || Array(tinted[$0..<$0 + 4]) == [0xE2, 0x46, 0x6F, 0xFF] }, "a tint recolours what is drawn")
+    let sprites = Array(BuddySprites.all.values) + Array(RobotSprites.all.values)
+    check(sprites.allSatisfy { s in s.pixels.count == s.width * s.height && s.pixels.allSatisfy { Int($0) <= s.palette.count } }, "every sprite is whole")
 }
 
-// 8. korekore's picture of the box (ADR-0021), drawn from the status's Activities.
+// 8. The picture of the box, drawn from the status's Activities.
 do {
     let json = #"""
     {"daemon":{"build":"x"},"device":{"connected":true,"bridge":false,"mode":"duty","network":true},
@@ -458,7 +518,7 @@ do {
     let old = try StatusCoding.decoder().decode(Status.self, from: Data(sample.utf8))
     check(old.activities == nil && BoxPicture.derive(status: old, daemonAlive: true).mood == .pomodoro, "an older daemon without activities still decodes; its box is in a Pomodoro")
 } catch {
-    check(false, "korekore status fails to decode: \(error)")
+    check(false, "the box picture status fails to decode: \(error)")
 }
 
 if failures > 0 {

@@ -3,7 +3,7 @@ import Foundation
 /// "Report a problem": a new GitHub issue with the versions filled in, so the user only has to say what happened.
 /// Only build and version lines go in, never logs or anything an agent did.
 public enum IssueReport {
-    public static let newIssue = "https://github.com/wow-look-at-my/vibebuddy/issues/new"
+    public static let newIssue = "https://github.com/second-state/vibebuddy/issues/new"
 
     public static func body(summary: String) -> String {
         """

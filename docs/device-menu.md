@@ -40,7 +40,7 @@ Muse manages with two keys because many of its boards only have two. This box ha
 | STOP FOCUS / END BREAK | only while a phase is running, paused or waiting to start its break | gives up the phase, like K0 long without voice commands, and closes the menu |
 | VOLUME | always | steps 20 → 35 → 50 → 65 → 80 → 100 → 20 and plays the "All done!" line at the new level, as the app's preview does |
 | MUTE | always | toggles mute, like K2 long |
-| COMPUTERS | on a box with a key; shows how many computers are paired | opens the COMPUTERS view below |
+| COMPUTERS | on a box with a key (ADR-0012); shows how many computers are paired | opens the COMPUTERS view below |
 | NETWORK | always | opens the network view; K0 there goes back |
 | STATUS | always | opens the status view; K0 there goes back |
 
@@ -64,9 +64,7 @@ Who trusts the box. K1 moves, K0 opens, K2 closes; BACK returns to the menu.
 | NEW ID | always | asks NEW IDENTITY? (what goes and what stays), then SURE?; K0 at both makes the box a new identity, K1 at either goes back (#122) |
 | BACK | always | back to the menu |
 
-A new identity is for a box changing hands or a key that may leaked (flash is not encrypted, ADR-0014). The box draws a new key from its hardware random number generator and forgets the paired computers and its Wi-Fi network. Its Character, voice, volume and tally are kept elsewhere and stay. It prints `NEW IDENTITY <key>` and restarts. With a new key it is a new box to everyone. Each computer pairs again over USB, and until then its local-network attempts fail on the key.
-
-The daemon takes the new key only from `BOX KEY` on the cable, not from the network.
+A new identity is for a box changing hands or a key that may have leaked (flash isn't encrypted, ADR-0014). The box draws a new key from its hardware random number generator and forgets the paired computers, its Wi-Fi network and its Relay (back to the default). Its Character, voice, volume and tally are kept elsewhere and stay. It prints `NEW IDENTITY <key>` and restarts. With a new key it is a new box to everyone: each computer pairs again over USB, and until then its local-network and Relay attempts fail on the key; the daemon takes the new key only from `BOX KEY` on the cable, never from the network. The old id's place on the Relay is simply never used again.
 
 ### Network
 
@@ -76,14 +74,17 @@ How the box reaches its computer, as rows a glance can read; anything dimmed isn
 
 | Row | Shows |
 |---|---|
-| LINK | `USB` or `LAN`, the way the computer is linked now (USB wins); `NO LINK` dimmed without one |
+| LINK | `USB`, `LAN` or `RELAY`, the way the computer is linked now (USB wins, then the local network, then the Relay); `NO LINK` dimmed without one |
 | WIFI | the network's name, dimmed until the box has joined it; `OFF` with none set |
+| RELAY | `PROD` or `STAGING` for the Relay the box uses (docs/relay-protocol.md, "Which Relay"), the host for any other; `DOWN` after it, dimmed, while not connected; `OFF` without Wi-Fi |
 
 ### The link icon
 
 ![The plug in the top left](images/screen-link.png)
 
-Every screen shows how the box is linked as a small icon in its top left. A plug for USB, Wi-Fi waves for the local network. No icon shows without a link: the screen already says NO LINK. MUTE, when on, comes after them.
+Every screen shows how the box is linked as a small icon in its top left: a plug for USB, Wi-Fi waves for the local network, a cloud for the Relay. While that link goes through the staging Relay, `STG` follows the cloud in orange, so a development build is never mistaken for a release; over USB or the local network the Relay isn't in the way, so no `STG` shows (the NETWORK view still names the Relay). No icon shows without a link: the screen already says NO LINK. MUTE, when on, comes after them.
+
+![USB, local network and Relay icons](images/link-icons.png)
 
 ## Touch
 
@@ -133,8 +134,8 @@ A voice command has an overlay of its own, drawn like the menu's panel and, like
 
 - **LISTENING** appears when the long press fires, a second after K0 went down, and that is when recording starts. The meter shows the level of each 100 ms (green, then yellow, then orange near the top); under it, the seconds left. Letting go sends it; under half a second is taken as a slip and cancelled. K2 cancels; other keys do nothing while recording.
 - **THINKING** follows until the computer answers. What it heard shows dimmed, then each spoken reply as it comes, in large type while it fits and small type after that; past what small type holds, the oldest rows give way. The title says **REPLY** once there is one.
-- After the computer says the turn is done, the text stays up 15 s to be read. ". With replies already up, it closes.
-- **Why voice is off.** When the computer says why it does not offer voice (its session not ready, a slow cable), a long K0 with Pomodoro idle shows that panel for 6 s and records nothing. No spoken line goes with it: these are states of the system, not moments for the Character.
+- After the computer says the turn is done, the text stays up 15 s to be read. An error shows a short message for 6 s: NOT HEARD, UNAVAILABLE, BUSY, or NO MICROPHONE when the box couldn't start recording; for the account and the computer, SIGN IN, VOICE USED UP, VOICE PAUSED and NOT READY, with the computer's text ("Today's voice is used up. It comes back at 08:00."). With nothing from the computer for 130 s, it says NO ANSWER, "The computer didn't answer."; with replies already up, it just closes.
+- **Why voice is off.** When the computer says why it doesn't offer voice (signed out, the day's voice used up or paused for everyone, its session not ready), a long K0 with Pomodoro idle shows that panel for 6 s and records nothing. No spoken line goes with it: these are states of the system, not moments for the Character.
 - K2 closes the overlay; a long K0 starts the next command; any other key closes it and does its own job.
 - **Events that need the user win**, as with the menu: input required, failed, or a Pomodoro phase ending closes the overlay, and a recording in progress is given up (`VOICE CANCEL`).
 - **Text only.** Spoken replies are text until there is speech synthesis, so mute changes nothing here. Chinese draws in a 12 px pixel font beside the 5×7 ASCII one, and text with Chinese in it uses small type throughout ([`firmware-bringup.md`](firmware-bringup.md), "Fonts").

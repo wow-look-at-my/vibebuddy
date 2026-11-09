@@ -1,5 +1,5 @@
 //! The tray icon, as a StatusNotifierItem: Omarchy's shell, KDE and waybar all host these. The icon is
-//! Kore and the menu repeats the Mac app's menu bar menu; picking an item only sends an event to
+//! robot face and the menu repeats the Mac app's menu bar menu. Picking an item only sends an event to the
 //! the app, which does the work.
 
 use std::path::PathBuf;
@@ -16,6 +16,7 @@ pub enum TrayEvent {
     OpenSettings,
     /// The daemon isn't answering: have systemd start it again.
     RestartDaemon,
+    CheckForUpdates,
     ReportProblem,
     Quit,
     /// The shell's tray host is gone (not up yet at login, or restarting) or back; ksni registers again by itself.
@@ -25,8 +26,8 @@ pub enum TrayEvent {
 
 pub struct Tray {
     pub menu: MenuState,
-    /// The icon is Kore (ADR-0021), drawn from this.
-    pub kore: crate::korekore::picture::BoxPicture,
+    /// The icon is drawn from this.
+    pub picture: crate::ui::picture::BoxPicture,
     pub events: UnboundedSender<TrayEvent>,
 }
 
@@ -43,7 +44,7 @@ impl ksni::Tray for Tray {
         [1, 2]
             .into_iter()
             .map(|scale| {
-                let (width, height, data) = crate::korekore::tray_icon(&self.kore, scale);
+                let (width, height, data) = crate::ui::tray_icon(&self.picture, scale);
                 Icon {
                     width: width as i32,
                     height: height as i32,
@@ -105,6 +106,12 @@ impl ksni::Tray for Tray {
             MenuItem::Separator,
             action(tr("Settings…", &[]), TrayEvent::OpenSettings),
         ];
+        if crate::status::UPDATES_COMPILED_IN {
+            items.push(action(
+                tr("Check for Updates…", &[]),
+                TrayEvent::CheckForUpdates,
+            ));
+        }
         items.push(action(
             tr("Report a Problem…", &[]),
             TrayEvent::ReportProblem,
@@ -113,6 +120,33 @@ impl ksni::Tray for Tray {
         items.push(action(tr("Quit", &[]), TrayEvent::Quit));
         items
     }
+}
+
+/// The id of VibeBuddy's Omarchy shell plugin (github.com/second-state/omarchy-vibebuddy-plugin).
+pub const OMARCHY_PLUGIN: &str = "io.github.second-state.vibebuddy";
+
+/// Whether Omarchy's `shell.json` places our plugin in the bar. Enabling a bar widget adds it to the bar's layout
+/// and disabling it takes it out, so the layout is the answer.
+pub fn plugin_in_bar(shell_json: &str) -> bool {
+    let Ok(config) = serde_json::from_str::<serde_json::Value>(shell_json) else {
+        return false;
+    };
+    let Some(sections) = config
+        .pointer("/bar/layout")
+        .and_then(serde_json::Value::as_object)
+    else {
+        return false;
+    };
+    sections
+        .values()
+        .filter_map(serde_json::Value::as_array)
+        .flatten()
+        .any(|entry| {
+            entry
+                .as_str()
+                .or_else(|| entry.get("id").and_then(serde_json::Value::as_str))
+                == Some(OMARCHY_PLUGIN)
+        })
 }
 
 /// Omarchy keeps tray icons in a drawer behind a chevron until they're pinned, while the Mac's icon always shows in the
@@ -149,5 +183,31 @@ commit "$NORMALIZE"' | .bar.layout[] |= map(
         Err(error) => {
             eprintln!("vibebuddy-desktop: cannot run bash to pin the tray icon ({error})")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_plugin_counts_in_any_section_of_the_bar() {
+        let shell = r#"{"bar": {"layout": {"left": ["omarchy.menu"],
+            "right": [{"id": "omarchy.tray", "pinned": ["vibebuddy"]}, {"id": "io.github.second-state.vibebuddy"}]}}}"#;
+        assert!(plugin_in_bar(shell));
+        assert!(plugin_in_bar(
+            r#"{"bar": {"layout": {"center": ["io.github.second-state.vibebuddy"]}}}"#
+        ));
+    }
+
+    #[test]
+    fn a_pinned_tray_icon_or_a_broken_file_is_not_the_plugin() {
+        assert!(!plugin_in_bar(
+            r#"{"bar": {"layout": {"right": [{"id": "omarchy.tray", "pinned": ["vibebuddy"]}]}}}"#
+        ));
+        assert!(!plugin_in_bar(
+            r#"{"plugins": ["io.github.second-state.vibebuddy"]}"#
+        ));
+        assert!(!plugin_in_bar("not json"));
     }
 }

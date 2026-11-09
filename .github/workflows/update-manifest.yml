@@ -1,0 +1,89 @@
+# Rebuilds and signs the update manifest (ADR-0010) from every published release and the notes in docs/releases,
+# and Sparkle's appcast for the macOS App, with its DMG signed by the separate Sparkle key.
+# Called after each release of the App or the firmware, so either keeps the other's entry; run it by hand to rebuild.
+# Both go to the updates R2 bucket (the URL and name are in the steps below), and are kept as an
+# artifact too.
+name: update-manifest
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  manifest:
+    if: github.event_name == 'workflow_dispatch'
+    # One at a time across the App and firmware workflows: each lists the releases when it starts, so two running
+    # side by side could finish out of order and upload a manifest missing the other's release. Queued instead of
+    # cancelled; if a third arrives, GitHub drops the one still waiting, which is fine, since the newest lists everything.
+    concurrency:
+      group: update-manifest
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    env:
+      SIGNED: ${{ secrets.MANIFEST_SIGNING_KEY != '' }}
+      SPARKLE: ${{ secrets.SPARKLE_SIGNING_KEY != '' }}
+      UPLOAD: ${{ secrets.R2_ACCESS_KEY_ID != '' }}
+    steps:
+      - name: Skip without a signing key
+        if: env.SIGNED != 'true'
+        run: echo "::notice::MANIFEST_SIGNING_KEY is not set; no manifest built. tools/setup-update-signing.sh sets it up."
+      - uses: actions/checkout@v4
+        if: env.SIGNED == 'true'
+      - name: Build and sign
+        if: env.SIGNED == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MANIFEST_SIGNING_KEY: ${{ secrets.MANIFEST_SIGNING_KEY }}
+        run: |
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases" > "${RUNNER_TEMP}/releases.json"
+          cargo run --locked --release -q -p vibebuddy-manifest -- build "${RUNNER_TEMP}/releases.json" manifest.json
+          # The checked-in public key is what the daemon trusts; a manifest it can't verify must not go out.
+          cargo run --locked --release -q -p vibebuddy-manifest -- verify manifest/manifest-key.pub manifest.json
+      - name: Sparkle appcast
+        if: env.SIGNED == 'true' && env.SPARKLE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SPARKLE_SIGNING_KEY: ${{ secrets.SPARKLE_SIGNING_KEY }}
+        run: |
+          version="$(python3 -c 'import json; m = json.loads(json.load(open("manifest.json"))["manifest"]); print(m["app"].get("macos-arm64", {}).get("version", ""))')"
+          [[ -n "${version}" ]] || { echo "::notice::no macOS App in the manifest; no appcast"; exit 0; }
+          # The DMG as published (notarized and stapled), the file Sparkle will download; the tool checks it against
+          # the manifest's sha256 before signing it.
+          gh release download "v${version}" --repo "${GITHUB_REPOSITORY}" --pattern "VibeBuddy-v${version}-arm64.dmg" --dir "${RUNNER_TEMP}"
+          cargo run --locked --release -q -p vibebuddy-manifest -- appcast manifest.json "${RUNNER_TEMP}/VibeBuddy-v${version}-arm64.dmg" appcast.xml
+      - uses: actions/upload-artifact@v4
+        if: env.SIGNED == 'true'
+        with:
+          name: manifest
+          path: |
+            manifest.json
+            appcast.xml
+          retention-days: 30
+      # An R2 API token limited to this one bucket, through R2's S3 API (the account holds other projects' buckets).
+      # Five minutes of caching: a release reaches everyone within that, and the daily checks barely notice.
+      - name: Upload
+        if: env.SIGNED == 'true' && env.UPLOAD == 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          ENDPOINT: https://144772c196f3327fb8e8af4cfdf09cc6.r2.cloudflarestorage.com
+          BUCKET: ${{ vars.UPDATES_BUCKET }}
+          UPDATES_URL: ${{ vars.UPDATES_URL }}
+        run: |
+          : "${BUCKET:?the repository variable UPDATES_BUCKET names the R2 bucket}"
+          : "${UPDATES_URL:?the repository variable UPDATES_URL is the public base URL of that bucket}"
+          # The manifest last: an appcast pointing at a release the manifest doesn't know yet does no harm.
+          if [[ -f appcast.xml ]]; then
+            aws s3 cp appcast.xml "s3://${BUCKET}/vibebuddy/appcast.xml" --endpoint-url "${ENDPOINT}" \
+              --content-type application/xml --cache-control "public, max-age=300"
+          fi
+          aws s3 cp manifest.json "s3://${BUCKET}/vibebuddy/manifest.json" --endpoint-url "${ENDPOINT}" \
+            --content-type application/json --cache-control "public, max-age=300"
+          # What clients now get is what was just signed.
+          curl -fsS "${UPDATES_URL}/vibebuddy/manifest.json?check=${GITHUB_RUN_ID}" -o served.json
+          cargo run --locked --release -q -p vibebuddy-manifest -- verify manifest/manifest-key.pub served.json
+          cmp manifest.json served.json

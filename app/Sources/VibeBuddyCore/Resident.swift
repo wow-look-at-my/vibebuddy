@@ -17,8 +17,8 @@ public struct ResidentInfo: Decodable, Equatable {
     public var brainSetting: ResidentBrainChoice?
     /// Whether the daemon holds an Anthropic API key; the key itself never comes back.
     public var anthropicKeySet: Bool?
-    /// Why the box can't take voice commands right now besides `problem`: `bridge_firmware` or
-    /// `bridge_slow`. Nil when nothing else holds voice back, and from an older daemon.
+    /// Why the box can't take voice commands right now besides `problem`: `bridge_firmware`, `bridge_slow`,
+    /// `signed_out`, `allowance` or `global_cap`. Nil when nothing else holds voice back, and from an older daemon.
     public var voiceOff: String?
 
     enum CodingKeys: String, CodingKey {
@@ -50,6 +50,9 @@ public struct ResidentInfo: Decodable, Equatable {
         switch voiceOff {
         case "bridge_firmware": String(localized: "The box is on its UART bridge, and its firmware can't carry voice there. Update the firmware, or plug the cable into the box's native USB port.")
         case "bridge_slow": String(localized: "The box is on its UART bridge, which didn't hold the speed voice needs. Plug the cable into the box's native USB port, or plug it in again to try once more.")
+        case "signed_out": String(localized: "Voice needs this computer signed in to VibeBuddy.")
+        case "allowance": String(localized: "Today's voice is used up. It comes back at \(AccountStatus.voiceComesBack()).")
+        case "global_cap": String(localized: "Voice is paused for everyone today. It comes back at \(AccountStatus.voiceComesBack()).")
         default: nil
         }
     }

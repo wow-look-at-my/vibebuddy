@@ -52,22 +52,22 @@ Pomodoro runs entirely on the box: its timer and today's tally keep going withou
 
 ## Getting started
 
-1. Download `VibeBuddy-<version>-arm64.dmg` from the [latest release](https://github.com/wow-look-at-my/vibebuddy/releases/latest) and drag VibeBuddy to Applications.
+1. Install with Homebrew: `brew install --cask second-state/tap/vibebuddy`. Or download `VibeBuddy-<version>-arm64.dmg` from the [latest release](https://github.com/second-state/vibebuddy/releases/latest) and drag VibeBuddy to Applications. Either way the app then updates itself.
 2. Plug the box into the Mac.
 3. Open VibeBuddy. First-run setup walks you through:
-   - finding the box (it blinks so you know it is the right one).
+   - finding the box (it blinks so you know it's the right one), and updating its firmware if a newer one is out;
    - connecting your agents: Codex, Claude Code, OpenCode, GitHub Copilot CLI and Pi (you see the exact change to their hook config before it's written);
    - picking a character and writing it to the box (the default robot comes first);
    - putting the box on Wi-Fi, so this Mac reaches it without the cable;
    - launching at login.
 
-After that VibeBuddy lives in the menu bar as Kore. Open the app again any time to bring up Settings. Click Kore for a panel that tells you whether the box is online, which mode it is in and how much got done today. Settings has a sidebar with multiple pages: Character (who the buddy is, and the volume), Agents, Conversation (voice commands), Device (firmware, screenshots), General (including the interface language) and Advanced. Firmware is released on its own: download the zip from its release and flash it with Settings → Device → Flash from file.
+After that VibeBuddy lives in the menu bar as a pixel picture of the box. Open the app again any time to bring up Settings. Click it for a panel that tells you whether the box is online. These mode it is in and how much got done today. Settings has a sidebar with multiple pages: Character (who the buddy is, and the volume), Agents, Conversation (voice commands), Device (firmware updates, screenshots), General (including the interface language) and Advanced. Firmware is released on its own: when a newer one the app can run is out, VibeBuddy downloads it.
 
 If a release isn't signed yet, macOS blocks the first launch; allow it under System Settings → Privacy & Security.
 
 ### Linux (experimental)
 
-For x86_64 Linux with systemd, tested on Omarchy (Arch, Hyprland). Download `VibeBuddy-<version>-linux-x86_64.tar.gz` from the [latest release](https://github.com/wow-look-at-my/vibebuddy/releases/latest), then:
+For x86_64 Linux with systemd; tested on Omarchy (Arch, Hyprland). Download `VibeBuddy-<version>-linux-x86_64.tar.gz` from the [latest release](https://github.com/second-state/vibebuddy/releases/latest), then:
 
 ```bash
 tar xf VibeBuddy-<version>-linux-x86_64.tar.gz
@@ -77,7 +77,7 @@ cd VibeBuddy-<version>-linux-x86_64 && ./install.sh
 On Arch and Omarchy you can install the same release as a pacman package instead. It goes in system-wide, and a udev rule gives you access to the box without joining a group:
 
 ```bash
-git clone https://github.com/wow-look-at-my/vibebuddy
+git clone https://github.com/second-state/vibebuddy
 cd vibebuddy/packaging/aur/vibebuddy-bin && makepkg -si
 systemctl --user enable --now vibebuddyd && vibebuddy-hook install
 ```
@@ -86,13 +86,13 @@ It will be on the AUR as `vibebuddy-bin` once AUR registration reopens. To build
 
 Run it again to upgrade. The daemon needs to be in the group that owns `/dev/ttyACM*` (`uucp` on Arch, `dialout` on Debian and Ubuntu). The script tells you if it is not. Config lives in `~/.config/vibebuddy`, stats in `~/.local/state/vibebuddy`, and when the box is gone for many seconds you get a desktop notification through `notify-send`.
 
-On Hyprland, K2 brings back the terminal window the session runs in, on whatever workspace it is. Inside tmux it first switches your tmux client to the session's pane. A session over SSH has no window to go back to. The app is a tray icon (Kore. Click it for settings) plus a settings window with the same pages as on the Mac. Those settings are in the same korekore look.
+On Hyprland, K2 brings back the terminal window the session runs in, on whatever workspace it is. Inside tmux it first switches your tmux client to the session's pane. A session over SSH has no window to go back to. The app is a tray icon (click it for settings) plus a settings window with the same pages and look as on the Mac. It is only a client: quitting it leaves the daemon, and the box, running. Device → Refresh shows what the box's screen shows, and Save image puts it in your Pictures folder.
 
-It is only a client: quitting it leaves the daemon, and the box, running. Device → Refresh shows what the box's screen shows, and Save image puts it in your Pictures folder. Character lists the Characters the script installed, plays a preview of each, and writes the one you pick to the box. Agents shows each agent's hook and connects, repairs or removes it after showing what it will write. Device flashes a firmware zip from a file, as on the Mac. General launch at login.
+Character lists the Characters the script installed, plays a preview of each, and writes the one you pick to the box. Agents shows each agent's hook and connects, repairs or removes it after showing what it will write. Device offers newer firmware once the daemon downloads it (with a notification, once per version) and flashes a firmware zip from a file, as on the Mac. General has Launch at login. The first launch opens a short guide in the settings window: find the box (with help when it does not show up, and VibeBuddy firmware for a factory box), pick a character, and put the box on Wi-Fi. The script has already connected the agents and set up the start at login.
 
-The first launch opens a short guide in the settings window: find the box (with help when it does not show up, and VibeBuddy firmware for a factory box), pick a character, and put the box on Wi-Fi. The script has already connected the agents and set up the start at login. Those pages are left out. Launching the app again while it runs opens the settings window. Omarchy keeps tray icons in a drawer behind the bar's chevron, so the app pins its icon to the bar the first time it runs. Unpin or hide it there (right-click the chevron) and it stays that way.
+Those pages are left out. Launching the app again while it runs opens the settings window. Omarchy keeps tray icons in a drawer behind the bar's chevron, so the app pins its icon to the bar the first time it runs. Unpin or hide it there (right-click the chevron) and it stays that way. On Omarchy 4 the script also adds VibeBuddy's [bar plugin](https://github.com/second-state/omarchy-vibebuddy-plugin) (with the pacman package, run `omarchy plugin add https://github.com/second-state/omarchy-vibebuddy-plugin --enable` yourself). This is the face in the bar, with a panel for the box's status, today's stats and the volume.
 
-General → Language overrides the system language, as on the Mac. To make the settings window float on Omarchy, add `o.window("^vibebuddy$", { float = true, center = true, tag = "-default-opacity", opacity = "1.0 1.0" })` to `~/.config/hypr/hyprland.lua`: floating, centred and opaque, at the size the app asks for. Omarchy's own `floating-window` tag will pin it to 875 × 600 instead. Like every Hyprland window it moves with Super + drag. To remove everything, run `vibebuddy-hook uninstall`, then `systemctl --user disable --now vibebuddyd`, then delete the files the script installed.
+While the plugin is in the bar the app leaves out its tray icon, and brings it back if you disable the plugin. General → Language overrides the system language, as on the Mac. To make the settings window float on Omarchy, add `o.window("^vibebuddy$", { float = true, center = true, tag = "-default-opacity", opacity = "1.0 1.0" })` to `~/.config/hypr/hyprland.lua`: floating, centred and opaque, at the size the app asks for. Omarchy's own `floating-window` tag pins it to 875 × 600 instead. Like every Hyprland window it moves with Super + drag. To remove everything, run `vibebuddy-hook uninstall`, then `systemctl --user disable --now vibebuddyd`, then delete the files the script installed.
 
 ## How it works
 
@@ -150,18 +150,33 @@ curl -H 'content-type: application/json' \
 
 See [`docs/protocol.md`](docs/protocol.md) for the events.
 
-### Wi-Fi
+### This fork has no updates
 
-Put the box on Wi-Fi (Settings → Device, with the box on the cable). VibeBuddy reaches it without the cable, over the local network when this computer is on the same one. The cable wins when it is plugged in, and moving between them does not drop the link.
+This fork never checks for, downloads or offers updates, for the App or for the box's firmware. No setting or environment variable turns that on. The daemon has no update source, the Mac app never starts Sparkle, and the Linux app shows no update controls. The code stays behind compile-time switches. The `update-manifest` workflow runs only when started by hand. A new version is built from source, and firmware goes onto the box with Settings → Device → Flash from file.
 
-- **Pairing**: the box and each computer have their own key. A computer pairs with the box when it is plugged in. Nothing else can link to the box over the network.
-- **Encryption**. The lines that drive the box (agent states, task titles, project names) are end-to-end encrypted between the computer and the box with the keys they exchanged when pairing. Firmware older than this links in the clear until it is updated over USB.
+The section below describes how the upstream project works.
+
+### Updates
+
+The App and the box's firmware are released separately, and VibeBuddy looks for new versions of both ([ADR-0010](docs/adr/0010-firmware-and-app-release-separately-behind-an-update-manifest.md)). Apart from the Relay (next section), this is the only time it contacts anything on the internet:
+
+- **When**: when it starts, once a day, and when you click Check now in Settings → General.
+- **What it sends**: your platform (`macos-arm64` or `linux-x86_64`), the App's version and the box's firmware version. Nothing else: no ID, no hook data, nothing about your agents or projects. On the Mac, Sparkle also fetches the App's update feed, sending the usual User-Agent with the App's name and version; its system profiling stays off.
+- **Where**: a signed list of releases at `<updates URL>/vibebuddy/manifest.json` (and Sparkle's `appcast.xml` next to it), served by Cloudflare. The release workflow reads the bucket and URL from the repository variables `UPDATES_BUCKET` and `UPDATES_URL`. The downloads themselves come from GitHub Releases.
+- **What happens**: nothing is installed without you. A new App opens Sparkle's window on the Mac, where you can install, wait or skip; on Linux, General says how to upgrade. Newer firmware is downloaded and checked in the background, then Settings → Device offers it with a button.
+- **Turning it off**: Settings → General → Check for updates. Builds from source have it off by default; the builds on the Releases page have it on.
+
+### Wi-Fi and the Relay
+
+Put the box on Wi-Fi (Settings → Device, with the box on the cable) and VibeBuddy reaches it without the cable: over the local network when this computer is on the same one, or through the VibeBuddy Relay when it isn't. The cable wins whenever it's plugged in, and moving between them doesn't drop the link ([ADR-0012](docs/adr/0012-the-relay-is-a-closed-cloudflare-service-with-pairing-not-accounts.md)).
+
+- **Pairing**: the box and each computer have their own key. A computer pairs with the box when it's plugged in; nothing else can link to the box, over the network or the Relay.
+- **What the Relay sees**: it runs on Cloudflare at `relay.korekore.ai`. While the box is on Wi-Fi it keeps a connection there, which carries its key, the names of the computers paired with it, and, while a computer is linked through the Relay, the lines that drive the box. Those lines (agent states, task titles, project names) are end-to-end encrypted between the computer and the box with the keys they exchanged when pairing, so the Relay can't read or change them; it sees which computer is linked to which box, when, and how much they send. The local network link is encrypted the same way. Firmware older than this links in the clear until it is updated over USB.
+- **Turning it off**: Settings → General → Reach the box through the VibeBuddy Relay. With it off, this computer never contacts the Relay. The box still connects to it while it's on Wi-Fi; forget its network to stop that.
 
 ### Giving the box to someone else
 
-The box has its own key, which computers pair with when it is plugged in. Give it a new one: hold K1 for the menu, then COMPUTERS → NEW ID, and confirm twice. Do this before the box changes hands, or if you think its key leaked. The box makes a new key and forgets every paired computer and its Wi-Fi network, then restarts. Its Character, voice, volume and today's tally stay. Every computer then pairs again the next time it is plugged in, and the Wi-Fi network is set again from the App.
-
-To forget the computers but keep the key, use FORGET ALL in the same place.
+The box has its own key, which computers pair with when it's plugged in. Before the box changes hands, or if you think its key has leaked, give it a new one: hold K1 for the menu, then COMPUTERS → NEW ID, and confirm twice. The box makes a new key and forgets every paired computer, its Wi-Fi network and its Relay, then restarts. Its Character, voice, volume and today's tally stay. Every computer then pairs again the next time it's plugged in, and the Wi-Fi network is set again from the App. To forget the computers but keep the key, use FORGET ALL in the same place.
 
 ## Development
 
@@ -257,7 +272,7 @@ cargo run -p vibebuddyd
 
 By default it only listens on `127.0.0.1:7331` and finds the box by its Espressif USB Serial/JTAG ID, `VID:PID 303A:1001`. `VIBEBUDDY_BIND` changes the listen address, `VIBEBUDDY_SERIAL_PORT` names a serial port explicitly, and `VIBEBUDDY_USB_SERIAL` picks one box among several identical ones; without it, the daemon connects to the box that has reported VibeBuddy firmware to it before, and when none of several devices is that box, the app asks which one is. Either variable shows up in the app's Device tab, so a pin left set can't pass for a missing box. A box running other firmware, such as Muse, is written nothing. HTTP `202 Accepted` means the event entered the bounded send queue; whether the box actually received it is what the daemon logs from the box's reply.
 
-HTTP `202 Accepted` means the event entered the bounded send queue. Whether the box actually received it is what the daemon logs from the box's reply.
+Voice commands are experimental and off by default: `VIBEBUDDY_RESIDENT_SESSION=1` turns on the resident session, and with a speech recognizer configured the box gets push-to-talk on a long K0. Your own Codex answers, or, if you'd rather, your own Claude Code with your own Anthropic API key (a Claude subscription can't be used). While it is on, Settings has a Conversation tab, on the Mac and on Linux, with your last voice commands and the buddy's spoken replies, which Agent answers, and the API key. See [`docs/resident-session.md`](docs/resident-session.md).
 
 The app normally supervises the daemon. On a development machine without the app you can install it as a LaunchAgent with [`packaging/com.vibebuddy.vibebuddyd.plist`](packaging/com.vibebuddy.vibebuddyd.plist), but don't run both: they'd fight over the serial port. For the app, the daemon also serves `GET /v1/status`, SSE `/v1/status/stream`, `/v1/config`, `/v1/device/{identify,volume,choice,screenshot,voice-pack,firmware}` and `/v1/daemon/restart`.
 
@@ -265,22 +280,25 @@ When sending through the box's CH343 UART bridge, the daemon writes in line-rate
 
 ### Releases
 
-CI builds releases. The App and the firmware release separately. [`release-app`](.github/workflows/release-app.yml) builds the Mac app on an Apple silicon runner (packed into a DMG with `app/scripts/make-dmg.sh`) and the Linux tarball on Ubuntu 22.04 (`packaging/linux/make-tarball.sh`), testing on both.
+CI builds releases. The App and the firmware release separately (ADR-0010). [`release-app`](.github/workflows/release-app.yml) builds the Mac app on an Apple silicon runner (packed into a DMG with `app/scripts/make-dmg.sh`) and the Linux tarball on Ubuntu 22.04 (`packaging/linux/make-tarball.sh`), testing on both.
 
 - Commits on main that touch what goes into the packages (`app/`, `daemon/`, `desktop/`, `hook/`, `protocol/`, `voices/`, `packaging/`) only produce test artifacts kept for 7 days.
 - A `vX.Y.Z` tag notarizes the app and publishes one GitHub Release with the DMG and the Linux tarball. The tag must match `version` in `Cargo.toml`, or the build fails.
-- Before releasing, write `docs/releases/vX.Y.Z.md`: a few bullets on what the version does. It opens the release notes, and CI adds the downloads after it.
+- Before releasing, write `docs/releases/vX.Y.Z.md`: a few bullets on what the version does. It opens the release notes, and CI adds the downloads after it. A `vX.Y.Z.zh-Hans.md` next to it gives the Chinese notes the App shows; without one it shows the English.
 - Then releasing is one command on a clean main: `just release 0.3.0` checks that file, updates the versions in `Cargo.toml` and both lockfiles, commits, tags and pushes.
-- [`release-firmware`](.github/workflows/release-firmware.yml) builds the firmware on Linux. A `firmware-vX.Y.Z` tag publishes its own Release, not marked latest, with `VibeBuddy-firmware-vX.Y.Z.zip`: the images, `build.txt`, `version.txt` and the firmware's license notices. Flash that zip from Settings → Device → Flash from file…. The tag must match `version` in `firmware-rs/device/Cargo.toml`.
-- Before a firmware release, write `docs/releases/firmware-vX.Y.Z.md`: what it does. `just release-firmware 0.3.3` checks that file, bumps the version, commits, tags and pushes.
-- Builds are arm64 for the Mac and x86_64 for Linux. The AUR package is not published yet (see above). Its source in `packaging/aur/` is still at 0.3.2, and nothing needs updating there after a release until it is.
+- [`release-firmware`](.github/workflows/release-firmware.yml) builds the firmware on Linux. A `firmware-vX.Y.Z` tag publishes its own Release, never marked latest, with `VibeBuddy-firmware-vX.Y.Z.zip`: the three images, `build.txt`, `version.txt` and the firmware's license notices. That zip is what the daemon downloads, and anyone can flash it from Settings → Device → Flash from file…. The tag must match `version` in `firmware-rs/device/Cargo.toml`.
+- Before a firmware release, write `docs/releases/firmware-vX.Y.Z.md`: front matter naming the oldest App it runs with (`min_app: 0.4.0` between two `---` lines), then what it does. `just release-firmware 0.3.3` checks that file, bumps the version, commits, tags and pushes.
+- Releasing the App and the firmware together: commit both sets of notes before either tag. Each release's manifest job checks out its own tag and needs notes for every published release, so a firmware Release whose notes came after the App's tag fails the App's manifest (v0.4.1 did; rerun `update-manifest` by hand from main to recover).
+- Builds are arm64 for the Mac and x86_64 for Linux. The AUR package isn't published yet (see above): its source in `packaging/aur/` is still at 0.3.2, and nothing needs updating there after a release until it is. The Homebrew cask in [second-state/homebrew-tap](https://github.com/second-state/homebrew-tap) follows new releases on its own within the hour.
 
 With the five signing secrets set on the repository, releases are signed with a Developer ID and notarized, so they open straight after download. Without them the build falls back to ad-hoc signing, and the first launch has to be allowed under Privacy & Security. [`tools/setup-release-signing.sh`](tools/setup-release-signing.sh) sets the secrets up: it walks you through requesting the certificate, packing the p12 and creating an app-specific password, then checks each one before writing it to GitHub.
+
+After each release, [`update-manifest`](.github/workflows/update-manifest.yml) rebuilds the signed update manifest (ADR-0010) from every published release: the latest App per platform, every firmware with the oldest App it runs with, and `min_supported_app` from `Cargo.toml`. It also writes Sparkle's appcast for the Mac App, with the published DMG (checked against the manifest's sha256) signed by a second key. [`tools/setup-update-signing.sh`](tools/setup-update-signing.sh) creates both keys once. The private halves go to the `MANIFEST_SIGNING_KEY` and `SPARKLE_SIGNING_KEY` secrets and `~/.vibebuddy-signing`; the public halves go to `manifest/manifest-key.pub`, which the daemon trusts, and `app/sparkle-key.pub`, which `build-app.sh` writes into the App's `SUPublicEDKey`.
 
 ## License
 
 The source code is licensed under the [GNU General Public License v3.0 or later](LICENSE). That covers everything that draws the buddy, too, since its look and animations are defined in code.
 
-The voice audio we hold the rights to, and any artwork added later, is licensed under [CC BY-SA 4.0](LICENSE-ASSETS). [`LICENSE-ASSETS`](LICENSE-ASSETS) lists exactly what is covered.
+The voice audio we hold the rights to, and any artwork added later, is licensed under [CC BY-SA 4.0](LICENSE-ASSETS). The two Chinese voices in `voices/` come from Volcano Engine's speech service and aren't covered; [`LICENSE-ASSETS`](LICENSE-ASSETS) lists exactly what is.
 
 Neither license grants rights to the name "VibeBuddy" or the buddy character as a trademark.

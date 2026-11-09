@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Assembles VibeBuddy.app: both Rust helpers, the Swift app, and the Character packs. Firmware isn't bundled: it is
-# released on its own and flashed from a file.
+# Assembles VibeBuddy.app: the two Rust helpers, the Swift app with Sparkle, and the Character packs. Firmware isn't bundled: it is
+# released on its own and the daemon downloads it (ADR-0010).
 #
 # Usage: app/scripts/build-app.sh [--debug] [--install]
 #   --debug    Swift uses the debug configuration.
@@ -55,10 +55,20 @@ fi
 bundle="${app_dir}/build/VibeBuddy.app"
 contents="${bundle}/Contents"
 rm -rf "${bundle}"
-mkdir -p "${contents}/MacOS" "${contents}/Resources/voices"
+mkdir -p "${contents}/MacOS" "${contents}/Frameworks" "${contents}/Resources/voices"
 
 sed -e "s/__VERSION__/${version}/" -e "s/__BUILD__/${build_number}/" "${app_dir}/Info.plist" > "${contents}/Info.plist"
+# Sparkle trusts only downloads signed with the key in app/sparkle-key.pub (tools/setup-update-signing.sh); a build
+# without it has no SUPublicEDKey, and the app then leaves Sparkle off.
+if [[ -s "${app_dir}/sparkle-key.pub" ]]; then
+    /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $(tr -d '[:space:]' < "${app_dir}/sparkle-key.pub")" "${contents}/Info.plist"
+else
+    /usr/libexec/PlistBuddy -c "Delete :SUPublicEDKey" "${contents}/Info.plist"
+fi
 
+echo "== Sparkle"
+ditto "${app_dir}/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework" \
+    "${contents}/Frameworks/Sparkle.framework"
 cp "${swift_bin}" "${contents}/MacOS/VibeBuddy"
 # UI copy is keyed in English; each lproj holds one language's table, and macOS
 # picks by the user's preferred languages (Chinese systems get zh-Hans).
@@ -84,9 +94,9 @@ echo "== Character packs"
 # The robot: the built-in voice's five lines as a pack without a look, and its face for the card.
 "${repo_root}/tools/make_voice_pack.py" "${repo_root}/voices/jessica" robot "${contents}/Resources/voices/robot.bin" >/dev/null
 cp "${repo_root}/characters/robot/face.png" "${contents}/Resources/robot-face.png"
-# The korekore UI's fonts (ADR-0021), registered at launch only when that UI is on.
+# The UI fonts, registered at launch.
 mkdir -p "${contents}/Resources/fonts"
-cp "${repo_root}"/fonts/korekore/*.ttf "${contents}/Resources/fonts/"
+cp "${repo_root}"/fonts/ui/*.ttf "${contents}/Resources/fonts/"
 echo "  robot"
 for pack in "${repo_root}"/characters/*/pack.bin; do
     id="$(basename "$(dirname "${pack}")")"
@@ -101,11 +111,14 @@ done
 # The firmware zip carries its own notices (release-firmware.yml).
 echo "== Licenses and corresponding source"
 python3 "${repo_root}/tools/package-licenses.py" "${contents}/Resources"
+# Sparkle ships inside the bundle, with the notices of what it bundles in turn in its own LICENSE.
+cp "${app_dir}/.build/checkouts/Sparkle/LICENSE" "${contents}/Resources/licenses/THIRD-PARTY-SPARKLE.txt"
 
 # Login items and notifications key on the bundle's identity, so an unsigned bundle looks like a new app after every change. Locally we sign ad hoc;
 # for releases CI passes a Developer ID in CODESIGN_IDENTITY, and notarization requires the hardened runtime
 # and a timestamp, so on that path a signing failure fails the build.
-# Inside out: the helpers, then the app.
+# Inside out and without --deep, as Sparkle asks: --deep would re-sign its XPC services and drop the Downloader's
+# entitlements. The helpers, then each of Sparkle's executables, the framework, and the app last.
 sign() {
     if [[ -n "${CODESIGN_IDENTITY:-}" ]]; then
         codesign --force --options runtime --timestamp --sign "${CODESIGN_IDENTITY}" "$@"
@@ -114,7 +127,12 @@ sign() {
     fi
 }
 if command -v codesign >/dev/null 2>&1; then
+    sparkle="${contents}/Frameworks/Sparkle.framework/Versions/B"
     sign "${contents}/MacOS/vibebuddyd" "${contents}/MacOS/vibebuddy-hook"
+    sign "${sparkle}/XPCServices/Installer.xpc"
+    sign --preserve-metadata=entitlements "${sparkle}/XPCServices/Downloader.xpc"
+    sign "${sparkle}/Autoupdate" "${sparkle}/Updater.app"
+    sign "${contents}/Frameworks/Sparkle.framework"
     # The app asks for Automation access itself (Agents tab), which the hardened runtime only allows with this entitlement.
     sign --entitlements "${app_dir}/VibeBuddy.entitlements" "${bundle}"
 else

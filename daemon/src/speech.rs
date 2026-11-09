@@ -21,7 +21,7 @@ use base64::Engine;
 use serde_json::{Value, json};
 use tracing::{info, warn};
 
-/// Picks the backend: `cloudflare`, `openai` or `off`. Unset, the user's own recognizer if set.
+/// Picks the backend. Unset, the user's own recognizer if set.
 pub const BACKEND_VARIABLE: &str = "VIBEBUDDY_STT";
 /// A `KEY=VALUE` file the other variables can come from, so credentials stay out of the daemon's environment.
 pub const ENV_FILE_VARIABLE: &str = "VIBEBUDDY_STT_ENV_FILE";

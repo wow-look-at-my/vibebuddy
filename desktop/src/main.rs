@@ -14,7 +14,7 @@ mod firmware_file;
 mod i18n;
 #[cfg(target_os = "linux")]
 mod instance;
-mod korekore;
+mod ui;
 mod making;
 mod preview;
 mod status;
@@ -38,7 +38,7 @@ const CONVERSATION_LIMIT: usize = 20;
 const RESTARTED: &str = "--restarted";
 /// Followed by a voice id: written once the restarted copy sees the box answer, then forgotten.
 const WRITE_VOICE: &str = "--write-voice";
-/// Open Settings, even from a launch that would otherwise stay in the background.
+/// Passed by the Omarchy bar plugin: open Settings, even from a launch that would otherwise stay in the background.
 const SETTINGS: &str = "--settings";
 
 /// The running copy's socket, handed to the subscription that listens on it.
@@ -61,11 +61,11 @@ fn main() -> iced::Result {
         .title(App::title)
         .theme(App::theme)
         .subscription(App::subscription);
-    // The korekore UI's fonts, there before any window opens (ADR-0021); its own face is the default.
-    for font in korekore::FONTS {
+    // The UI's fonts, there before any window opens; its own face is the default.
+    for font in ui::FONTS {
         app = app.font(font);
     }
-    app.default_font(korekore::DEFAULT_FONT).run()
+    app.default_font(ui::DEFAULT_FONT).run()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -89,6 +89,7 @@ enum Message {
     /// The shell's tray host went away or came back; if it stays away, the window opens instead.
     TrayHost(bool),
     TrayHostCheck,
+    PluginTick,
     OpenSettings,
     /// A page of the first-run guide, or (None) leave it for the tabs.
     Guide(Option<usize>),
@@ -97,6 +98,10 @@ enum Message {
     WindowClosed(window::Id),
     Tab(Tab),
     NotifyLink(bool),
+    CheckUpdates(bool),
+    Relay(bool),
+    CheckForUpdatesNow,
+    OpenReleases,
     ReportProblem,
     PickLanguage(UiLanguage),
     SwitchVoice(bool),
@@ -106,8 +111,6 @@ enum Message {
     VolumeDragged(u8),
     VolumeReleased,
     PlayLine,
-    /// Which set of screens the box draws (ADR-0021).
-    SetScreens(BoxScreens),
     /// The user says which of several devices is the box, by its USB serial number.
     ChooseBox(String),
     /// Forget another computer on the box, by its key.
@@ -137,10 +140,11 @@ enum Message {
     MakeLines(&'static str, Result<Vec<making::Line>, String>),
     MakeName(String),
     MakeVoice(making::Voice),
-    /// The korekore sheet's pick: a preset's voice takes that preset's lines too, while none has changed.
+    /// The Character sheet's pick: a preset's voice takes that preset's lines too, while none has changed.
     MakeVoiceAndLines(making::Voice),
-    /// The form for a voice of the user's own: open or closed, its voice id and name.
+    /// The form for a voice of the user's own: open or closed, its provider, voice id and name.
     MakeOwnOpen(bool),
+    MakeOwnProvider(OwnProvider),
     MakeOwnVoice(String),
     MakeOwnName(String),
     MakeOwnPick(making::ProviderVoice),
@@ -174,6 +178,8 @@ enum Message {
     DeleteCustom,
     DeleteMade(String),
     MadeDeleted(Result<(), String>),
+    AskFirmwareUpdate(bool),
+    FlashFirmware,
     FlashFromFile,
     FirmwareFile(Result<Option<firmware_file::Package>, String>),
     /// Flash the package picked from a file, or (false) forget it.
@@ -185,6 +191,8 @@ enum Message {
     LaunchAtLogin(bool),
     /// Through systemd, which works when the daemon isn't answering, unlike its own restart endpoint.
     StartDaemon,
+    /// The tray's Check for Updates…: check, and show General, where the answer appears (the Mac shows Sparkle's).
+    CheckFromMenu,
     /// Play a Character's preview lines here, or stop the one playing.
     TogglePreview(&'static str),
     PreviewDone(String, Result<(), String>),
@@ -219,16 +227,24 @@ enum Message {
     OpenLogsFolder,
     ShowDaemonLog,
     ExportDiagnostics,
-    OwnKeyDraft(String),
-    SaveOwnKey,
-    ClearOwnKey,
-    OpenOwnKeyPage,
+    /// Open the browser to sign in to the VibeBuddy account; clicking again starts over.
+    SignIn,
+    SignInUrl(Result<String, String>),
+    SignOut,
+    AskDeleteAccount(bool),
+    DeleteAccount,
+    /// Signing out or deleting the account finished; the account itself comes with the next status.
+    AccountDone(Result<(), String>),
+    OwnKeyDraft(client::KeyProvider, String),
+    SaveOwnKey(client::KeyProvider),
+    ClearOwnKey(client::KeyProvider),
+    OpenOwnKeyPage(client::KeyProvider),
     /// The daemon took the key, or didn't; whether it is set comes with the next status.
-    OwnKeySaved(Result<(), String>),
+    OwnKeySaved(client::KeyProvider, Result<(), String>),
     Done(Result<(), String>),
     Quit,
-    /// A section picked in the korekore UI's sidebar (ADR-0021).
-    Korekore(korekore::Section),
+    /// A section picked in the sidebar.
+    Section(ui::Section),
 }
 
 #[cfg(target_os = "linux")]
@@ -281,6 +297,8 @@ struct App {
     /// The made Character waiting for a second click to be deleted, since it can't be undone.
     confirm_delete_made: Option<String>,
     confirm_delete_custom: bool,
+    /// The firmware update waits for a second click, since the box restarts.
+    confirm_firmware: bool,
     /// A firmware zip picked with Flash from file…, waiting for the user to confirm.
     file_firmware: Option<firmware_file::Package>,
     /// What is typed into the Wi-Fi fields; the password is cleared once sent.
@@ -315,8 +333,12 @@ struct App {
     anthropic_key_draft: String,
     /// Why the last brain or key change failed.
     resident_setting_error: Option<String>,
-    /// The own key being typed; cleared once the daemon has it, and never filled from the daemon.
-    own_key_draft: String,
+    /// The browser was opened to sign in, until the status shows the account signed in.
+    signing_in: bool,
+    /// Deleting the account waits for a second click, since it can't be undone.
+    confirm_delete_account: bool,
+    /// The own keys being typed, by provider; cleared once the daemon has one, and never filled from the daemon.
+    own_key_drafts: [String; 2],
     /// The outcome of the last action, shown at the bottom of the window.
     notice: Option<Result<String, String>>,
     /// The language picked in Settings, and, while it differs from the UI's, the offer to restart.
@@ -329,6 +351,9 @@ struct App {
     tray_host: bool,
     #[cfg(target_os = "linux")]
     tray: Option<TrayHandle>,
+    /// VibeBuddy's Omarchy plugin is in the bar, showing the face; the tray icon would be a second one.
+    #[cfg(target_os = "linux")]
+    plugin: bool,
 }
 
 /// Making a Character: the preset it starts from, its lines as edited (occasions stay, each keeps a line), the voice,
@@ -353,12 +378,39 @@ struct MakeForm {
 /// A voice of the user's own being added: where it is, the name to keep it under, and why trying it failed.
 #[derive(Debug, Default)]
 struct OwnVoiceForm {
+    provider: OwnProvider,
     voice: String,
     name: String,
     trying: bool,
     problem: Option<String>,
     /// The voices of the own ElevenLabs key, to pick from, or why they couldn't be listed; None until asked.
     listed: Option<Result<Vec<making::ProviderVoice>, String>>,
+}
+
+/// The providers a voice of the user's own can be in, for the form's picker.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum OwnProvider {
+    #[default]
+    ElevenLabs,
+    Volc,
+}
+
+impl OwnProvider {
+    fn id(self) -> &'static str {
+        match self {
+            OwnProvider::ElevenLabs => "elevenlabs",
+            OwnProvider::Volc => "volc",
+        }
+    }
+}
+
+impl std::fmt::Display for OwnProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OwnProvider::ElevenLabs => write!(f, "ElevenLabs"),
+            OwnProvider::Volc => write!(f, "{}", tr("Volcano Engine", &[])),
+        }
+    }
 }
 
 impl MakeForm {
@@ -384,7 +436,7 @@ impl App {
         let app = Self {
             status: None,
             settings: None,
-            // The korekore sidebar starts on Character, as the design does.
+            // The sidebar starts on Character, as the design does.
             tab: Tab::Sound,
             guide: None,
             not_this_one: false,
@@ -405,6 +457,7 @@ impl App {
             make: None,
             confirm_delete_made: None,
             confirm_delete_custom: false,
+            confirm_firmware: false,
             file_firmware: None,
             wifi_ssid: String::new(),
             wifi_password: String::new(),
@@ -423,7 +476,9 @@ impl App {
             resident_info: None,
             anthropic_key_draft: String::new(),
             resident_setting_error: None,
-            own_key_draft: String::new(),
+            signing_in: false,
+            confirm_delete_account: false,
+            own_key_drafts: Default::default(),
             notice: None,
             language: UiLanguage::saved(),
             restart_offer: None,
@@ -431,6 +486,8 @@ impl App {
             tray_host: true,
             #[cfg(target_os = "linux")]
             tray: None,
+            #[cfg(target_os = "linux")]
+            plugin: plugin_in_omarchy_bar(),
         };
         // The first launch shows the window, so it's clear where the app went; later ones stay in the tray, unless a
         // language change restarted the app from its window. Without a tray (macOS builds, for development) the
@@ -464,10 +521,10 @@ impl App {
             });
         app.custom_look_written = app.custom_look.is_some();
         // Debug builds only: open the window on a given section or first-run step, for checking it on a desktop
-        // without a pointer (VIBEBUDDY_KOREKORE_SECTION=device, VIBEBUDDY_KOREKORE_GUIDE=1).
+        // without a pointer (VIBEBUDDY_UI_SECTION=device, VIBEBUDDY_UI_GUIDE=1).
         #[cfg(debug_assertions)]
-        if let Ok(name) = std::env::var("VIBEBUDDY_KOREKORE_SECTION")
-            && let Some(section) = korekore::Section::ALL
+        if let Ok(name) = std::env::var("VIBEBUDDY_UI_SECTION")
+            && let Some(section) = ui::Section::ALL
                 .into_iter()
                 .find(|section| format!("{section:?}").eq_ignore_ascii_case(&name))
         {
@@ -479,7 +536,7 @@ impl App {
         app.guide = (first && cfg!(target_os = "linux")).then_some(0);
         #[cfg(debug_assertions)]
         {
-            app.guide = std::env::var("VIBEBUDDY_KOREKORE_GUIDE")
+            app.guide = std::env::var("VIBEBUDDY_UI_GUIDE")
                 .ok()
                 .and_then(|page| page.parse().ok())
                 .or(app.guide);
@@ -497,7 +554,7 @@ impl App {
         "VibeBuddy".to_owned()
     }
 
-    /// The korekore pages draw their own colors; widgets without a style of their own get the light theme the
+    /// The pages draw their own colors; widgets without a style of their own get the light theme the
     /// snapshots are drawn with.
     fn theme(&self, _window: window::Id) -> Theme {
         Theme::Light
@@ -505,7 +562,14 @@ impl App {
 
     fn subscription(&self) -> Subscription<Message> {
         #[cfg(target_os = "linux")]
-        let (tray, instance) = (Subscription::run(run_tray), Subscription::run(run_instance));
+        let (tray, instance) = (
+            if self.plugin {
+                Subscription::none()
+            } else {
+                Subscription::run(run_tray)
+            },
+            Subscription::run(run_instance),
+        );
         #[cfg(not(target_os = "linux"))]
         let (tray, instance) = (Subscription::none(), Subscription::none());
         // Only while the Conversation tab is in an open window: the history is read again when it changed.
@@ -518,6 +582,7 @@ impl App {
             };
         Subscription::batch([
             Subscription::run(client::status_updates).map(Message::Daemon),
+            iced::time::every(Duration::from_secs(2)).map(|_| Message::PluginTick),
             window::close_events().map(Message::WindowClosed),
             tray,
             instance,
@@ -537,6 +602,12 @@ impl App {
                 let voice = (device.connected && device.firmware_build.is_some() && !busy)
                     .then(|| self.pending_voice.take())
                     .flatten();
+                notify_new_firmware(&status);
+                if status.account.signed_in {
+                    self.signing_in = false;
+                } else {
+                    self.confirm_delete_account = false;
+                }
                 // Only the daemon's environment at start decides, so ask once each time it comes up.
                 let resident = if self.status.is_none() {
                     Task::perform(client::resident_enabled(), Message::Resident)
@@ -593,6 +664,20 @@ impl App {
                     return Task::done(Message::OpenSettings);
                 }
             }
+            Message::PluginTick => {
+                // The plugin can be enabled or disabled while the app runs: the tray icon gives way, or comes back
+                // when the subscription starts it again.
+                #[cfg(target_os = "linux")]
+                {
+                    let plugin = plugin_in_omarchy_bar();
+                    if plugin != self.plugin {
+                        self.plugin = plugin;
+                        if let Some(TrayHandle(handle)) = self.tray.take() {
+                            return Task::future(async move { handle.shutdown().await }).discard();
+                        }
+                    }
+                }
+            }
             Message::OpenSettings => {
                 if let Some(id) = self.settings {
                     return window::gain_focus(id);
@@ -644,6 +729,18 @@ impl App {
                 if tab == Tab::Conversation {
                     self.conversation_seen = None;
                     return Task::done(Message::PollConversation);
+                }
+                // Reading the day's use costs a request to the service, so only when General, which shows the account,
+                // opens; the status brings it.
+                if tab == Tab::General
+                    && self
+                        .status
+                        .as_ref()
+                        .is_some_and(|status| status.account.signed_in)
+                {
+                    return Task::perform(client::refresh_account(), |_| {
+                        Message::AccountDone(Ok(()))
+                    });
                 }
             }
             Message::Resident(Ok(enabled)) => {
@@ -761,6 +858,38 @@ impl App {
                 config.notify_link = enabled;
                 return Task::perform(client::put_config(config), Message::ConfigSaved);
             }
+            Message::Relay(enabled) => {
+                let mut config = self
+                    .status
+                    .as_ref()
+                    .map(|status| status.config.clone())
+                    .unwrap_or_default();
+                config.relay = enabled;
+                return Task::perform(client::put_config(config), Message::ConfigSaved);
+            }
+            Message::CheckUpdates(enabled) => {
+                if !status::UPDATES_COMPILED_IN {
+                    return Task::none();
+                }
+                let mut config = self
+                    .status
+                    .as_ref()
+                    .map(|status| status.config.clone())
+                    .unwrap_or_default();
+                config.check_updates = Some(enabled);
+                return Task::perform(client::put_config(config), Message::ConfigSaved);
+            }
+            Message::CheckForUpdatesNow => {
+                if !status::UPDATES_COMPILED_IN {
+                    return Task::none();
+                }
+                return Task::perform(client::check_for_updates(), Message::Done);
+            }
+            Message::OpenReleases => {
+                if let Err(error) = launch("xdg-open", &[std::ffi::OsStr::new(RELEASES_PAGE)]) {
+                    self.notice = Some(Err(error));
+                }
+            }
             Message::ReportProblem => {
                 let url = issue_url(&self.diagnostics_summary());
                 if let Err(error) = launch("xdg-open", &[std::ffi::OsStr::new(url.as_str())]) {
@@ -836,9 +965,6 @@ impl App {
                     .or_else(|| self.status.as_ref()?.device.volume)
                     .unwrap_or(60);
                 return Task::perform(client::set_volume(level, true), Message::Done);
-            }
-            Message::SetScreens(screens) => {
-                return Task::perform(client::set_screens(screens.0), Message::Done);
             }
             Message::ChooseBox(usb_serial) => {
                 return Task::perform(client::choose_box(usb_serial), Message::Done);
@@ -1058,9 +1184,18 @@ impl App {
                 if let Some(form) = &mut self.make {
                     form.own = open.then(OwnVoiceForm::default);
                 }
-                // ElevenLabs lists the key's voices, so the id needn't be looked up.
+                // ElevenLabs lists the key's voices, so the id needn't be looked up; Volcano Engine can't with a key alone.
                 if open {
                     return Task::perform(client::elevenlabs_voices(), Message::ElevenVoices);
+                }
+            }
+            Message::MakeOwnProvider(provider) => {
+                if let Some(own) = self.make.as_mut().and_then(|form| form.own.as_mut()) {
+                    own.provider = provider;
+                    own.voice.clear();
+                    if provider == OwnProvider::ElevenLabs && !matches!(own.listed, Some(Ok(_))) {
+                        return Task::perform(client::elevenlabs_voices(), Message::ElevenVoices);
+                    }
                 }
             }
             Message::MakeOwnPick(picked) => {
@@ -1100,6 +1235,7 @@ impl App {
                 own.trying = true;
                 own.problem = None;
                 let tried = client::add_own_voice(
+                    own.provider.id().to_owned(),
                     own.voice.trim().to_owned(),
                     own.name.trim().to_owned(),
                     text,
@@ -1345,6 +1481,18 @@ impl App {
                 }
                 Err(error) => self.notice = Some(Err(error)),
             },
+            Message::AskFirmwareUpdate(asking) => self.confirm_firmware = asking,
+            Message::FlashFirmware => {
+                self.confirm_firmware = false;
+                if let Some(directory) =
+                    self.updates().and_then(status::Updates::firmware_directory)
+                {
+                    return Task::perform(
+                        client::flash_firmware(directory.to_path_buf()),
+                        Message::Done,
+                    );
+                }
+            }
             Message::FlashFromFile => {
                 return Task::perform(firmware_file::pick(), Message::FirmwareFile);
             }
@@ -1379,6 +1527,16 @@ impl App {
             }
             Message::RestartDaemon => {
                 return Task::perform(client::restart_daemon(), Message::Done);
+            }
+            Message::CheckFromMenu => {
+                if !status::UPDATES_COMPILED_IN {
+                    return Task::none();
+                }
+                self.tab = Tab::General;
+                return Task::batch([
+                    Task::done(Message::OpenSettings),
+                    Task::done(Message::CheckForUpdatesNow),
+                ]);
             }
             Message::StartDaemon => {
                 let args = ["--user", "restart", "vibebuddyd"].map(std::ffi::OsStr::new);
@@ -1462,23 +1620,63 @@ impl App {
                 let config = self.status.as_ref().map(|status| status.config.clone());
                 return Task::perform(export_diagnostics(summary, config), Message::Notice);
             }
-            Message::OwnKeyDraft(draft) => self.own_key_draft = draft,
-            Message::SaveOwnKey => {
-                let key = self.own_key_draft.trim().to_owned();
-                if !key.is_empty() {
-                    return Task::perform(client::set_voice_key(Some(key)), Message::OwnKeySaved);
+            Message::SignIn => return Task::perform(client::sign_in(), Message::SignInUrl),
+            Message::SignInUrl(result) => {
+                match result.and_then(|url| launch("xdg-open", &[std::ffi::OsStr::new(&url)])) {
+                    Ok(()) => self.signing_in = true,
+                    Err(error) => {
+                        self.signing_in = false;
+                        self.notice = Some(Err(tr("Couldn't sign in: %@", &[&error])));
+                    }
                 }
             }
-            Message::ClearOwnKey => {
-                return Task::perform(client::set_voice_key(None), Message::OwnKeySaved);
+            Message::SignOut => {
+                return Task::perform(client::sign_out(), |result| {
+                    Message::AccountDone(
+                        result.map_err(|error| tr("Couldn't sign out: %@", &[&error])),
+                    )
+                });
             }
-            Message::OpenOwnKeyPage => {
-                if let Err(error) = launch("xdg-open", &[std::ffi::OsStr::new(ELEVENLABS_KEYS)]) {
+            Message::AskDeleteAccount(asking) => self.confirm_delete_account = asking,
+            Message::DeleteAccount => {
+                self.confirm_delete_account = false;
+                return Task::perform(client::delete_account(), |result| {
+                    Message::AccountDone(
+                        result.map_err(|error| tr("Couldn't delete the account: %@", &[&error])),
+                    )
+                });
+            }
+            Message::AccountDone(result) => {
+                if let Err(error) = result {
                     self.notice = Some(Err(error));
                 }
             }
-            Message::OwnKeySaved(result) => match result {
-                Ok(()) => self.own_key_draft.clear(),
+            Message::OwnKeyDraft(provider, draft) => self.own_key_drafts[provider as usize] = draft,
+            Message::SaveOwnKey(provider) => {
+                let key = self.own_key_drafts[provider as usize].trim().to_owned();
+                if !key.is_empty() {
+                    return Task::perform(
+                        client::set_voice_key(provider, Some(key)),
+                        move |result| Message::OwnKeySaved(provider, result),
+                    );
+                }
+            }
+            Message::ClearOwnKey(provider) => {
+                return Task::perform(client::set_voice_key(provider, None), move |result| {
+                    Message::OwnKeySaved(provider, result)
+                });
+            }
+            Message::OpenOwnKeyPage(provider) => {
+                let page = match provider {
+                    client::KeyProvider::ElevenLabs => ELEVENLABS_KEYS,
+                    client::KeyProvider::Volc => VOLC_CONSOLE,
+                };
+                if let Err(error) = launch("xdg-open", &[std::ffi::OsStr::new(page)]) {
+                    self.notice = Some(Err(error));
+                }
+            }
+            Message::OwnKeySaved(provider, result) => match result {
+                Ok(()) => self.own_key_drafts[provider as usize].clear(),
                 Err(error) => {
                     self.notice = Some(Err(tr("Couldn't save your own key: %@", &[&error])))
                 }
@@ -1491,17 +1689,17 @@ impl App {
                 }
             }
             Message::Quit => return iced::exit(),
-            // The korekore sections are the tabs, so what a tab does on opening happens here too.
-            Message::Korekore(section) => return Task::done(Message::Tab(section.tab())),
+            // The sections are the tabs, so what a tab does on opening happens here too.
+            Message::Section(section) => return Task::done(Message::Tab(section.tab())),
         }
         Task::none()
     }
 
     /// Pushes the menu and the face's color to the tray; a no-op until the tray is up.
     /// Asks for the Characters made here, and the voices once.
-    /// The korekore Character page opens the look's card below the grid; go down to it.
+    /// The Character page opens the look's card below the grid; go down to it.
     fn show_custom_look(&self) -> Task<Message> {
-        iced::widget::operation::snap_to_end(korekore::pages::CHARACTER_PAGE)
+        iced::widget::operation::snap_to_end(ui::pages::CHARACTER_PAGE)
     }
 
     fn refresh_made(&self) -> Task<Message> {
@@ -1564,12 +1762,12 @@ impl App {
         #[cfg(target_os = "linux")]
         if let Some(TrayHandle(handle)) = self.tray.clone() {
             let menu = MenuState::derive(self.status.as_ref());
-            let kore = korekore::picture::BoxPicture::derive(self.status.as_ref());
+            let picture = ui::picture::BoxPicture::derive(self.status.as_ref());
             return Task::future(async move {
                 handle
                     .update(move |tray| {
                         tray.menu = menu;
-                        tray.kore = kore;
+                        tray.picture = picture;
                     })
                     .await;
             })
@@ -1580,27 +1778,34 @@ impl App {
 
     fn view(&self, _window: window::Id) -> Element<'_, Message> {
         if let Some(page) = self.guide {
-            return self.kk_guide(page);
+            return self.guide_view(page);
         }
-        self.korekore(korekore::Section::of(self.tab))
+        self.settings_window(ui::Section::of(self.tab))
     }
 
-    /// The korekore settings window (ADR-0021).
-    fn korekore(&self, section: korekore::Section) -> Element<'_, Message> {
+    /// The settings window.
+    fn settings_window(&self, section: ui::Section) -> Element<'_, Message> {
         // Voice commands are experimental: no Conversation section while the daemon has them off.
-        let sections: Vec<korekore::Section> = korekore::Section::ALL
+        let sections: Vec<ui::Section> = ui::Section::ALL
             .into_iter()
-            .filter(|&section| section != korekore::Section::Conversation || self.resident)
+            .filter(|&section| section != ui::Section::Conversation || self.resident)
             .collect();
-        let picture = korekore::picture::BoxPicture::derive(self.status.as_ref());
-        korekore::view::settings(
+        let picture = ui::picture::BoxPicture::derive(self.status.as_ref());
+        ui::view::settings(
             &picture,
             &sections,
             section,
             env!("CARGO_PKG_VERSION"),
-            Message::Korekore,
-            self.korekore_page(section),
+            Message::Section,
+            self.section_page(section),
         )
+    }
+
+    fn updates(&self) -> Option<&status::Updates> {
+        if !status::UPDATES_COMPILED_IN {
+            return None;
+        }
+        self.status.as_ref()?.updates.as_ref()
     }
 
     /// Both sides' build IDs, the voice and the OS, as in the Mac app's summary.txt; also what a problem report
@@ -1608,7 +1813,7 @@ impl App {
     fn diagnostics_summary(&self) -> String {
         let device = self.status.as_ref().map(|status| &status.device);
         format!(
-            "App {}\ndaemon {}\nfirmware {}\nvoice {}\nOS {}\n",
+            "App {}\ndaemon {}\nfirmware {}\noffered firmware {}\nvoice {}\nOS {}\n",
             env!("CARGO_PKG_VERSION"),
             self.status
                 .as_ref()
@@ -1617,6 +1822,9 @@ impl App {
                 .and_then(|device| device.firmware_label())
                 .as_deref()
                 .unwrap_or("—"),
+            self.updates()
+                .and_then(|updates| updates.firmware.as_ref())
+                .map_or("—", |offer| offer.version.as_str()),
             device
                 .and_then(|device| device.voice.as_deref())
                 .unwrap_or("—"),
@@ -1708,6 +1916,8 @@ async fn export_diagnostics(summary: String, config: Option<Config>) -> Result<S
     Ok(tr("Saved to %@", &[&target.display()]))
 }
 
+/// Where every release lives: the new App, and the firmware zip for flashing by hand when the daemon can't get it.
+const RELEASES_PAGE: &str = "https://github.com/second-state/vibebuddy/releases";
 /// OpenAI's page on installing the Codex CLI, which voice commands need.
 const CODEX_INSTALL_PAGE: &str = "https://learn.chatgpt.com/docs/codex/cli";
 /// Anthropic's page on installing Claude Code, the other Agent that can answer voice commands.
@@ -1716,7 +1926,9 @@ const CLAUDE_INSTALL_PAGE: &str = "https://code.claude.com/docs/en/setup";
 const ANTHROPIC_CONSOLE: &str = "https://platform.claude.com/";
 /// Where the user makes their own key for spoken replies in ElevenLabs' voices.
 const ELEVENLABS_KEYS: &str = "https://elevenlabs.io/app/settings/api-keys";
-const NEW_ISSUE: &str = "https://github.com/wow-look-at-my/vibebuddy/issues/new";
+/// Volcano Engine's speech console, where the user makes their own key for the Doubao voices.
+const VOLC_CONSOLE: &str = "https://console.volcengine.com/speech/";
+const NEW_ISSUE: &str = "https://github.com/second-state/vibebuddy/issues/new";
 
 /// The id under which the box wears the user's own Character.
 const CUSTOM: &str = "custom";
@@ -1755,27 +1967,6 @@ impl Lender {
 impl std::fmt::Display for Lender {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&assets::voice_name(self.id))
-    }
-}
-
-/// One entry of the box screens picker: `robot` or `korekore` (ADR-0021).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct BoxScreens(&'static str);
-
-impl BoxScreens {
-    const ALL: [BoxScreens; 2] = [BoxScreens("robot"), BoxScreens("korekore")];
-
-    fn of(style: &str) -> Option<BoxScreens> {
-        Self::ALL.into_iter().find(|screens| screens.0 == style)
-    }
-}
-
-impl std::fmt::Display for BoxScreens {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.0 {
-            "robot" => f.write_str(&tr("Robot", &[])),
-            other => f.write_str(other),
-        }
     }
 }
 
@@ -1827,6 +2018,45 @@ fn set_launch_at_login(enabled: bool) -> Result<(), String> {
     std::fs::write(&path, entry).map_err(|error| format!("{}: {error}", path.display()))
 }
 
+/// One notification per new firmware version, only while the box is there to take it and once it's downloaded, as on
+/// the Mac; the version last told about is kept in the state directory.
+fn notify_new_firmware(status: &Status) {
+    if !status::UPDATES_COMPILED_IN {
+        return;
+    }
+    let Some(offer) = status
+        .updates
+        .as_ref()
+        .filter(|updates| updates.firmware_update_available())
+        .and_then(|updates| updates.firmware.as_ref())
+    else {
+        return;
+    };
+    let Some(marker) = state_dir().map(|dir| dir.join("notified-firmware")) else {
+        return;
+    };
+    if !status.device.connected
+        || std::fs::read_to_string(&marker).is_ok_and(|told| told.trim() == offer.version)
+    {
+        return;
+    }
+    let _ = std::fs::create_dir_all(marker.parent().unwrap_or(&marker));
+    let _ = std::fs::write(&marker, &offer.version);
+    let title = tr("Box firmware %@ is available", &[&offer.version]);
+    // As the design words it ("SYSTEM NOTIFICATIONS").
+    let body = tr("Update it from Settings › Device.", &[]);
+    if let Err(error) = launch(
+        "notify-send",
+        &[
+            "--app-name=VibeBuddy".as_ref(),
+            title.as_ref(),
+            body.as_ref(),
+        ],
+    ) {
+        eprintln!("vibebuddy-desktop: {error}");
+    }
+}
+
 /// The daemon's XDG directories (see `daemon/src/config.rs`), where it keeps state and config and the hook its log.
 fn state_dir() -> Option<std::path::PathBuf> {
     xdg_dir("XDG_STATE_HOME", ".local/state")
@@ -1834,6 +2064,15 @@ fn state_dir() -> Option<std::path::PathBuf> {
 
 fn config_dir() -> Option<std::path::PathBuf> {
     xdg_dir("XDG_CONFIG_HOME", ".config")
+}
+
+/// Read from the shell's own config, which `omarchy plugin enable` and `disable` rewrite.
+#[cfg(target_os = "linux")]
+fn plugin_in_omarchy_bar() -> bool {
+    // `config_dir` is ours, inside the XDG config directory; Omarchy's sits next to it.
+    config_dir()
+        .and_then(|dir| std::fs::read_to_string(dir.parent()?.join("omarchy/shell.json")).ok())
+        .is_some_and(|text| tray::plugin_in_bar(&text))
 }
 
 fn xdg_dir(variable: &str, default: &str) -> Option<std::path::PathBuf> {
@@ -1934,10 +2173,10 @@ fn run_tray() -> impl futures::Stream<Item = Message> {
 
     iced::stream::channel(16, async |mut output| {
         let (events, mut clicks) = futures::channel::mpsc::unbounded();
-        let kore = korekore::picture::BoxPicture::derive(None);
+        let picture = ui::picture::BoxPicture::derive(None);
         let tray = tray::Tray {
             menu: MenuState::derive(None),
-            kore,
+            picture,
             events,
         };
         // At login the app can start before the shell's tray host is up; ksni then registers once it appears, and
@@ -1958,6 +2197,7 @@ fn run_tray() -> impl futures::Stream<Item = Message> {
             let message = match event {
                 tray::TrayEvent::OpenSettings => Message::OpenSettings,
                 tray::TrayEvent::RestartDaemon => Message::StartDaemon,
+                tray::TrayEvent::CheckForUpdates => Message::CheckFromMenu,
                 tray::TrayEvent::ReportProblem => Message::ReportProblem,
                 tray::TrayEvent::Quit => Message::Quit,
                 tray::TrayEvent::HostGone => Message::TrayHost(false),
@@ -2039,7 +2279,7 @@ mod tests {
         let url = issue_url("App 0.3.5\nOS Omarchy 3.1+beta\n");
         assert!(
             url.as_str()
-                .starts_with("https://github.com/wow-look-at-my/vibebuddy/issues/new?body=")
+                .starts_with("https://github.com/second-state/vibebuddy/issues/new?body=")
         );
         let body = url
             .query_pairs()

@@ -57,13 +57,6 @@ struct DaemonClient {
         guard code == 202 else { throw DaemonError(message: DaemonClient.message(in: data) ?? String(localized: "Volume change was rejected (\(code))")) }
     }
 
-    /// `style` is `robot` or `korekore`; the box reports a SCREENS line once it has stored it, which is when the status follows.
-    func setScreens(_ style: String) async throws {
-        let body = try JSONSerialization.data(withJSONObject: ["style": style])
-        let (code, data) = try await post("/v1/device/screens", body: body, contentType: "application/json")
-        guard code == 202 else { throw DaemonError(message: DaemonClient.message(in: data) ?? String(localized: "Changing the box screens was rejected (\(code))")) }
-    }
-
     /// The daemon remembers the choice and connects to that device on its next look around.
     func chooseBox(usbSerial: String) async throws {
         let body = try JSONSerialization.data(withJSONObject: ["usb_serial": usbSerial])
@@ -78,7 +71,7 @@ struct DaemonClient {
         guard code == 202 else { throw DaemonError(message: DaemonClient.message(in: data) ?? String(localized: "Removing the computer was rejected (\(code))")) }
     }
 
-    /// Takes the box from the computer that has it; the daemon's next try over the network asks outright.
+    /// Takes the box from the computer that has it; the daemon's next try over the network or the Relay asks outright.
     func takeOver() async throws {
         let (code, data) = try await post("/v1/device/takeover", body: Data(), contentType: "application/json")
         guard code == 202 else { throw DaemonError(message: DaemonClient.message(in: data) ?? String(localized: "Taking the box over was rejected (\(code))")) }
@@ -132,9 +125,44 @@ struct DaemonClient {
 
     func restart() async throws { try await post("/v1/daemon/restart") }
 
-    /// Sets the user's own ElevenLabs key (nil clears it). The daemon never sends it back; the status says it is set.
-    func setVoiceKey(_ key: String?) async throws {
-        let body = try JSONSerialization.data(withJSONObject: ["elevenlabs": key.map { $0 as Any } ?? NSNull()])
+    /// Asks the daemon to read the update manifest now instead of at the next daily check.
+    func checkForUpdates() async throws {
+        let (code, data) = try await post("/v1/updates/check")
+        guard code == 202 else { throw DaemonError(message: DaemonClient.message(in: data) ?? String(localized: "Update check was rejected (\(code))")) }
+    }
+
+    /// Starts signing in to the VibeBuddy account (ADR-0018): the App opens the URL, and the browser comes back to the
+    /// daemon, whose next status says signed in.
+    func signIn() async throws -> URL {
+        let (code, data) = try await post("/v1/account/sign-in")
+        guard code == 200 else { throw DaemonError(message: DaemonClient.message(in: data) ?? String(localized: "The daemon answered \(code)")) }
+        guard let text = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["url"] as? String, let url = URL(string: text) else {
+            throw DaemonError(message: String(localized: "The daemon answered \(code)"))
+        }
+        return url
+    }
+
+    func signOut() async throws { try await accountCall("/v1/account/sign-out", method: "POST") }
+
+    /// Has the daemon read today's voice use from the service; it comes back in the status.
+    func refreshAccount() async throws { try await accountCall("/v1/account/refresh", method: "POST") }
+
+    /// Deletes the account on the service; when the service doesn't, the daemon stays signed in.
+    func deleteAccount() async throws { try await accountCall("/v1/account", method: "DELETE") }
+
+    /// The daemon asks the service, which it gives 20 s, so this waits longer than the usual 10 s.
+    private func accountCall(_ path: String, method: String) async throws {
+        var request = request(path, method: method)
+        request.timeoutInterval = 30
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard code == 200 else { throw DaemonError(message: DaemonClient.message(in: data) ?? String(localized: "The daemon answered \(code)")) }
+    }
+
+    /// Sets the user's own key for a provider of spoken replies, `elevenlabs` or `volc` (nil clears it). The daemon
+    /// never sends it back; the status says it is set.
+    func setVoiceKey(_ provider: String, _ key: String?) async throws {
+        let body = try JSONSerialization.data(withJSONObject: [provider: key.map { $0 as Any } ?? NSNull()])
         var request = request("/v1/voice-keys", method: "PUT", body: body, contentType: "application/json")
         request.timeoutInterval = 10
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -167,10 +195,11 @@ struct DaemonClient {
 
     /// Tries a voice in the user's own account with their own key, saying `text`; the daemon keeps it when the provider
     /// speaks it. Answers the voice and what it said, as a 16 kHz WAV.
-    func addOwnVoice(voice: String, name: String, text: String) async throws -> (CharacterVoice, Data) {
+    func addOwnVoice(provider: String, voice: String, name: String, text: String) async throws -> (CharacterVoice, Data) {
         struct Answer: Decodable { let voice: CharacterVoice; let audio: String }
-        let body = try JSONSerialization.data(withJSONObject: ["provider": "elevenlabs", "voice": voice, "name": name, "text": text])
+        let body = try JSONSerialization.data(withJSONObject: ["provider": provider, "voice": voice, "name": name, "text": text])
         var request = request("/v1/voices", method: "POST", body: body, contentType: "application/json")
+        // Volcano Engine may be tried on four resources, each a whole line.
         request.timeoutInterval = 120
         let (data, response) = try await URLSession.shared.data(for: request)
         let code = (response as? HTTPURLResponse)?.statusCode ?? 0
